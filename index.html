@@ -65,7 +65,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.1.0 · 16 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.2.0 · 16 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -278,6 +278,8 @@
                                     <th class="px-4 py-3">Asset Details</th>
                                     <th class="px-4 py-3 w-40">Owner Suggestion</th>
                                     <th class="px-4 py-3">Inferred Service</th>
+                                    <th class="px-4 py-3" title="Optional: set now, or later in the Asset Register">Tier</th>
+                                    <th class="px-4 py-3" title="Optional: set now, or later in the Asset Register">Exposure</th>
                                     <th class="px-4 py-3">Status</th>
                                     <th class="px-4 py-3 text-right">Action</th>
                                 </tr>
@@ -1409,21 +1411,6 @@
             }
         }
 
-        class RiskScoringEngine {
-            static getMultiplier(exposure) {
-                switch(exposure) {
-                    case 'Internet Facing': return 2.0;
-                    case 'DMZ': return 1.5;
-                    case 'Internal': return 1.0;
-                    default: return 1.0;
-                }
-            }
-
-            static calculateEffectiveRisk(baseScore, exposure) {
-                return (baseScore || 0) * this.getMultiplier(exposure);
-            }
-        }
-
         class ServiceClassificationEngine {
             // First matching rule from Organisation setup wins (on the name, or on the Qualys tags).
             static infer(name, tags = '') {
@@ -1816,7 +1803,10 @@
                 return { backlog: false, due: first + days * this.DAY };
             }
             // The finding tier used for the priority: Qualys signals, raised to "This sprint" for a patchable severity 4-5 when that rule is on.
-            static findingTier(d, S = this.settings()) { return (S.highSevP2 && d.sev >= 4 && d.patchable) ? Math.min(d.tier, 2) : d.tier; }
+            // "Critical or high" = CVSS 7 or above when the data has a CVSS score (Cyber Essentials' own test; CSV exports carry it,
+            // the API does only when CVSS Scoring is on in Qualys), otherwise Qualys severity 4 or 5.
+            static isHigh(d) { return d.cvss > 0 ? d.cvss >= 7 : d.sev >= 4; }
+            static findingTier(d, S = this.settings()) { return (S.highSevP2 && d.patchable && this.isHigh(d)) ? Math.min(d.tier, 2) : d.tier; }
             // Adds p (1-4), due (ms), backlog and overdue to the open findings of getVulnData().
             static annotate(vd) {
                 const S = this.settings(), sla = this.sla(), now = Date.now();
@@ -3189,7 +3179,6 @@
                         let existingIdx = register.findIndex(r => r.normalizedName === item.normalizedName);
                         if (existingIdx === -1 && qData.assetId) existingIdx = register.findIndex(r => r.assetId === qData.assetId);
 
-                        const baseRisk = qData.truRiskScore || 0;
                         const newRecord = {
                             assetId: qData.assetId || null,
                             hostId: qData.hostId || null,
@@ -3210,9 +3199,6 @@
                             environment: 'Production',
                             exposure: 'Unknown',
                             criticality: 'Medium',
-                            baseRiskScore: baseRisk,
-                            exposureMultiplier: RiskScoringEngine.getMultiplier('Unknown'),
-                            effectiveRiskScore: RiskScoringEngine.calculateEffectiveRisk(baseRisk, 'Unknown'),
                             lastSeen: new Date().toISOString()
                         };
                         Lifecycle.copy(newRecord, qData);
@@ -3227,7 +3213,6 @@
                                 exposure: (finalExposure && finalExposure !== 'Unknown') ? finalExposure : (current.exposure || 'Unknown'), status: current.unrecognised ? 'Approved' : (current.status || 'Approved'),
                                 unrecognised: false
                             };
-                            register[existingIdx].effectiveRiskScore = RiskScoringEngine.calculateEffectiveRisk(newRecord.baseRiskScore, register[existingIdx].exposure);
                             if (current.osOverride) Lifecycle.keepEdit(register[existingIdx], newRecord.os);
                         }
                         else register.push(newRecord);
@@ -3473,6 +3458,7 @@
                 
                 target.classList.add('active');
                 this.currentView = viewId;
+                OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
                 const TITLES = { dashboard: 'Dashboard', import: 'Import Data', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Status Rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
                 const pt = document.getElementById('page-title'); if (pt) pt.textContent = TITLES[viewId] || 'CyberView';
                 const navView = viewId === 'inspect' ? (this.inspectReturn || '') : viewId;
@@ -3852,14 +3838,14 @@
                         <p>In use: <strong>${prof === 'custom' ? '✎ Custom (changed by hand)' : '● ' + esc(StatusEngine.PROFILES[prof].label)}</strong></p>
                         <ul class="text-xs text-gray-700 list-disc pl-5 space-y-1">
                             <li><strong>Standard:</strong> the machine's tier changes the priority (a known-exploited finding is P1 on Tier 1 and 2, P2 on Tier 3). Due in 14 / 30 / 90 / 180 days for P1 to P4. Internet facing is one step more urgent.</li>
-                            <li><strong>UK (NCSC + Cyber Essentials):</strong> deadlines follow exposure and severity, and the tier only decides what is worked on first. Known exploited = P1. A severity 4 or 5 finding with a patch is at least P2. P1 and P2 are due in 14 days (Cyber Essentials: critical and high fixes within 14 days), and in 5 days on Internet-facing machines (NCSC). P3 30 days, P4 90 days.</li>
+                            <li><strong>UK (NCSC + Cyber Essentials):</strong> deadlines follow exposure and severity, and the tier only decides what is worked on first. Known exploited = P1. A critical or high finding with a patch (CVSS 7+, or Qualys severity 4-5 when there is no CVSS) is at least P2. P1 and P2 are due in 14 days (Cyber Essentials: critical and high fixes within 14 days), and in 5 days on Internet-facing machines (NCSC). P3 30 days, P4 90 days.</li>
                         </ul>
                         ${admin ? `<div class="flex flex-wrap gap-2"><button onclick="app.applyStatusProfile('uk')" class="border-2 px-3 py-1.5 rounded text-sm ${prof === 'uk' ? 'border-slate-800 font-semibold' : ''}">${prof === 'uk' ? '● ' : '○ '}Use the UK rule set</button><button onclick="app.applyStatusProfile('standard')" class="border-2 px-3 py-1.5 rounded text-sm ${prof === 'standard' ? 'border-slate-800 font-semibold' : ''}">${prof === 'standard' ? '● ' : '○ '}Use the Standard rule set</button></div>
                         <p class="text-[11px] text-gray-500">Choosing a rule set changes the priority table, the Internet-facing rules and the SLA days below, and nothing else. Due dates of open findings are worked out again at once; tasks already created keep their dates.</p>` : ''}
                     </div>
                     <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Action priority</h4>
                         <p class="text-xs text-gray-600">Each open finding gets P1-P4 from its finding tier and its asset's tier.</p>${matrix}
-                        <label class="flex items-center gap-2"><input type="checkbox" data-k="highSevP2" class="sr-in" ${S.highSevP2 ? 'checked' : ''} ${dis}> A severity 4 or 5 finding that has a patch counts as <em>This sprint</em> at least (Cyber Essentials: critical and high)</label>
+                        <label class="flex items-center gap-2"><input type="checkbox" data-k="highSevP2" class="sr-in" ${S.highSevP2 ? 'checked' : ''} ${dis}> A critical or high finding that has a patch counts as <em>This sprint</em> at least (Cyber Essentials). Critical or high = CVSS 7 or above when the data has a CVSS score, otherwise Qualys severity 4 or 5.</label>
                         <label class="flex items-center gap-2"><input type="checkbox" data-k="internetStep" class="sr-in" ${S.internetStep ? 'checked' : ''} ${dis}> Internet-facing assets: one step more urgent (e.g. P2 → P1)</label>
                         <label class="flex items-center gap-2 text-sm">Internet-facing assets: P1 and P2 due within ${num('internetDays', S.internetDays || 0, 'w-16', 0, 365)} days <span class="text-xs text-gray-500">(0 = no special rule; NCSC says 5)</span></label>
                         <div class="flex flex-wrap gap-4 items-end"><span class="text-sm font-semibold">SLA from first found (days):</span>${[1, 2, 3, 4].map(p => `<label class="text-xs">P${p}<br>${num('sla.t' + p, sla['t' + p], 'w-20', 1)}</label>`).join('')}</div>
@@ -4167,12 +4153,12 @@
                         if (prev && RemediationVerifier.ACTIVE(prev.status) && !RemediationVerifier.ACTIVE(status)) continue;
                         const t0 = AutomoxService.time(first), t1 = status === 'FIXED' ? (AutomoxService.time(lastFixed) || now) : now;
                         ctx.dets.set(k, {
-                            k, asset: a.normalizedName, qid: String(qid), proto, port, sev, qvs: qds || 0, cvss: 0, status, type, first, last,
+                            k, asset: a.normalizedName, qid: String(qid), proto, port, sev, qvs: qds || 0, cvss: +q.cvss || 0, status, type, first, last,
                             age: t0 ? Math.max(0, Math.floor((t1 - t0) / day)) : 0, times, patchable: !!q.patchable, cves: (q.cves || []).slice(0, 40)
                         });
                         if (!ctx.qids.has(String(qid))) ctx.qids.set(String(qid), {
                             qid: String(qid), title: q.title || '', sev: q.sev || sev, solution: q.solution || '', threat: q.threat || '', category: q.category || '',
-                            rti: q.rti || [], patchable: !!q.patchable, published: q.published || '', patchReleased: '',
+                            rti: q.rti || [], patchable: !!q.patchable, published: q.published || '', patchReleased: '', cvss: +q.cvss || 0,
                             cveCount: q.cveCount || 0, cves: (q.cves || []).slice(0, 25).map(id => ({ id, cvss: 0 }))
                         });
                     }
@@ -4571,7 +4557,10 @@
                 document.getElementById('review-selected-count').textContent = this.reviewState.selectedIds.size;
                 const tbody = document.getElementById('review-queue-tbody');
                 tbody.innerHTML = '';
-                if(filtered.length === 0) return tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-gray-500">No assets match.</td></tr>`;
+                if(filtered.length === 0) return tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500">No assets match.</td></tr>`;
+                const TL = OrgSettings.tiers();
+                const tierSel = (id) => `<select id="tier-${id}" class="border text-sm px-2 py-1" title="Tier (optional)"><option value="0">not set</option>${TL.map((t, i) => `<option value="${i + 1}" title="${esc(t.desc)}">${i + 1} · ${esc(t.name)}</option>`).join('')}</select>`;
+                const expSel = (id) => `<select id="exp-${id}" class="border text-sm px-2 py-1" title="Exposure (optional)">${['Unknown', 'Internal', 'DMZ', 'Internet Facing'].map(x => `<option>${x}</option>`).join('')}</select>`;
                 
                 // Using DocumentFragment to prevent browser thrashing on 1000+ rows
                 const frag = document.createDocumentFragment();
@@ -4584,6 +4573,8 @@
                         <td class="px-4 py-2"><div class="font-medium">${item.normalizedName}</div><div class="text-xs text-gray-500">${item.ipAddress || 'No IP'}</div></td>
                         <td class="px-4 py-2" onclick="event.stopPropagation()"><select id="own-${item.id}" class="border text-sm px-2 py-1">${[...OrgSettings.teams(), 'Unknown'].map(t => `<option value="${esc(t)}" ${item.suggestedOwner === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select><div class="text-[10px] text-gray-400">Src: ${item.ownershipSource||'Unknown'}</div></td>
                         <td class="px-4 py-2"><span class="bg-gray-100 text-xs px-2 py-1 rounded">${item.detectedService}</span></td>
+                        <td class="px-4 py-2" onclick="event.stopPropagation()">${tierSel(item.id)}</td>
+                        <td class="px-4 py-2" onclick="event.stopPropagation()">${expSel(item.id)}</td>
                         <td class="px-4 py-2 text-xs">${item.status}</td>
                         <td class="px-4 py-2 text-right"><button onclick="event.stopPropagation(); app.approveQueueItem('${item.id}')" class="text-blue-700 bg-blue-100 px-3 py-1 rounded text-xs">Approve</button></td>
                     `;
@@ -4799,8 +4790,6 @@
                     const osEl = document.getElementById('edit-asset-os'), osNew = osEl.value.trim();
                     if (osNew !== (osEl.dataset.orig || '').trim() || (!osNew && reg[idx].osOverride)) Lifecycle.setOs(reg[idx], osNew);
                     else if (reg[idx].osOverrideCheck) delete reg[idx].osOverrideCheck;      // saved again = checked
-                    reg[idx].exposureMultiplier = RiskScoringEngine.getMultiplier(reg[idx].exposure);
-                    reg[idx].effectiveRiskScore = RiskScoringEngine.calculateEffectiveRisk(reg[idx].baseRiskScore, reg[idx].exposure);
                     this.invalidateVulnData();
                     StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
                     this.renderRegister(); this.closeModals();
@@ -4821,8 +4810,9 @@
 
             approveQueueItem(id) {
                 const o = document.getElementById(`own-${id}`).value;
+                const t = +(document.getElementById(`tier-${id}`) || {}).value || 0, x = (document.getElementById(`exp-${id}`) || {}).value || 'Unknown';
                 const q = ReviewQueueService.getQueue().find(x => x.id === id);
-                ReviewQueueService.resolve(id, o, q.detectedService, 'APPROVED');
+                ReviewQueueService.resolveBulk([{ id, finalOwner: o, finalService: q.detectedService, finalTier: t, finalExposure: x }], 'APPROVED');
                 this.updateGlobalBadges(); this.renderReviewQueue();
             }
 
@@ -4977,10 +4967,6 @@
                         else if (k === 'patchNA') { if (/^Cannot/.test(val)) r.patchNA = true; else delete r.patchNA; }
                         else r[k] = val;
                     });
-                    if (ch.some(x => x[0] === 'exposure')) {
-                        r.exposureMultiplier = RiskScoringEngine.getMultiplier(r.exposure);
-                        r.effectiveRiskScore = RiskScoringEngine.calculateEffectiveRisk(r.baseRiskScore, r.exposure);
-                    }
                     n++;
                 });
                 StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
@@ -5209,7 +5195,7 @@
                 const names = new Set(reg.map(r => r.normalizedName));
                 const empty = (c, m) => `<tr><td colspan="${c}" class="px-2 py-4 text-center text-gray-500 italic">${m}</td></tr>`;
                 const crit = (r) => (sums.get(r.normalizedName)?.criticality) || r.qualysCriticality || 0;
-                const tru = (r) => (sums.get(r.normalizedName)?.truRisk) || r.baseRiskScore || 0;
+                const tru = (r) => (sums.get(r.normalizedName)?.truRisk) || 0;
                 const daysTxt = (v) => { if (typeof v !== 'string') return ''; const d = EolDates.days(v); return d < 0 ? `${fmtNum(-d)} days ago` : `in ${fmtNum(d)} days`; };
 
                 // EOL software: QIDs titled "EOL/Obsolete ...", distinct assets in scope.
@@ -5277,7 +5263,7 @@
                 const later = famAll.filter(f => f.life.bucket === 3), nod = famAll.filter(f => f.life.bucket === 4);
                 $('eol-os-more').textContent = `Not listed: ${fmtNum(later.reduce((n, f) => n + f.n, 0))} assets on ${fmtNum(later.length)} releases supported for over a year, ${fmtNum(nod.reduce((n, f) => n + f.n, 0))} assets with no date (section 6).`;
 
-                $('eol-sw').innerHTML = sw.length ? sw.slice(0, 25).map(x => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(x.qid)}" onclick="app.inspectQid(this.dataset.q)"><td class="px-2 py-2 text-gray-700">${esc(x.title)}${x.os ? ' <span class="text-[10px] text-gray-500">(OS)</span>' : ''} <span class="text-[10px] text-gray-400 font-mono">QID ${esc(x.qid)}</span></td><td class="px-2 py-2 text-right font-mono">${fmtNum(x.assets.size)}</td><td class="px-2 py-2 text-right">${trackBtn('sw', sw.indexOf(x), [...(RIX.byKey.get('eolsw|' + x.qid) || []), ...(RIX.byQid.get(String(x.qid)) || [])], [...x.assets])}</td></tr>`).join('') + (sw.length > 25 ? `<tr><td colspan="3" class="px-2 py-2 text-xs text-gray-500">+${sw.length - 25} more products</td></tr>` : '')
+                $('eol-sw').innerHTML = sw.length ? sw.slice(0, 25).map(x => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(x.qid)}" onclick="app.inspectQid(this.dataset.q, 'eol')"><td class="px-2 py-2 text-gray-700">${esc(x.title)}${x.os ? ' <span class="text-[10px] text-gray-500">(OS)</span>' : ''} <span class="text-[10px] text-gray-400 font-mono">QID ${esc(x.qid)}</span></td><td class="px-2 py-2 text-right font-mono">${fmtNum(x.assets.size)}</td><td class="px-2 py-2 text-right">${trackBtn('sw', sw.indexOf(x), [...(RIX.byKey.get('eolsw|' + x.qid) || []), ...(RIX.byQid.get(String(x.qid)) || [])], [...x.assets])}</td></tr>`).join('') + (sw.length > 25 ? `<tr><td colspan="3" class="px-2 py-2 text-xs text-gray-500">+${sw.length - 25} more products</td></tr>` : '')
                     : empty(3, meta.imports.length ? 'None in the imported vulnerability exports.' : 'No vulnerability export imported yet.');
 
                 const hw = new Map();
@@ -5963,8 +5949,6 @@
                     ipv4Address: ipv4, ipv6Address: ipv6, os, osCategory: '', osVersion: '', tags, metadata: {},
                     owner: 'Unrecognised', ownershipSource: 'Vulnerability report', service: inferred || 'Unclassified',
                     status: 'Unrecognised', unrecognised: true, environment: 'Production', exposure: 'Unknown', criticality: 'Medium',
-                    baseRiskScore: tru, exposureMultiplier: RiskScoringEngine.getMultiplier('Unknown'),
-                    effectiveRiskScore: RiskScoringEngine.calculateEffectiveRisk(tru, 'Unknown'),
                     lastSeen: new Date().toISOString(), inferredService: inferred
                 };
                 ctx.unrec.set(nn, a);
@@ -6661,13 +6645,14 @@
             openAssetDetail(name) { this.inspectNav({ type: 'asset', id: name }); }
             inspectAsset(name) { this.inspectNav({ type: 'asset', id: name }); }
             // A fix opened from a filtered page keeps that page's filters (v3.18.3): 'vuln' = Vuln Management's filters,
-            // 'report' = the Team Risk Report's team and risk status, 'ax' = the Patch Coverage team. With no source,
+            // 'report' = the Team Risk Report's team and risk status, 'ax' = the Patch Coverage team, 'eol' = the End of Life Report team. With no source,
             // a fix opened inside Inspect (from an asset) keeps the scope of the fix it came from; anywhere else = every asset.
             inspectQid(qid, from) {
                 let scope = null;
                 if (from === 'vuln') scope = { ...this.vulnState.filters };
                 else if (from === 'report' && this.reportCtx) scope = { owner: this.reportCtx.scope, riskStatus: this.reportCtx.riskStatusFilter };
                 else if (from === 'ax' && this.axState) scope = { owner: this.axState.scope || 'ALL' };
+                else if (from === 'eol') scope = { owner: (document.getElementById('eol-scope-selector') || {}).value || 'ALL' };
                 else if (!from && this.currentView === 'inspect') scope = [...this.inspectState.stack].reverse().find(x => x.type === 'qid')?.scope || null;
                 this.inspectNav({ type: 'qid', id: String(qid), scope: App.inspectScope(scope) });
             }
@@ -6726,7 +6711,7 @@
                 const e = this.inspectState.stack[this.inspectState.stack.length - 1];
                 if (!e) return;
                 document.getElementById('view-container').scrollTop = 0;
-                const retLabel = { reports: 'Report', eol: 'End of Life Report', vuln: 'Vuln Management', dashboard: 'Dashboard', 'risk-accept': 'Risk Acceptances', register: 'Register' }[this.inspectReturn] || 'Back';
+                const retLabel = { automox: 'Patch Coverage', reports: 'Report', eol: 'End of Life Report', vuln: 'Vuln Management', dashboard: 'Dashboard', 'risk-accept': 'Risk Acceptances', register: 'Register' }[this.inspectReturn] || 'Back';
                 const crumbs = this.inspectState.stack.map((s, i) => {
                     const label = s.type === 'asset' ? s.id : 'QID ' + s.id;
                     const last = i === this.inspectState.stack.length - 1;
@@ -6779,7 +6764,7 @@
                                 <p class="text-xs mt-1 text-gray-500">${esc(reg.os || '')}${reg.ipv4Address ? ' • ' + esc(reg.ipv4Address) : ''}</p>
                             </div>
                             <div class="flex items-start gap-6">
-                                <div class="text-right"><p class="text-[10px] uppercase font-semibold text-gray-500">TruRisk</p><div class="text-lg">${PriorityEngine.truRiskBadge(sum.truRisk || reg.baseRiskScore || 0)}</div></div>
+                                <div class="text-right"><p class="text-[10px] uppercase font-semibold text-gray-500">TruRisk</p><div class="text-lg">${sum.truRisk ? PriorityEngine.truRiskBadge(sum.truRisk) : '<span class="text-sm text-gray-400" title="No TruRisk in the latest findings import or sync for this machine">-</span>'}</div></div>
                                 <div class="text-right"><p class="text-[10px] uppercase font-semibold text-gray-500">Criticality</p><p class="text-lg font-bold font-mono">${sum.criticality || '-'}<span class="text-xs text-gray-400">/5</span></p></div>
                                 <button data-n="${esc(name)}" onclick="app.openRiskModal([this.dataset.n])" class="bg-amber-100 text-amber-800 border border-amber-300 px-4 py-2 rounded text-sm font-bold hover:bg-amber-200">⚖️ Accept Risk</button>
                             </div>

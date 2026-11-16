@@ -3,7 +3,7 @@
 Replaces the capped CSV export (50,000 rows, 500 per asset) with the full data set from the Qualys APIs:
   * VM Host List API          hosts in scope with their last scan date      /api/2.0/fo/asset/host/
   * Host List Detection API   every finding (New, Active, Re-Opened, Fixed)  /api/2.0/fo/asset/host/vm/detection/
-  * KnowledgeBase API         QID -> title, CVEs, threat flags, solution    /api/2.0/fo/knowledge_base/vuln/
+  * KnowledgeBase API         QID -> title, CVEs, threat flags, solution, CVSS (when the subscription has CVSS Scoring on)    /api/2.0/fo/knowledge_base/vuln/
   * CSAM asset search         TruRisk score, asset criticality, tags        (gateway) /rest/2.0/search/am/asset
 Every call only reads. The login (QUALYS_USERNAME + QUALYS_PASSWORD_B64) stays on the server; the page only sees
 `configured: true/false`. A login that Qualys refuses blocks further syncs until the password is changed
@@ -257,6 +257,13 @@ def _int(v, default=0):
         return default
 
 
+def _num(v):
+    try:
+        return round(float(str(v).strip().split()[0]), 1)
+    except (TypeError, ValueError, IndexError):
+        return 0
+
+
 def normalise_kb(v):
     cves = [c.findtext("ID") for c in v.findall("./CVE_LIST/CVE") if (c.findtext("ID") or "").startswith("CVE-")]
     rti = []
@@ -269,6 +276,8 @@ def normalise_kb(v):
         "solution": _txt(v.findtext("SOLUTION"), 2000), "threat": _txt(v.findtext("DIAGNOSIS"), 600),
         "category": _txt(v.findtext("CATEGORY"), 80), "rti": rti, "patchable": v.findtext("PATCHABLE") == "1",
         "published": v.findtext("PUBLISHED_DATETIME") or "", "patchReleased": "",
+        # CVSS comes back only when "CVSS Scoring" is switched on for the Qualys subscription; 0 = not supplied
+        "cvss": _num(v.findtext("CVSS_V3/BASE")) or _num(v.findtext("CVSS/BASE")),
         "cveCount": len(cves), "cves": cves[:200],
     }
 

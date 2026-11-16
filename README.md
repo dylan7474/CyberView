@@ -182,8 +182,8 @@ The table and days above are the **Standard** rule set. The Status Rules page ca
 - **The P3 and P4 days** (30 and 90) are not set by either source; they are this portal's choice for lower-severity findings, and can be changed.
 
 **Two limits to know about:**
-- The clock starts when the scanner **first finds** the problem, not when the vendor released the patch (the Qualys API sync does not supply the patch release date). With a daily sync the two are usually a day or so apart, but a machine that is scanned late gets its 14 days from the scan.
-- "Critical and high" is taken as **Qualys severity 4 or 5 with a patch available**. The API sync carries no CVSS scores, so the Cyber Essentials test of CVSS 7 or above cannot be applied exactly.
+- The clock starts when the scanner **first finds** the problem, not when the vendor released the patch. The Qualys API has no patch release date (checked against a live account: the KnowledgeBase reply has the date Qualys published its check, but no patch date). With a daily sync the two are usually a day or so apart, but a machine that is scanned late gets its 14 days from the scan.
+- **"Critical or high" = CVSS 7 or above** (the Cyber Essentials test) whenever the finding has a CVSS score, and Qualys severity 4 or 5 when it has none. CSV exports carry CVSS. The API sync carries it only when **CVSS Scoring is switched on** for your Qualys subscription (a Qualys administrator's setting); with it off, the API sync falls back to severity. On the 29 Oct test export, 2,843 findings were severity 4 or 5 but scored under CVSS 7, so CVSS makes the rule noticeably narrower.
 
 Switching rule set works out the priority and due date of every open finding again. Expect many more P1 and P2 findings under the UK set, because it treats every patchable severity 4 or 5 finding as urgent.
 
@@ -344,7 +344,7 @@ flowchart LR
 | OS end of life | Your EOL table, then endoflife.date. A Qualys stage of *EOL/EOS* always counts as unsupported. |
 | Hardware stage | Qualys asset export. |
 | Asset importance | **Tier** 1-3 (v3.15), set by people in the Review Queue, Edit or bulk edit; who and when are recorded; imports never change it. An unset tier counts as Tier 2 and is listed as a gap. Qualys's Asset Criticality Score is shown as a hint only, because it follows Qualys tags. The old register *Criticality* is retired (hand-set values are listed as suggestions on the Status Rules page). |
-| TruRisk used in reports | The latest findings import or sync. The register keeps the value from when the asset was approved (see gaps). |
+| TruRisk used in reports | The latest findings import or sync, and nothing else. A machine that has no score there shows "-" (v4.2; earlier versions fell back to a copy kept from approval). |
 | Whether a finding is open | Its Qualys status: New, Active and Re-Opened are open. **Fixed is never counted as open** (v3.12.1); it only verifies remediation. |
 
 ### From findings to priorities
@@ -376,7 +376,7 @@ flowchart LR
 
 ### Known gaps (input to the joined-up design)
 1. ~~Two criticalities~~ **Done in v3.15:** one Tier, set by people (see above).
-2. **Two TruRisk values (still open).** The register keeps the value from approval and an "effective risk", while the reports use the latest sync. Since v3.15, exposure does feed the priorities (Internet facing = one step more urgent); retiring the register's frozen copy is still to do.
+2. ~~Two TruRisk values~~ **Done in v4.2:** the register no longer keeps its own copy (or an "effective risk"); reports and pages use the latest import or sync only. *Before:* The register keeps the value from approval and an "effective risk", while the reports use the latest sync. Since v3.15, exposure does feed the priorities (Internet facing = one step more urgent); retiring the register's frozen copy is still to do.
 3. ~~No single status per team~~ **Done in v3.16:** the 🚦 Status page (see *Status page*).
 4. ~~No "data as of"~~ **Done in v3.16:** on the Status page and the Team Risk Report.
 5. ~~Risk acceptance is per asset~~ **Done in v3.17:** per-finding exceptions with expiry (see *Exceptions*).
@@ -439,7 +439,7 @@ The register keyword box and the End of Life asset list share one search:
 ### Priorities, due dates and the backlog (v3.15)
 
 Phase A of the joined-up status design (`docs/vulnerability-status-design.md`):
-- **Tier** column, filter (including "? Tier not set"), Edit and bulk edit in the Asset Register. The Review Queue's bulk *Approve* asks for Tier and exposure (both optional).
+- **Tier** column, filter (including "? Tier not set"), Edit and bulk edit in the Asset Register. The Review Queue's bulk *Approve* asks for Tier and exposure (both optional), and since v4.2 each row has its own Tier and Exposure choices for the single *Approve* button.
 - **📐 Status Rules** page: the data gaps (no tier, unknown exposure, old criticality values), the priority matrix, the Internet-facing step, SLA days, go-live date and backlog targets, the status check limits, the teams patched by Automox, and the staleness limits. Only administrators can change them; everyone can read them.
 - Every open finding gets a priority, a due date and a backlog flag. Tasks made with *Track* take the most urgent priority of their findings and their earliest due date. Older tasks show their tier as P1-P4. The SLA settings are now named P1-P4.
 - A Qualys API sync records each asset's last scan date (for the scan coverage check in phase B).
@@ -550,7 +550,9 @@ Clicking a fix opens its page (the vendor solution, the AI plan and the affected
 - A bar at the top says what is shown, e.g. **🔎 Showing: Platform only · risk status Open · 38 of 65 affected assets**. Its *Show all teams* link lists every asset, and *Back to …* returns to the filtered view.
 - **＋ Track this fix** and the AI plan use the same assets the page shows.
 - Opening an asset from the page and going back keeps the filter. A fix opened from an asset's own list inherits it too.
-- Fixes opened from elsewhere, such as the Dashboard or the End of Life Report, still show every asset.
+- **From the End of Life Report** (v4.2): its team, for the end-of-life software list.
+- Fixes opened from elsewhere, such as the Dashboard, still show every asset.
+- Team lists everywhere are rebuilt on every page change, so a team that has just been given its first machine appears without reloading (v4.2).
 
 ### Remediation tracking (v3.8, step 1)
 

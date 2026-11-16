@@ -502,7 +502,7 @@ Filter choices are remembered **per person, in their own browser**, and come bac
 
 ### Automox on the Dashboard (v4.2.1)
 
-Under the Qualys data line, the Dashboard shows when Automox data last came in: date and time, devices, waiting patches, who started it, and whether a sync is scheduled. It says ✔ when it is recent, ⚠ when it is older than the *Data is stale after* limit for Automox (Status Rules, default 7 days) or has never run, ⟳ while a sync is running, and ✗ when the last sync failed. Shown only on a server with Automox set up.
+Under the Qualys data box, the Dashboard shows a matching Automox box (same layout, v4.3.1) saying when Automox data last came in: date and time, devices, waiting patches, who started it, and whether a sync is scheduled. It says ✔ when it is recent, ⚠ when it is older than the *Data is stale after* limit for Automox (Status Rules, default 7 days) or has never run, ⟳ while a sync is running, and ✗ when the last sync failed. Shown only on a server with Automox set up.
 
 ### Organisation setup
 

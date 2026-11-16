@@ -65,7 +65,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.3.0 · 16 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.3.1 · 16 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -4482,13 +4482,16 @@
                 const when = (s) => new Date(AutomoxService.time(s)).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
                 const sched = st.scheduleHours > 0 ? `scheduled every ${fmtNum(st.scheduleHours)} h` : 'sync by hand only';
                 const ok = L && !failed && days <= limit;
-                const parts = [];
-                if (j.running) parts.push(`⟳ <strong>Automox sync running</strong> (started by ${esc(j.by || '?')} ${esc(AutomoxService.ago(j.started))})`);
-                if (L) parts.push(`${ok ? '✔' : '⚠'} <strong>Automox sync</strong> ${esc(when(L.at))}${days > limit ? ` <strong>(${Math.floor(days)} days old)</strong>` : ''}: ${fmtNum(L.devices || 0)} devices, ${fmtNum(L.pending || 0)} waiting patches (${L.by === 'schedule' ? 'scheduled' : 'started by ' + esc(L.by || '?')}; ${esc(sched)}).`);
-                else if (!j.running) parts.push(`⚠ <strong>Automox has not been synced yet.</strong> Open Patch Coverage and press Sync from Automox.`);
-                if (failed) parts.push(`✗ <strong>The last Automox sync failed</strong> ${esc(when(E.at))}: ${esc(E.message || '')}`);
-                el.className = `rounded-lg border px-4 py-2 text-sm ${ok ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-900'}`;
-                el.innerHTML = parts.map(x => `<p>${x}</p>`).join('') + `<p class="text-xs opacity-80"><a href="#" onclick="app.switchView('automox'); return false;" class="underline">Open Patch Coverage</a></p>`;
+                // Same box as the Qualys data panel above it: icon on the left, a bold headline, detail lines, a small source line.
+                const lines = [];
+                lines.push(L ? `<p><strong>Patch data covers ${fmtNum(L.devices || 0)} Automox devices, with ${fmtNum(L.pending || 0)} waiting patches.</strong></p>`
+                    : `<p><strong>No Automox data yet.</strong> Open Patch Coverage and press Sync from Automox.</p>`);
+                if (j.running) lines.push(`<p>⟳ <strong>Automox sync running</strong> (started by ${esc(j.by || '?')} ${esc(AutomoxService.ago(j.started))}).</p>`);
+                if (L) lines.push(`<p>${days > limit ? '⚠' : '✔'} <strong>Automox sync</strong> ${esc(when(L.at))}${days > limit ? ` <strong>(${Math.floor(days)} days old)</strong>` : ''} (${L.by === 'schedule' ? 'scheduled' : 'started by ' + esc(L.by || '?')}; ${esc(sched)}).</p>`);
+                if (failed) lines.push(`<p>✗ <strong>The last Automox sync failed</strong> ${esc(when(E.at))}: ${esc(E.message || '')}</p>`);
+                lines.push(`<p class="text-xs opacity-80">Source: Automox API${L && (L.orgName || L.org) ? ` (organisation ${esc(L.orgName || L.org)})` : ''} · <a href="#" onclick="app.switchView('automox'); return false;" class="underline">Open Patch Coverage</a></p>`);
+                el.className = `rounded-lg border p-4 text-sm ${ok ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-900'}`;
+                el.innerHTML = `<div class="flex items-start gap-3"><div class="text-xl leading-none">${ok ? '✅' : '⚠️'}</div><div class="flex-1 space-y-1.5">${lines.join('')}</div></div>`;
             }
 
             renderDashboard() {

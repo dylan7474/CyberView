@@ -496,6 +496,14 @@ Phase D of the status design.
   - **Backlog P1/P2 still open against the target:** the dashed line reaches zero for P1 by go-live + 60 days and for P2 by go-live + 90 days, starting from the backlog at go-live.
   - Hover a point for its value. A table view of the last 30 snapshots is underneath.
 
+### Remembered filters (v4.3)
+
+Filter choices are remembered **per person, in their own browser**, and come back on the next visit: Vuln Management (team, exposure, risk, urgency, more filters, grouping, rows shown), the Asset Register and Review Queue filters, the team on Status, Team Risk Reports, End of Life (and its status, reason, criticality and field filters), Patch Coverage (team and priority), and Remediation. Searches typed into boxes are not remembered. Nothing is stored on the server; a private window, another browser or cleared site data simply starts with the defaults. *Clear filters* on Vuln Management goes back to the defaults (and remembers that).
+
+### Automox on the Dashboard (v4.2.1)
+
+Under the Qualys data line, the Dashboard shows when Automox data last came in: date and time, devices, waiting patches, who started it, and whether a sync is scheduled. It says ✔ when it is recent, ⚠ when it is older than the *Data is stale after* limit for Automox (Status Rules, default 7 days) or has never run, ⟳ while a sync is running, and ✗ when the last sync failed. Shown only on a server with Automox set up.
+
 ### Organisation setup
 
 Everything specific to one organisation now lives on the **⚙ Organisation setup** page. It is stored in the database (`gov_org_settings`) and is part of every backup and restore. Only administrators can change it; the server refuses changes from anyone else. Everyone can read it.
@@ -538,6 +546,7 @@ The page answers two questions: **which machines to fix first** and **which fixe
   - Tenable's "top recommended actions" are sorted *by VPR category, then by decreasing assets affected*.
   - Our P1–P4 is the category (known exploited first, the machine's Tier, one step for Internet facing), so a P1 on one machine stays above a P2 on a hundred.
 - Each list shows its top 10, with *Show all*, search and paging. A column header sorts by that column; **#** returns to the ranked order.
+- **CSV of the affected machines (v4.3), for automation:** the **⬇** on a fix row downloads the machines that fix needs; **⬇ CSV: machines for these fixes** downloads every fix in the list (after any search) in ranked order. One row per fix and machine, within the page's filters (team, urgency and so on). Columns: fix, QIDs, CVE, priority, due date, overdue, patch available, machine, name in Qualys, IPv4, operating system, team, service, tier, exposure, ports, first found, rank. Cells that start with = + - @ are prefixed with ' so spreadsheets do not run them.
 - **Data & imports** (a button at the top, collapsed) holds the Qualys sync, CSV import, the export query tips and the coverage panel. It opens by itself while a sync runs or when there is no data yet. The top line always says how fresh the findings are (*Data: Qualys sync 16 Nov 06:12 ✓*, or *⚠ 3 days old*).
 - Team comparison is on 🚦 Status (linked under the lists), so the *Teams & services* tab has gone.
 

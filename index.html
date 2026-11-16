@@ -65,7 +65,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.2.0 · 16 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.3.0 · 16 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -129,6 +129,7 @@
                     <p class="text-sm text-indigo-100 mt-1 max-w-2xl">One view of who owns each machine, what is wrong with it, and where to focus: Qualys findings, patching, end of life and remediation joined to your asset register.</p>
                 </div>
                 <div id="dash-coverage"></div>
+                <div id="dash-automox" class="hidden"></div>
                 <div id="dash-status"></div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div class="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
@@ -1395,6 +1396,30 @@
                 return true;
             }
             static save(o) { StorageService.save(StorageService.KEYS.ORG_SETTINGS, o); this.invalidate(); }
+        }
+
+        // Filter choices remembered per person, in this browser only (v4.3). A private window or cleared site data simply starts with the defaults.
+        class Prefs {
+            static KEY = 'cyberview.filters.v1';
+            static _all() { try { const o = JSON.parse(localStorage.getItem(this.KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } }
+            static get(k, dflt = null) { const v = this._all()[k]; return v === undefined ? dflt : v; }
+            static set(k, v) { try { const o = this._all(); o[k] = v; localStorage.setItem(this.KEY, JSON.stringify(o)); } catch (e) { /* storage blocked: nothing remembered */ } }
+            static clear() { try { localStorage.removeItem(this.KEY); } catch (e) { } }
+            // Plain page controls whose value is read when the page draws: remember on change, put back when the options exist.
+            static DOM = ['review-filter-state', 'review-filter-owner', 'review-filter-service', 'reg-f-field', 'reg-f-owner', 'reg-f-service', 'reg-f-env', 'reg-f-status', 'reg-f-exposure', 'reg-f-crit',
+                'register-filter-risk', 'reg-f-ax', 'report-risk-status-selector', 'report-scope-selector', 'ax-scope', 'eol-scope-selector', 'eol-f-crit', 'eol-f-field', 'rem-f-team', 'rem-f-type', 'rem-f-overdue', 'rem-f-soon'];
+            static apply(id) {
+                const el = document.getElementById(id), d = this.get('dom', {}); if (!el || !(id in d)) return;
+                if (el.type === 'checkbox') el.checked = !!d[id];
+                else if ([...el.options].some(o => o.value === d[id])) el.value = d[id];
+            }
+            static applyAll() { this.DOM.forEach(id => this.apply(id)); }
+            static listen() {
+                document.addEventListener('change', (e) => {
+                    const el = e.target; if (!el || !this.DOM.includes(el.id)) return;
+                    const d = this.get('dom', {}); d[el.id] = el.type === 'checkbox' ? el.checked : el.value; this.set('dom', d);
+                }, true);
+            }
         }
 
         class AssetIdentityService {
@@ -3419,10 +3444,12 @@
                 this.importController = new ImportController(this);
                 this.reviewState = { filters: { state: 'PENDING', owner: 'ALL', service: 'ALL', search: '' }, selectedIds: new Set(), visibleIds: [], pendingAction: null };
                 this.registerState = { editingAsset: null, deletingAsset: null, selectedAssets: new Set(), shown: 200, sig: '' };
+                const pv = Prefs.get('vuln', {});
                 this.vulnState = {
-                    filters: { ...App.VULN_DEFAULT_FILTERS }, selectedAssets: new Set(), coverageOpen: false, dataOpen: false, group: true, expanded: new Set(),
-                    tables: { assets: { key: null, dir: 1, q: '', size: '10', page: 0 }, fixes: { key: null, dir: 1, q: '', size: '10', page: 0 } }
+                    filters: { ...App.VULN_DEFAULT_FILTERS, ...(pv.filters || {}) }, selectedAssets: new Set(), coverageOpen: false, dataOpen: false, group: pv.group !== false, expanded: new Set(),
+                    tables: { assets: { key: null, dir: 1, q: '', size: pv.sizeAssets || '10', page: 0 }, fixes: { key: null, dir: 1, q: '', size: pv.sizeFixes || '10', page: 0 } }
                 };
+                this.stScope = Prefs.get('statusScope', 'ALL');
                 this.vulnData = null;
                 this.vulnVisible = [];
                 this.raState = { selectedAssets: [], filteredAssets: [] };
@@ -3437,8 +3464,11 @@
             }
 
             init() {
+                Prefs.listen();
                 OrgSettings.ensureSaved();          // v3.20: copy the built-in organisation values into the database once (administrators)
                 this.fillTeamSelects();
+                this.reviewState.filters = { state: document.getElementById('review-filter-state').value, owner: document.getElementById('review-filter-owner').value, service: document.getElementById('review-filter-service').value, search: '' };
+                const rf = this.remF; this.remSyncDom();
                 this.updateGlobalBadges();
                 // Recount old summaries first, then apply a Qualys API sync nobody has applied yet (editors, server mode).
                 StatusEngine.ensureGoLive();
@@ -3588,7 +3618,7 @@
                     ${shown.length > 400 ? `<p class="text-xs text-gray-500">Showing 400 of ${fmtNum(shown.length)}.</p>` : ''}
                     <h4 class="font-bold pt-2">Trend</h4>${this.statusTrendHTML(this.stScope, S)}`;
             }
-            stOpen(team) { this.stScope = team; this.stFilter = 'act'; this.renderStatus(); }
+            stOpen(team) { this.stScope = team; Prefs.set('statusScope', team); this.stFilter = 'act'; this.renderStatus(); }
             stFilt(k) { this.stFilter = k; this.renderStatus(); }
             // Dashboard: the estate headline from the same engine.
             // Reads the latest snapshot (saved after each applied sync), so landing on the Dashboard does not load every finding.
@@ -3686,7 +3716,8 @@
                     const was = el.value; el.innerHTML = html;
                     if (was !== '' && [...el.options].some(o => o.value === was)) el.value = was;
                 });
-                const vf = this.vulnState && this.vulnState.filters; if (vf) { const el = document.getElementById('vuln-filter-owner'); if (el) el.value = vf.owner; }
+                if (!this._prefsApplied) { this._prefsApplied = true; Prefs.applyAll(); }      // remembered choices, once per page load
+                if (this.vulnState) this.syncVulnFilterControls();
                 const bulk = document.getElementById('review-bulk-teams');
                 if (bulk) bulk.innerHTML = T.map(t => `<button data-t="${esc(t)}" onclick="app.promptBulkAction('APPROVE', this.dataset.t)" class="bg-white border text-blue-700 px-3 py-1 rounded shadow-sm font-medium">Bulk ${esc(t)}</button>`).join('');
                 const S = OrgSettings.get();
@@ -4212,7 +4243,7 @@
             }
 
             async renderAutomox(force = false) {
-                if (!this.axState) this.axState = { filter: 'ALL', q: '', tier: '2', shown: 200 };
+                if (!this.axState) this.axState = { filter: 'ALL', q: '', tier: Prefs.get('axTier', '2'), shown: 200 };
                 const S = this.axState, statusEl = document.getElementById('ax-status'), body = document.getElementById('ax-body');
                 if (!AutomoxService.on()) { body.innerHTML = '<p class="text-gray-600">Automox data needs the portal server; it is not available in the browser-only version.</p>'; return; }
                 if (!AutomoxService.data && !force) body.innerHTML = '<p class="text-gray-500 italic">Loading…</p>';
@@ -4303,7 +4334,7 @@
                         <p class="text-xs text-gray-500 mt-2">${fmtNum(m.extra.length)} Automox device${m.extra.length === 1 ? ' is' : 's are'} not in the register (section 4). Matching: hand links first, then the full name, the short name, and last the IP address (marked "by IP only": check those).</p></div>
 
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">2. Qualys findings Automox can fix</h3>
-                        <div class="flex flex-wrap items-center gap-3 mb-3 text-sm print-hide"><label class="text-xs font-semibold text-gray-500 uppercase">Priority</label><select onchange="app.axState.tier = this.value; app.renderAutomox()" class="border-gray-300 rounded text-sm">${tierOpts}</select>
+                        <div class="flex flex-wrap items-center gap-3 mb-3 text-sm print-hide"><label class="text-xs font-semibold text-gray-500 uppercase">Priority</label><select onchange="app.axState.tier = this.value; Prefs.set('axTier', this.value); app.renderAutomox()" class="border-gray-300 rounded text-sm">${tierOpts}</select>
                             <span class="text-xs text-gray-600">Of ${fmtNum(tot.a)} detections: <strong class="text-blue-800">🩹 ${fmtNum(tot.w)} have an Automox patch waiting</strong> · ${fmtNum(tot.p)} on managed assets with no matching patch · <span class="text-red-800">✗ ${fmtNum(tot.n)} on assets with no agent</span>${tot.u ? ` · ? ${fmtNum(tot.u)} on assets still to check (section 4)` : ''}</span></div>
                         <p class="text-xs text-gray-500 mb-2">Linked by CVE; for Linux "Update for &lt;package&gt;" findings also by package name (marked ≈). Automox names CVEs mostly for Windows updates, so "no patch" can also mean Automox does not name it. Only CVE links count as proof for tasks. A Linux release past its end of life gets no updates at all: see the End of Life Report.</p>
                         <div class="overflow-x-auto max-h-[28rem]"><table class="min-w-full text-sm text-left"><thead class="text-gray-500 bg-gray-50 border-b sticky top-0"><tr><th class="py-2 px-2">Priority</th><th class="py-2 px-2">QID</th><th class="py-2 px-2 w-full">Title</th><th class="py-2 px-2 text-right">Assets</th><th class="py-2 px-2 text-right" title="Automox has a patch waiting for one of its CVEs">🩹 Waiting</th><th class="py-2 px-2 text-right" title="Managed, but Automox has no waiting patch naming its CVEs">No patch</th><th class="py-2 px-2 text-right" title="No Automox agent">✗ No agent</th><th class="py-2 px-2">Automox patches</th><th class="py-2 px-2 print-hide"></th></tr></thead>
@@ -4438,10 +4469,33 @@
                 else b.classList.add('hidden');
             }
 
+            // When Automox data last came in (server mode, Automox set up): the same kind of line as the Qualys sync above it.
+            async renderDashAutomox() {
+                const el = document.getElementById('dash-automox'); if (!el) return;
+                const st = await AutomoxService.loadStatus();
+                if (this.currentView !== 'dashboard') return;
+                if (!st || !st.configured) { el.classList.add('hidden'); return; }
+                const L = st.last, E = st.error, j = st.job || {};
+                const limit = (StatusEngine.settings().staleDays || {}).automox || 7;
+                const days = L ? (Date.now() - AutomoxService.time(L.at)) / 864e5 : Infinity;
+                const failed = E && (!L || AutomoxService.time(E.at) > AutomoxService.time(L.at));
+                const when = (s) => new Date(AutomoxService.time(s)).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+                const sched = st.scheduleHours > 0 ? `scheduled every ${fmtNum(st.scheduleHours)} h` : 'sync by hand only';
+                const ok = L && !failed && days <= limit;
+                const parts = [];
+                if (j.running) parts.push(`⟳ <strong>Automox sync running</strong> (started by ${esc(j.by || '?')} ${esc(AutomoxService.ago(j.started))})`);
+                if (L) parts.push(`${ok ? '✔' : '⚠'} <strong>Automox sync</strong> ${esc(when(L.at))}${days > limit ? ` <strong>(${Math.floor(days)} days old)</strong>` : ''}: ${fmtNum(L.devices || 0)} devices, ${fmtNum(L.pending || 0)} waiting patches (${L.by === 'schedule' ? 'scheduled' : 'started by ' + esc(L.by || '?')}; ${esc(sched)}).`);
+                else if (!j.running) parts.push(`⚠ <strong>Automox has not been synced yet.</strong> Open Patch Coverage and press Sync from Automox.`);
+                if (failed) parts.push(`✗ <strong>The last Automox sync failed</strong> ${esc(when(E.at))}: ${esc(E.message || '')}`);
+                el.className = `rounded-lg border px-4 py-2 text-sm ${ok ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-900'}`;
+                el.innerHTML = parts.map(x => `<p>${x}</p>`).join('') + `<p class="text-xs opacity-80"><a href="#" onclick="app.switchView('automox'); return false;" class="underline">Open Patch Coverage</a></p>`;
+            }
+
             renderDashboard() {
                 const register = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 const queue = ReviewQueueService.getQueue().filter(x => x.status === 'PENDING' || x.status === 'IN_REVIEW');
                 document.getElementById('dash-coverage').innerHTML = this.coverageHTML('ALL');
+                this.renderDashAutomox();
                 this.renderDashStatus();
                 const drawRem = () => { const el = document.getElementById('dash-remediation'); if (el) el.innerHTML = RemediationStats.html(RemediationStats.compute(RemediationService.list())); };
                 drawRem();
@@ -4918,6 +4972,7 @@
                 const cur = sel.value;
                 sel.innerHTML = '<option value="ALL">All Services</option>' + services.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
                 sel.value = services.includes(cur) ? cur : 'ALL';
+                if (!this._regSvcApplied) { this._regSvcApplied = true; Prefs.apply('reg-f-service'); }
                 sel.dataset.key = key;
                 document.getElementById('reg-service-list').innerHTML = services.map(x => `<option value="${esc(x)}">`).join('');
             }
@@ -5047,7 +5102,7 @@
             updateVulnFilters() {
                 const v = (id) => document.getElementById(id).value;
                 this.vulnState.filters = { ...this.vulnState.filters, patchable: v('vuln-filter-patchable'), severity: v('vuln-filter-severity'), owner: v('vuln-filter-owner'), exposure: v('vuln-filter-exposure'), riskStatus: v('vuln-filter-riskstatus') };
-                Object.values(this.vulnState.tables).forEach(t => { t.page = 0; });
+                this.vulnResetPages();
                 this.renderVulnDashboard();
             }
 
@@ -5311,14 +5366,18 @@
             }
 
             static EOL_DEFAULT_FILTERS() { return { status: new Set([0, 1, 2]), reason: new Set(['os', 'sw', 'hw']), crit: 0, q: '', field: 'ALL' }; }
-            get eolF() { if (!this._eolF) this._eolF = App.EOL_DEFAULT_FILTERS(); return this._eolF; }
-            eolToggle(kind, v) { const set = this.eolF[kind]; if (set.has(v)) set.delete(v); else set.add(v); this.renderEOLAssets(); }
-            eolSetFilter(kind, v) { this.eolF[kind] = kind === 'crit' ? +v : v; this.renderEOLAssets(); }
+            get eolF() {
+                if (!this._eolF) { const d = App.EOL_DEFAULT_FILTERS(), p = Prefs.get('eol'); this._eolF = p ? { ...d, status: new Set(p.status || [...d.status]), reason: new Set(p.reason || [...d.reason]), crit: +p.crit || 0, field: p.field || 'ALL' } : d; }
+                return this._eolF;
+            }
+            eolRemember() { const f = this.eolF; Prefs.set('eol', { status: [...f.status], reason: [...f.reason], crit: f.crit, field: f.field }); }
+            eolToggle(kind, v) { const set = this.eolF[kind]; if (set.has(v)) set.delete(v); else set.add(v); this.eolRemember(); this.renderEOLAssets(); }
+            eolSetFilter(kind, v) { this.eolF[kind] = kind === 'crit' ? +v : v; this.eolRemember(); this.renderEOLAssets(); }
             eolSearch(v) { clearTimeout(this._eolQ); this._eolQ = setTimeout(() => { this.eolF.q = v; this.renderEOLAssets(); }, 200); }
-            eolResetFilters() { this._eolF = App.EOL_DEFAULT_FILTERS(); document.getElementById('eol-f-crit').value = '0'; document.getElementById('eol-f-q').value = ''; document.getElementById('eol-f-field').value = 'ALL'; this.renderEOLAssets(); }
+            eolResetFilters() { this._eolF = App.EOL_DEFAULT_FILTERS(); this.eolRemember(); document.getElementById('eol-f-crit').value = '0'; document.getElementById('eol-f-q').value = ''; document.getElementById('eol-f-field').value = 'ALL'; this.renderEOLAssets(); }
             // Summary tiles: jump to exactly the assets behind the number.
             eolTile(status, reason) {
-                this._eolF = { ...App.EOL_DEFAULT_FILTERS(), status: new Set(status), reason: new Set(reason) };
+                this._eolF = { ...App.EOL_DEFAULT_FILTERS(), status: new Set(status), reason: new Set(reason) }; this.eolRemember();
                 document.getElementById('eol-f-crit').value = '0'; document.getElementById('eol-f-q').value = ''; document.getElementById('eol-f-field').value = 'ALL';
                 this.renderEOLAssets();
                 document.getElementById('eol-f-summary').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -5404,7 +5463,11 @@
             // Remediation tracker
             // ==========================================
             static REM_DEFAULT() { return { status: new Set(RemediationService.OPEN), team: 'ALL', assignee: 'ALL', type: 'ALL', overdue: false, soon: false, q: '' }; }
-            get remF() { if (!this._remF) this._remF = App.REM_DEFAULT(); return this._remF; }
+            get remF() {
+                if (!this._remF) { const d = App.REM_DEFAULT(), p = Prefs.get('rem'); this._remF = p ? { ...d, ...p, status: new Set(Array.isArray(p.status) ? p.status : [...d.status]), q: '' } : d; }
+                return this._remF;
+            }
+            remRemember() { const f = this.remF; Prefs.set('rem', { status: [...f.status], team: f.team, assignee: f.assignee, type: f.type, overdue: f.overdue, soon: f.soon }); }
             get remSel() { if (!this._remSel) this._remSel = new Set(); return this._remSel; }
             remMsg(html, cls = 'bg-amber-50 border-amber-300 text-amber-900') { document.getElementById('rem-msg').innerHTML = html ? `<div class="rounded-lg border p-3 text-sm ${cls}">${html}</div>` : ''; }
 
@@ -5491,10 +5554,11 @@
                     return true;
                 }).sort((a, b) => (RemediationService.isOpen(b) - RemediationService.isOpen(a)) || String(a.due || '9999').localeCompare(String(b.due || '9999')) || (a.priorityRank || 9) - (b.priorityRank || 9) || a.id.localeCompare(b.id));
             }
-            remSet(k, v) { this.remF[k] = v; this.renderRemediation(); }
+            remSet(k, v) { this.remF[k] = v; this.remRemember(); this.renderRemediation(); }
             remSearch(v) { clearTimeout(this._remQ); this._remQ = setTimeout(() => { this.remF.q = v; this.renderRemediation(); }, 200); }
-            remToggleStatus(st) { const s = this.remF.status; if (s.has(st)) s.delete(st); else s.add(st); this.renderRemediation(); }
-            remReset() { this._remF = App.REM_DEFAULT(); document.getElementById('rem-f-q').value = ''; this.renderRemediation(); }
+            remToggleStatus(st) { const s = this.remF.status; if (s.has(st)) s.delete(st); else s.add(st); this.remRemember(); this.renderRemediation(); }
+            remReset() { this._remF = App.REM_DEFAULT(); this.remRemember(); this.remSyncDom(); document.getElementById('rem-f-q').value = ''; this.renderRemediation(); }
+            remSyncDom() { const f = this.remF, $ = (id) => document.getElementById(id); if ($('rem-f-team')) $('rem-f-team').value = f.team; if ($('rem-f-type')) $('rem-f-type').value = f.type; if ($('rem-f-overdue')) $('rem-f-overdue').checked = !!f.overdue; if ($('rem-f-soon')) $('rem-f-soon').checked = !!f.soon; }
             remTile(kind) {
                 const f = this._remF = App.REM_DEFAULT();
                 document.getElementById('rem-f-q').value = '';
@@ -5502,6 +5566,7 @@
                 if (kind === 'awaiting') f.status = new Set(['Fixed, awaiting scan']);
                 if (kind === 'closed') f.status = new Set(['Verified']);
                 if (kind === 'soon') f.soon = true;
+                this.remRemember(); this.remSyncDom();
                 this.renderRemediation();
             }
             remToggleSel(id, on) { if (on) this.remSel.add(id); else this.remSel.delete(id); this.remBulkBar(); }
@@ -6147,7 +6212,8 @@
                 Object.entries(map).forEach(([k, id]) => { const el = document.getElementById(id); if (el) el.value = f[k]; });
             }
 
-            vulnResetPages() { Object.values(this.vulnState.tables).forEach(t => { t.page = 0; }); }
+            vulnResetPages() { Object.values(this.vulnState.tables).forEach(t => { t.page = 0; }); this.vulnRemember(); }
+            vulnRemember() { const st = this.vulnState; Prefs.set('vuln', { filters: st.filters, group: st.group, sizeAssets: st.tables.assets.size, sizeFixes: st.tables.fixes.size }); }
 
             vulnSetFilter(key, val) {
                 this.vulnState.filters[key] = val;
@@ -6290,7 +6356,8 @@
                 box.innerHTML = `<div class="flex flex-wrap items-center gap-3 px-4 py-2 border-b">
                         <input type="search" value="${esc(T.q)}" placeholder="${tab === 'assets' ? 'Search machine, team or service' : 'Search fix, CVE or QID'}" oninput="app.vulnSearch('${tab}', this.value)" class="border border-gray-300 rounded px-3 py-1 text-sm w-64">
                         <label class="text-xs text-gray-500">Show <select onchange="app.vulnPageSize('${tab}', this.value)" class="border-gray-300 rounded text-sm ml-1">${sizes.map(([v, l]) => `<option value="${v}"${String(T.size) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-                        ${tab === 'fixes' ? `<label class="text-xs text-gray-600 flex items-center gap-1.5 cursor-pointer" title="Fold repeated updates for the same product into one row"><input type="checkbox" ${st.group ? 'checked' : ''} onchange="app.vulnSetGrouping(this.checked)" class="rounded border-gray-300"> Group similar fixes</label>` : ''}
+                        ${tab === 'fixes' ? `<label class="text-xs text-gray-600 flex items-center gap-1.5 cursor-pointer" title="Fold repeated updates for the same product into one row"><input type="checkbox" ${st.group ? 'checked' : ''} onchange="app.vulnSetGrouping(this.checked)" class="rounded border-gray-300"> Group similar fixes</label>
+                        <button onclick="app.vulnFixCsv()" class="ml-auto text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-50" title="One row per fix and machine, for every fix in this list (after search), for automation">⬇ CSV: machines for these fixes</button>` : ''}
                         ${tab === 'assets' ? '<button id="vuln-bulk-btn" onclick="app.openBulkRiskModal(\'vuln\')" class="ml-auto text-xs bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1 rounded shadow-sm hover:bg-amber-200"></button>' : ''}
                     </div><div id="vuln-table-${tab}"></div>`;
                 this.renderVulnTable(tab);
@@ -6303,7 +6370,7 @@
             }
 
             vulnSetGrouping(on) {
-                this.vulnState.group = on;
+                this.vulnState.group = on; this.vulnRemember();
                 Object.values(this.vulnState.tables).forEach(t => { t.page = 0; });
                 this.renderVulnTable('fixes');
             }
@@ -6316,8 +6383,57 @@
                 this.switchView('vuln');
             }
 
+            // CSV of the machines a fix needs, for automation (v4.3): one row per fix and machine, within the page's filters.
+            // token = one row ('q:QID' or 'f:family'); none = every fix in the list (after search), in the ranked order.
+            async vulnFixCsv(token) {
+                const d = this.vulnData; if (!d) return;
+                const st = this.vulnState, rows0 = st.group ? d.famFix : d.groups;
+                let rows;
+                if (token) {
+                    const [k, id] = [token.slice(0, 2), token.slice(2)];
+                    const pool = [...(d.famFix || []), ...(d.groups || [])];
+                    const r = k === 'f:' ? pool.find(x => x.family && x.key === id) : pool.find(x => !x.family && String(x.qid) === id);
+                    rows = r ? [r] : [];
+                } else {
+                    const q = (st.tables.fixes.q || '').toLowerCase(), cfg = this.vulnTabConfig('fixes');
+                    rows = q ? rows0.filter(r => cfg.search(r).toLowerCase().includes(q)) : rows0;
+                }
+                if (!rows.length) { StorageService.toast('No fixes to export'); return; }
+                const { dets, regMap } = await this.scopedData(st.filters);
+                const byKey = new Map();                                  // qid|asset -> findings (ports, dates)
+                dets.forEach(x => { const k = x.qid + '|' + x.asset; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(x); });
+                const safe = (v) => { const t = String(v ?? ''); return /^[=+\-@\t\r]/.test(t) ? "'" + t : t; };
+                const day = (t) => t ? new Date(t).toISOString().slice(0, 10) : '';
+                const TL = OrgSettings.tiers();
+                const head = ['Fix', 'QIDs', 'CVE', 'Priority', 'Due', 'Overdue', 'Patch available', 'Machine', 'Name in Qualys', 'IPv4', 'Operating system', 'Team', 'Service', 'Tier', 'Exposure', 'Ports', 'First found', 'Rank'];
+                const out = [];
+                rows.forEach((r, i) => {
+                    const qids = r.family ? r.members.map(m => String(m.qid)) : [String(r.qid)];
+                    [...r.assets].sort().forEach(a => {
+                        const f = qids.flatMap(q => byKey.get(q + '|' + a) || []);
+                        if (!f.length) return;
+                        const reg = regMap.get(a) || {}, t = StatusEngine.tierOf(reg);
+                        const p = Math.min(...f.map(x => x.p || 5)), due = Math.min(...f.map(x => x.due || Infinity));
+                        out.push([r.title, qids.join(' '), r.family ? '' : (r.cve || ''), p < 5 ? 'P' + p : '', isFinite(due) ? day(due) : '', f.some(x => x.overdue) ? 'yes' : '',
+                            r.family ? (r.patchable ? 'yes' : (r.patchCount ? `${r.patchCount} of ${r.members.length}` : 'no')) : (r.patchable ? 'yes' : 'no'),
+                            a, reg.originalName || a, reg.ipv4Address || '', reg.os || '', reg.owner || 'Unknown', reg.service || 'Unclassified',
+                            t ? `${t} ${TL[t - 1].name}` : 'not set', reg.exposure || 'Unknown',
+                            [...new Set(f.map(x => (x.port && String(x.port) !== '0') ? (x.proto ? `${String(x.proto).toLowerCase()}/${x.port}` : String(x.port)) : '').filter(Boolean))].join(' '),
+                            day(Math.min(...f.map(x => StatusEngine.time(x.first) || Infinity).filter(isFinite))), r.rank || i + 1].map(safe));
+                    });
+                });
+                if (!out.length) { StorageService.toast('No machines to export'); return; }
+                const scope = [st.filters.owner === 'ALL' ? 'all-teams' : st.filters.owner, st.filters.p !== 'ALL' ? 'P1-P' + st.filters.p : ''].filter(Boolean).join('_').replace(/[^A-Za-z0-9_-]+/g, '');
+                const name = token ? `fix_${String(rows[0].family ? rows[0].key : rows[0].qid).replace(/[^A-Za-z0-9]+/g, '-').slice(0, 40)}_${scope}` : `fixes_machines_${scope}`;
+                const blob = new Blob(['\ufeff' + Papa.unparse([head, ...out])], { type: 'text/csv;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob); link.download = `${name}_${new Date().toISOString().slice(0, 10)}.csv`; link.click();
+                setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+                StorageService.toast(`Exported ${fmtNum(out.length)} rows (${fmtNum(rows.length)} fix${rows.length === 1 ? '' : 'es'})`);
+            }
+
             vulnSearch(tab, v) { const T = this.vulnState.tables[tab]; T.q = v; T.page = 0; this.renderVulnTable(tab); }
-            vulnPageSize(tab, v) { const T = this.vulnState.tables[tab]; T.size = v; T.page = 0; this.renderVulnTable(tab); }
+            vulnPageSize(tab, v) { const T = this.vulnState.tables[tab]; T.size = v; T.page = 0; this.vulnRemember(); this.renderVulnTable(tab); }
             vulnPage(tab, delta) { this.vulnState.tables[tab].page += delta; this.renderVulnTable(tab); }
             vulnSort(tab, key, firstDir) {
                 const T = this.vulnState.tables[tab];
@@ -6352,13 +6468,14 @@
                 }
                 const RIX = RemediationVerifier.index();
                 const cols = [
-                    { key: 'track', w: 11, head: '<span class="sr-only">Track</span>', cell: (r) => {
+                    { key: 'track', w: 13, head: '<span class="sr-only">Track</span>', cell: (r) => {
                         const tasks = r.family ? [...(RIX.byKey.get('family|' + r.key) || []), ...r.members.flatMap(m => RIX.byQid.get(String(m.qid)) || [])] : (RIX.byQid.get(String(r.qid)) || []);
                         const c = RemediationVerifier.chip(tasks, [...r.assets]);
                         const exBtn = `<button class="write-only text-[10px] text-purple-800 border border-purple-300 rounded px-1.5 py-0.5 hover:bg-purple-50 whitespace-nowrap" title="Record an exception (accepted risk) for this fix on its machines" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.exceptVulnRow(this.dataset.t)">⚖</button>`;
-                        return `<span class="inline-flex gap-1 items-center">${c}${exBtn}<button class="write-only text-[10px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-100 whitespace-nowrap" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.trackVulnRow(this.dataset.t)" title="Create a remediation task for ${c ? 'the machines not tracked yet' : 'this fix'}">＋${c ? '' : ' Track'}</button></span>`; } },
+                        const csvBtn = `<button class="text-[10px] text-gray-700 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100" title="Download the affected machines for this fix (CSV)" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.vulnFixCsv(this.dataset.t)">⬇</button>`;
+                        return `<span class="inline-flex gap-1 items-center">${c}${exBtn}${csvBtn}<button class="write-only text-[10px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-100 whitespace-nowrap" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.trackVulnRow(this.dataset.t)" title="Create a remediation task for ${c ? 'the machines not tracked yet' : 'this fix'}">＋${c ? '' : ' Track'}</button></span>`; } },
                     { key: 'rank', w: 4, label: '#', num: true, dir: 1, align: 'right', sort: (r) => r.rank || 0, cell: (r) => r.rank ? `<span class="text-gray-500">${r.rank}</span>` : '' },
-                    { key: 'title', w: 31, label: 'Fix', dir: 1, sort: (r) => r.title.toLowerCase(), cell: (r) => r.family
+                    { key: 'title', w: 29, label: 'Fix', dir: 1, sort: (r) => r.title.toLowerCase(), cell: (r) => r.family
                         ? `<span class="flex items-center gap-2 text-gray-900"><span class="text-gray-400 w-3">${this.vulnState.expanded.has(r.key) ? '▾' : '▸'}</span><span class="truncate" title="${esc(r.title)}">${esc(r.title)}</span><span class="shrink-0 px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">${r.members.length} updates</span></span>`
                         : `<span class="text-gray-800">${trunc(r.title)}</span>` },
                     { key: 'p', w: 6, label: 'P', dir: 1, align: 'center', sort: (r) => r.p || 5, cell: (r) => r.p && r.p < 5 ? `<span title="${esc(PriorityEngine.LABELS[r.tier])} on the most important machine">${StatusEngine.pBadge(r.p)}</span>` : '-' },

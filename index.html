@@ -65,7 +65,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.3.2 · 16 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.3.3 · 16 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -6360,7 +6360,7 @@
                         <input type="search" value="${esc(T.q)}" placeholder="${tab === 'assets' ? 'Search machine, team or service' : 'Search fix, CVE or QID'}" oninput="app.vulnSearch('${tab}', this.value)" class="border border-gray-300 rounded px-3 py-1 text-sm w-64">
                         <label class="text-xs text-gray-500">Show <select onchange="app.vulnPageSize('${tab}', this.value)" class="border-gray-300 rounded text-sm ml-1">${sizes.map(([v, l]) => `<option value="${v}"${String(T.size) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
                         ${tab === 'fixes' ? `<label class="text-xs text-gray-600 flex items-center gap-1.5 cursor-pointer" title="Fold repeated updates for the same product into one row"><input type="checkbox" ${st.group ? 'checked' : ''} onchange="app.vulnSetGrouping(this.checked)" class="rounded border-gray-300"> Group similar fixes</label>
-                        <button onclick="app.vulnFixCsv()" class="ml-auto text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-50" title="One row per fix and machine, for every fix in this list (after search), for automation">⬇ CSV: machines for these fixes</button>` : ''}
+                        <button onclick="app.vulnFixCsv()" class="ml-auto text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-50" title="The names of every machine these fixes need (after search), one per line: an Ansible inventory">⬇ Machine list for these fixes</button>` : ''}
                         ${tab === 'assets' ? '<button id="vuln-bulk-btn" onclick="app.openBulkRiskModal(\'vuln\')" class="ml-auto text-xs bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1 rounded shadow-sm hover:bg-amber-200"></button>' : ''}
                     </div><div id="vuln-table-${tab}"></div>`;
                 this.renderVulnTable(tab);
@@ -6388,35 +6388,20 @@
 
             // CSV of the machines a fix needs, for automation (v4.3): one row per fix and machine, within the page's filters.
             // token = one row ('q:QID' or 'f:family'); none = every fix in the list (after search), in the ranked order.
-            // One CSV row per fix and machine (v4.3): shared by the fix list and the fix page.
-            static FIX_CSV_HEAD = ['Fix', 'QIDs', 'CVE', 'Priority', 'Due', 'Overdue', 'Patch available', 'Machine', 'Name in Qualys', 'IPv4', 'Operating system', 'Team', 'Service', 'Tier', 'Exposure', 'Ports', 'First found', 'Rank'];
-            static fixCsvRows({ title, qids, cve, patch, assets, byKey, regMap, rank }) {
-                const safe = (v) => { const t = String(v ?? ''); return /^[=+\-@\t\r]/.test(t) ? "'" + t : t; };
-                const day = (t) => t ? new Date(t).toISOString().slice(0, 10) : '';
-                const TL = OrgSettings.tiers(), out = [];
-                [...assets].sort().forEach(a => {
-                    const f = qids.flatMap(q => byKey.get(q + '|' + a) || []);
-                    if (!f.length) return;
-                    const reg = regMap.get(a) || {}, t = StatusEngine.tierOf(reg);
-                    const p = Math.min(...f.map(x => x.p || 5)), due = Math.min(...f.map(x => x.due || Infinity));
-                    const firsts = f.map(x => StatusEngine.time(x.first)).filter(Boolean);
-                    out.push([title, qids.join(' '), cve || '', p < 5 ? 'P' + p : '', isFinite(due) ? day(due) : '', f.some(x => x.overdue) ? 'yes' : '', patch,
-                        a, reg.originalName || a, reg.ipv4Address || '', reg.os || '', reg.owner || 'Unknown', reg.service || 'Unclassified',
-                        t ? `${t} ${TL[t - 1].name}` : 'not set', reg.exposure || 'Unknown',
-                        [...new Set(f.map(x => (x.port && String(x.port) !== '0') ? (x.proto ? `${String(x.proto).toLowerCase()}/${x.port}` : String(x.port)) : '').filter(Boolean))].join(' '),
-                        firsts.length ? day(Math.min(...firsts)) : '', rank || ''].map(safe));
-                });
-                return out;
+            // Machine names for automation (v4.3.3): the name as Qualys reports it (usually the full hostname, which Ansible can reach),
+            // else the register name; one per line, no header, sorted, no duplicates.
+            static hostNames(assets) {
+                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                return [...new Set([...assets].map(a => { const r = reg.get(a) || {}; return String(r.originalName || a).trim(); }).filter(Boolean))].sort((x, y) => x.localeCompare(y));
             }
-            static downloadCsv(name, head, rows) {
-                const blob = new Blob(['﻿' + Papa.unparse([head, ...rows])], { type: 'text/csv;charset=utf-8' });
+            static downloadList(name, lines) {
+                const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
                 const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob); link.download = `${name}_${new Date().toISOString().slice(0, 10)}.csv`; link.click();
+                link.href = URL.createObjectURL(blob); link.download = `${name}_${new Date().toISOString().slice(0, 10)}.txt`; link.click();
                 setTimeout(() => URL.revokeObjectURL(link.href), 1000);
             }
-            static detIndex(dets) { const m = new Map(); dets.forEach(x => { const k = x.qid + '|' + x.asset; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }); return m; }
 
-            // CSV of the machines a fix needs, for automation (v4.3), within the page's filters.
+            // The machines a fix needs, as a plain list of names for automation (v4.3.3), within the page's filters.
             // token = one row ('q:QID' or 'f:family'); none = every fix in the list (after search), in the ranked order.
             async vulnFixCsv(token) {
                 const d = this.vulnData; if (!d) return;
@@ -6432,28 +6417,23 @@
                     rows = q ? rows0.filter(r => cfg.search(r).toLowerCase().includes(q)) : rows0;
                 }
                 if (!rows.length) { StorageService.toast('No fixes to export'); return; }
-                const { dets, regMap } = await this.scopedData(st.filters);
-                const byKey = App.detIndex(dets), out = [];
-                rows.forEach((r, i) => out.push(...App.fixCsvRows({ title: r.title, qids: r.family ? r.members.map(m => String(m.qid)) : [String(r.qid)], cve: r.family ? '' : r.cve,
-                    patch: r.family ? (r.patchable ? 'yes' : (r.patchCount ? `${r.patchCount} of ${r.members.length}` : 'no')) : (r.patchable ? 'yes' : 'no'),
-                    assets: r.assets, byKey, regMap, rank: r.rank || i + 1 })));
-                if (!out.length) { StorageService.toast('No machines to export'); return; }
+                const assets = new Set(); rows.forEach(r => r.assets.forEach(a => assets.add(a)));     // the rows' machines are already within the page's filters
+                const names = App.hostNames(assets);
+                if (!names.length) { StorageService.toast('No machines to export'); return; }
                 const scope = [st.filters.owner === 'ALL' ? 'all-teams' : st.filters.owner, st.filters.p !== 'ALL' ? 'P1-P' + st.filters.p : ''].filter(Boolean).join('_').replace(/[^A-Za-z0-9_-]+/g, '');
-                App.downloadCsv(token ? `fix_${String(rows[0].family ? rows[0].key : rows[0].qid).replace(/[^A-Za-z0-9]+/g, '-').slice(0, 40)}_${scope}` : `fixes_machines_${scope}`, App.FIX_CSV_HEAD, out);
-                StorageService.toast(`Exported ${fmtNum(out.length)} rows (${fmtNum(rows.length)} fix${rows.length === 1 ? '' : 'es'})`);
+                App.downloadList(token ? `fix_${String(rows[0].family ? rows[0].key : rows[0].qid).replace(/[^A-Za-z0-9]+/g, '-').slice(0, 40)}_${scope}` : `fixes_machines_${scope}`, names);
+                StorageService.toast(`Exported ${fmtNum(names.length)} machine names (${fmtNum(rows.length)} fix${rows.length === 1 ? '' : 'es'})`);
             }
 
-            // The fix page's "Affected assets" table as CSV: the machines it shows (its team filter, or every team after "Show all teams").
+            // The fix page's "Affected assets" table as a list of names: the machines it shows (its team filter, or every team after "Show all teams").
             async inspectQidCsv() {
                 const c = this.inspectCtx; if (!c || !c.qid) return;
                 const vd = c.vd || await this.getVulnData(), q = vd.qmap.get(c.qid) || {}, list = c.list || [];
                 if (!list.length) { StorageService.toast('No machines to export'); return; }
-                const regMap = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
-                const out = App.fixCsvRows({ title: plain(q.title || 'QID ' + c.qid), qids: [String(c.qid)], cve: (q.cves && q.cves[0] && q.cves[0].id) || '', patch: q.patchable ? 'yes' : 'no',
-                    assets: new Set(list.map(x => x.asset)), byKey: App.detIndex(list), regMap, rank: '' });
+                const names = App.hostNames(new Set(list.map(x => x.asset)));
                 const scope = (c.scope && c.scope.owner) ? c.scope.owner : 'all-teams';
-                App.downloadCsv(`fix_${c.qid}_${scope.replace(/[^A-Za-z0-9_-]+/g, '')}`, App.FIX_CSV_HEAD, out);
-                StorageService.toast(`Exported ${fmtNum(out.length)} machines`);
+                App.downloadList(`fix_${c.qid}_${scope.replace(/[^A-Za-z0-9_-]+/g, '')}`, names);
+                StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
             }
 
             vulnSearch(tab, v) { const T = this.vulnState.tables[tab]; T.q = v; T.page = 0; this.renderVulnTable(tab); }
@@ -6496,7 +6476,7 @@
                         const tasks = r.family ? [...(RIX.byKey.get('family|' + r.key) || []), ...r.members.flatMap(m => RIX.byQid.get(String(m.qid)) || [])] : (RIX.byQid.get(String(r.qid)) || []);
                         const c = RemediationVerifier.chip(tasks, [...r.assets]);
                         const exBtn = `<button class="write-only text-[10px] text-purple-800 border border-purple-300 rounded px-1.5 py-0.5 hover:bg-purple-50 whitespace-nowrap" title="Record an exception (accepted risk) for this fix on its machines" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.exceptVulnRow(this.dataset.t)">⚖</button>`;
-                        const csvBtn = `<button class="text-[10px] text-gray-700 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100" title="Download the affected machines for this fix (CSV)" aria-label="Download CSV" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.vulnFixCsv(this.dataset.t)">⬇ CSV</button>`;
+                        const csvBtn = `<button class="text-[10px] text-gray-700 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100" title="Download the names of the machines this fix needs, one per line (an Ansible inventory)" aria-label="Download machine list" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.vulnFixCsv(this.dataset.t)">⬇ List</button>`;
                         return `<span class="inline-flex gap-1 items-center">${c}${exBtn}${csvBtn}<button class="write-only text-[10px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-100 whitespace-nowrap" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.trackVulnRow(this.dataset.t)" title="Create a remediation task for ${c ? 'the machines not tracked yet' : 'this fix'}">＋${c ? '' : ' Track'}</button></span>`; } },
                     { key: 'rank', w: 4, label: '#', num: true, dir: 1, align: 'right', sort: (r) => r.rank || 0, cell: (r) => r.rank ? `<span class="text-gray-500">${r.rank}</span>` : '' },
                     { key: 'title', w: 26, label: 'Fix', dir: 1, sort: (r) => r.title.toLowerCase(), cell: (r) => r.family
@@ -7074,7 +7054,7 @@
                     </div>
 
                     <div class="bg-white rounded-lg shadow border overflow-hidden">
-                        <div class="bg-gray-50 px-4 py-3 border-b font-semibold text-sm text-gray-700 flex items-center justify-between gap-3"><span>Affected assets (${fmtNum(assets.length)})</span><button onclick="app.inspectQidCsv()" class="print-hide font-normal text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Download these machines as CSV (for automation)">⬇ CSV</button></div>
+                        <div class="bg-gray-50 px-4 py-3 border-b font-semibold text-sm text-gray-700 flex items-center justify-between gap-3"><span>Affected assets (${fmtNum(assets.length)})</span><button onclick="app.inspectQidCsv()" class="print-hide font-normal text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Download these machines' names, one per line (an Ansible inventory)">⬇ Machine list</button></div>
                         <div class="overflow-auto max-h-[28rem]">
                             <table class="min-w-full text-left text-sm whitespace-nowrap">
                                 <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2">Asset</th><th class="px-3 py-2">Owner</th><th class="px-3 py-2">Service</th><th class="px-3 py-2 text-center">Crit</th><th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>

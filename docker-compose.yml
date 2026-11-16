@@ -1,0 +1,70 @@
+# Governance portal: web app + MariaDB. Use deploy.sh rather than running this by hand.
+services:
+  db:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.db
+    image: governance-portal-db:latest
+    restart: unless-stopped
+    environment:
+      DB_NAME: qualys
+      DB_USER: qualys
+      DB_PASSWORD: ${DB_PASSWORD:?run deploy.sh to create .env}
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks: [internal]          # never published outside Docker
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    image: governance-portal-app:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_NAME: qualys
+      DB_USER: qualys
+      DB_PASSWORD: ${DB_PASSWORD:?run deploy.sh to create .env}
+      # Automox (optional, read-only): set with  ./deploy.sh automox key | org ID | hours N
+      AUTOMOX_API_KEY: ${AUTOMOX_API_KEY:-}
+      AUTOMOX_ORG_ID: ${AUTOMOX_ORG_ID:-}
+      AUTOMOX_SYNC_HOURS: ${AUTOMOX_SYNC_HOURS:-0}
+      AUTOMOX_BASE_URL: ${AUTOMOX_BASE_URL:-https://console.automox.com/api}
+      AUTOMOX_REQUEST_GAP: ${AUTOMOX_REQUEST_GAP:-2.2}
+      # Qualys API (optional, read-only): set with  ./deploy.sh qualys url URL | user | pass | tag NAME | hour H
+      QUALYS_API_URL: ${QUALYS_API_URL:-}
+      QUALYS_GATEWAY_URL: ${QUALYS_GATEWAY_URL:-}
+      QUALYS_USERNAME: ${QUALYS_USERNAME:-}
+      QUALYS_PASSWORD_B64: ${QUALYS_PASSWORD_B64:-}
+      QUALYS_SCOPE_TAG_B64: ${QUALYS_SCOPE_TAG_B64:-}
+      QUALYS_SYNC_HOUR: ${QUALYS_SYNC_HOUR:-}
+      QUALYS_HOSTS_PER_PAGE: ${QUALYS_HOSTS_PER_PAGE:-100}
+    networks: [internal]          # not published: only the proxy reaches it
+
+  proxy:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.proxy
+    image: governance-portal-proxy:latest
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      CERT_HOST: ${CERT_HOST:-portal.local}
+      CERT_NAMES: ${CERT_NAMES:-}
+      HTTPS_PUBLIC_PORT: ${HTTPS_PORT:-443}
+    volumes:
+      - ./certs:/certs            # portal.crt + portal.key; made (self-signed) if absent, replace with your own any time
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80"
+      - "${BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+    networks: [internal]
+
+volumes:
+  dbdata:
+networks:
+  internal:

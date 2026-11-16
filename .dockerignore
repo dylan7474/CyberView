@@ -1,0 +1,6 @@
+certs
+backups
+.env
+.git
+tests
+standalone

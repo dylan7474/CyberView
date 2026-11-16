@@ -1,0 +1,15 @@
+# MariaDB from Debian 13's own repository (Debian ships MariaDB as its MySQL).
+FROM debian:trixie-slim
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mariadb-server mariadb-client \
+ && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /var/lib/mysql/* \
+ && mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
+COPY docker/db-entrypoint.sh /usr/local/bin/db-entrypoint.sh
+COPY docker/my.cnf /etc/mysql/mariadb.conf.d/99-portal.cnf
+RUN chmod +x /usr/local/bin/db-entrypoint.sh
+VOLUME /var/lib/mysql
+EXPOSE 3306
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=6 \
+  CMD mariadb-admin --protocol=socket ping --silent || exit 1
+ENTRYPOINT ["/usr/local/bin/db-entrypoint.sh"]

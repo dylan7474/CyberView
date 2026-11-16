@@ -35,6 +35,7 @@
         .view-section:not(.active) { display: none !important; }
         /* roles (server mode only): admin-only things hide for everyone else, write-only things hide for viewers */
         body:not(.server-mode) .server-only { display: none !important; }
+        body.demo-mode aside .server-only.demo-ok { display: flex !important; }
         body.server-mode:not(.role-admin) .admin-only { display: none !important; }
         body.role-viewer .write-only { display: none !important; }
         /* dialogs scroll inside the window instead of running off the bottom on short screens */
@@ -65,7 +66,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.3.3 · 16 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.4.0 · 16 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -93,7 +94,7 @@
             <button onclick="app.switchView('org')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⚙ Organisation setup</button>
             <button onclick="app.switchView('reports')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📄 Team Risk Reports</button>
             <button onclick="app.switchView('eol')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⏳ End of Life Report</button>
-            <button onclick="app.switchView('automox')" class="server-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩹 Patch Coverage</button>
+            <button onclick="app.switchView('automox')" class="server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩹 Patch Coverage</button>
             <button onclick="app.switchView('history')" class="server-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🕘 History</button>
             <button onclick="app.switchView('backup')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">💾 Backup &amp; Restore</button>
             <button onclick="app.switchView('users')" class="server-only admin-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">👥 Users</button>
@@ -119,6 +120,7 @@
 
         <!-- Dynamic Views Container -->
         <div class="flex-1 overflow-y-auto p-8" id="view-container">
+            <div id="demo-banner" class="hidden"></div>
             <div id="org-banner" class="hidden mb-4 bg-amber-50 border-2 border-amber-400 text-amber-900 rounded-xl p-4 text-sm print-hide">⚠ <strong>Set up your organisation first.</strong> This portal has assets but no organisation setup (teams, domain suffixes, rules), so imports and Qualys syncs are paused to avoid duplicate assets. <button onclick="app.switchView('org')" class="underline font-semibold">Open ⚙ Organisation setup</button>, check it and press <em>Save setup</em>, or import your setup, or restore a backup that includes it.</div>
             
             <!-- VIEW: DASHBOARD -->
@@ -1152,9 +1154,10 @@
                 el.className = 'text-[10px] mt-1 ' + (bad ? 'text-red-400 font-bold' : 'text-slate-500');
             }
 
+            static ns = '';      // local mode: the demo keeps its data under its own names (Demo.NS), apart from anything else in this browser
             static load(key) {
                 if (this.mode === 'server') { const v = this._cache[key]; return v === undefined ? [] : structuredClone(v); }
-                const data = localStorage.getItem(key);
+                const data = localStorage.getItem(this.ns + key);
                 return data ? JSON.parse(data) : [];
             }
 
@@ -1170,7 +1173,7 @@
                     this._timer = setTimeout(() => this.flush(), 400);
                     return;
                 }
-                localStorage.setItem(key, JSON.stringify(data));
+                localStorage.setItem(this.ns + key, JSON.stringify(data));
             }
 
             static remove(key) {
@@ -1182,7 +1185,7 @@
                     this._timer = setTimeout(() => this.flush(), 400);
                     return;
                 }
-                localStorage.removeItem(key);
+                localStorage.removeItem(this.ns + key);
             }
 
             // Send pending changes to the server, one collection at a time. Resolves when everything is saved.
@@ -1396,6 +1399,404 @@
                 return true;
             }
             static save(o) { StorageService.save(StorageService.KEYS.ORG_SETTINGS, o); this.invalidate(); }
+        }
+
+        // =====================================================================================================
+        // Demo mode (v4.4): ACME Cloud Ltd, a made-up company with generated sample data, for a GitHub Pages demo.
+        // Turned on by ?demo or the "Load the demo" button. Everything stays in this browser, apart from any
+        // real data (own storage names), until "Reset demo". A small pretend server inside the page answers the
+        // Qualys and Automox requests the real server would, so the real sync / apply / Patch Coverage code runs.
+        // Nothing here is real: names, check numbers (QIDs 9xxxxx), titles and figures are invented. CVE numbers
+        // are real public ones, so the "public fix data" look-ups work.
+        // =====================================================================================================
+        class Demo {
+            static FLAG = 'cyberview.demo';
+            static NS = 'acme.';
+            static DB = 'cyberview_demo_vuln';
+            static ORG = 'ACME Cloud Ltd';
+            static ON = (() => { try { return localStorage.getItem('cyberview.demo') === '1'; } catch (e) { return false; } })();
+            static api() { return StorageService.mode === 'server' || this.ON; }
+
+            // ---------- turning it on and off
+            static boot() {
+                let want = false;
+                try { want = new URLSearchParams(location.search).has('demo'); } catch (e) { }
+                if (want && !this.ON) { try { localStorage.setItem(this.FLAG, '1'); this.ON = true; } catch (e) { } }
+                if (!this.ON) return;
+                StorageService.ns = this.NS;
+                VulnStore.DB = this.DB;
+                document.body.classList.add('demo-mode');
+                this.intercept();
+            }
+            static enter() { try { localStorage.setItem(this.FLAG, '1'); } catch (e) { } location.href = location.pathname + '?demo'; }
+            static async wipe() {
+                try { Object.keys(localStorage).filter(k => k.startsWith(this.NS)).forEach(k => localStorage.removeItem(k)); } catch (e) { }
+                await new Promise(res => { try { const r = indexedDB.deleteDatabase(this.DB); r.onsuccess = r.onerror = r.onblocked = () => res(); } catch (e) { res(); } });
+            }
+            static async reset() {
+                if (!confirm('Reset the demo? Everything you changed is thrown away and ACME Cloud Ltd starts again from the beginning.')) return;
+                await this.wipe(); location.href = location.pathname + '?demo';
+            }
+            static async leave() {
+                if (!confirm('Leave the demo? The sample data is removed from this browser.')) return;
+                await this.wipe(); try { localStorage.removeItem(this.FLAG); } catch (e) { }
+                location.href = location.pathname;
+            }
+            static bannerHTML() {
+                const S = this.state();
+                return `<div class="mb-4 rounded-xl border-2 border-indigo-300 bg-indigo-50 text-indigo-950 px-4 py-3 text-sm flex flex-wrap items-center gap-x-4 gap-y-2 print-hide">
+                    <span>🎭 <strong>DEMO · ${esc(this.ORG)}</strong>: sample data, nothing here is real. Simulated day ${fmtNum(S.day || 0)}.</span>
+                    <span class="flex flex-wrap gap-2 ml-auto">
+                        <button onclick="Demo.nextDay()" class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-700" title="Pretend a day has passed: some findings are fixed, a few new ones appear, Automox and Qualys sync">⟳ Simulate next day's sync</button>
+                        <button onclick="Demo.reset()" class="border border-indigo-300 bg-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-100">↺ Reset demo</button>
+                        <button onclick="Demo.leave()" class="border border-indigo-300 bg-white px-3 py-1.5 rounded-lg text-xs hover:bg-indigo-100">Leave demo</button>
+                    </span></div>`;
+            }
+            static paintBanner() { const el = document.getElementById('demo-banner'); if (el) { el.innerHTML = this.ON ? this.bannerHTML() : ''; el.classList.toggle('hidden', !this.ON); } }
+            static welcomeHTML() {
+                return `<div class="rounded-2xl border-2 border-indigo-200 bg-white p-6 space-y-3">
+                    <h3 class="text-lg font-bold text-slate-900">Try CyberView with sample data</h3>
+                    <p class="text-sm text-slate-600">This copy has no server and no data. Load the demo to explore a made-up hosting company, <strong>${esc(this.ORG)}</strong>: about 230 machines, Qualys-style findings, Automox patching, end-of-life operating systems, tasks and 30 days of history. Everything stays in this browser until you reset or leave the demo.</p>
+                    <button onclick="Demo.enter()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700">Load the ${esc(this.ORG)} demo</button>
+                    <p class="text-xs text-slate-500">Or import your own Qualys CSV export from Vuln Management (Data &amp; imports); it stays in this browser.</p></div>`;
+            }
+
+            // ---------- the pretend server's own state (in this browser)
+            static state() { try { return JSON.parse(localStorage.getItem(this.NS + '__server') || '{}') || {}; } catch (e) { return {}; } }
+            static saveState(s) { try { localStorage.setItem(this.NS + '__server', JSON.stringify(s)); } catch (e) { } }
+
+            static intercept() {
+                const raw = window.fetch.bind(window);
+                const json = (o, status = 200) => Promise.resolve(new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } }));
+                window.fetch = (input, init = {}) => {
+                    const url = typeof input === 'string' ? input : (input && input.url) || '';
+                    const m = url.match(/^api\/(qualys|automox)\/([a-z]+)/);
+                    if (!m) return raw(input, init);
+                    const S = this.state(), [, svc, what] = m;
+                    if (svc === 'qualys') {
+                        if (what === 'status') return json(this.qxStatus(S));
+                        if (what === 'history') return json((S.qxHist || []).slice().reverse());
+                        if (what === 'sync') { this.startJob(S, 'qx'); return json({ ok: true }, 202); }
+                        if (what === 'claim') return json({ ok: true });
+                        if (what === 'data') return json(this.qxPackage(S.day || 0, S.qxLast));
+                        if (what === 'applied') {
+                            const b = JSON.parse(init.body || '{}');
+                            S.qxApplied = { syncId: b.syncId, at: new Date().toISOString(), by: 'demo visitor', summary: b.summary || {} };
+                            (S.qxHist || []).forEach(h => { if (h.id === b.syncId) h.applied = { by: 'demo visitor', at: S.qxApplied.at }; });
+                            this.saveState(S); return json({ ok: true });
+                        }
+                    } else {
+                        if (what === 'status') return json(this.axStatus(S));
+                        if (what === 'data') return json(this.axData(S.day || 0, S.axLast));
+                        if (what === 'sync') { this.startJob(S, 'ax'); return json({ ok: true }, 202); }
+                    }
+                    return json({ error: 'not available in the demo' }, 404);
+                };
+            }
+            // A sync takes a couple of seconds, then finishes; the page's own polling picks it up and applies it.
+            static startJob(S, kind) {
+                const started = new Date().toISOString();
+                S[kind + 'Job'] = { running: true, started, by: 'demo visitor', phase: kind === 'qx' ? 'detections' : 'devices' };
+                this.saveState(S);
+                setTimeout(() => this.finishJob(kind), 2500);
+            }
+            static finishJob(kind, by = 'demo visitor') {
+                const S = this.state(), j = S[kind + 'Job'] || { started: new Date().toISOString(), by };
+                const at = new Date().toISOString();
+                if (kind === 'qx') {
+                    const pkg = this.qxPackage(S.day || 0, null), open = this.openKeys(pkg), prevOpen = new Set(S.qxOpen || []);
+                    const changes = S.qxLast ? { since: S.qxLast.syncId, sameScope: true, open: open.size, newOpen: [...open].filter(k => !prevOpen.has(k)).length, closed: [...prevOpen].filter(k => !open.has(k)).length, hostsAdded: 0, hostsGone: 0 } : null;
+                    const id = 'demo-' + at.replace(/[-:.TZ]/g, '').slice(0, 14);
+                    const steps = [['Hosts in scope', pkg.hosts.length], ['Findings', pkg.hosts.reduce((n, h) => n + h.d.length, 0)], ['KnowledgeBase', pkg.qids.length], ['Asset scores', pkg.hosts.length]]
+                        .map(([label, count]) => ({ label, state: 'done', seconds: 1 + Math.round(Math.random() * 4), count, total: count }));
+                    S.qxLast = { syncId: id, at, by: j.by || by, hosts: pkg.hosts.length, detections: steps[1].count, qids: pkg.qids.length, calls: 14, seconds: 9, steps, changes, warnings: [], scope: '' };
+                    S.qxOpen = [...open];
+                    S.qxHist = [...(S.qxHist || []), { id, ok: true, started: j.started, finished: at, by: j.by || by, scope: '', seconds: 9, calls: 14, hosts: S.qxLast.hosts, detections: S.qxLast.detections, qids: S.qxLast.qids, changes, warnings: [], steps }].slice(-30);
+                    S.qxJob = { running: false };
+                } else {
+                    const d = this.axData(S.day || 0, null);
+                    S.axLast = { at, by: j.by || by, org: '1001', orgName: this.ORG, devices: d.devices.length, pending: d.pending.length, installed: d.installed.length, installedDevices: 0, checkedIds: [], warnings: [], newlyInstalled: 0 };
+                    S.axJob = { running: false };
+                }
+                this.saveState(S);
+            }
+            static qxStatus(S) {
+                return { configured: true, blocked: false, scope: '', scheduleHour: 6, job: S.qxJob && S.qxJob.running ? { ...S.qxJob, steps: [{ label: 'Findings', state: 'running', count: 0 }], calls: 3 } : { running: false },
+                    last: S.qxLast || null, applied: S.qxApplied || null, error: null };
+            }
+            static axStatus(S) { return { configured: true, scheduleHours: 24, job: S.axJob && S.axJob.running ? S.axJob : { running: false }, last: S.axLast || null, error: null }; }
+            static openKeys(pkg) { const s = new Set(); pkg.hosts.forEach(h => h.d.forEach(r => { if (r[3] !== 'FIXED') s.add(h.n + '|' + r[0] + '|' + r[5]); })); return s; }
+
+            // "Simulate next day's sync": a day passes, then Automox and Qualys both sync; the Qualys sync is applied as usual.
+            static async nextDay() {
+                const S = this.state(); S.day = (S.day || 0) + 1; this.saveState(S);
+                this.paintBanner();
+                StorageService.toast(`Day ${S.day}: Automox and Qualys are syncing…`);
+                this.finishJob('ax', 'schedule');
+                AutomoxService.data = null; AutomoxService._m = null;
+                this.startJob(this.state(), 'qx');
+                await new Promise(r => setTimeout(r, 2800));
+                await window.app.qxApply(false);
+                window.app.switchView(window.app.currentView || 'dashboard');
+                this.paintBanner();
+            }
+
+            // ---------- the made-up estate (always the same for the same seed)
+            static rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+            static OS = {
+                w2012: { os: 'Microsoft Windows Server 2012 R2 Standard 6.3.9600 64-bit N/A Build 9600', fam: 'win', life: 'EOL/EOS' },
+                w2016: { os: 'Microsoft Windows Server 2016 Standard 10.0.14393 64-bit N/A Build 14393', fam: 'win', life: 'EOL' },
+                w2019: { os: 'Microsoft Windows Server 2019 Standard 10.0.17763 64-bit N/A Build 17763', fam: 'win', life: 'GA' },
+                w2022: { os: 'Microsoft Windows Server 2022 Datacenter 10.0.20348 64-bit N/A Build 20348', fam: 'win', life: 'GA' },
+                w10: { os: 'Microsoft Windows 10 Enterprise 22H2 10.0.19045 64-bit N/A Build 19045', fam: 'wincl', life: 'EOL/EOS' },
+                w11a: { os: 'Microsoft Windows 11 Enterprise 23H2 10.0.22631 64-bit N/A Build 22631', fam: 'wincl', life: 'GA' },
+                w11b: { os: 'Microsoft Windows 11 Enterprise 24H2 10.0.26100 64-bit N/A Build 26100', fam: 'wincl', life: 'GA' },
+                rhel86: { os: 'Red Hat Enterprise Linux 8 8.6', fam: 'rhel', life: 'EOL/EOS' },
+                rhel810: { os: 'Red Hat Enterprise Linux 8 8.10', fam: 'rhel', life: 'GA' },
+                rhel94: { os: 'Red Hat Enterprise Linux 9 9.4', fam: 'rhel', life: 'GA' },
+                c7: { os: 'CentOS Linux 7.9.2009', fam: 'rhel', life: 'EOL/EOS' },
+                u2004: { os: 'Ubuntu Linux 20.04.6 LTS', fam: 'ubu', life: 'EOL' },
+                u2204: { os: 'Ubuntu Linux 22.04.5 LTS', fam: 'ubu', life: 'GA' },
+                u2404: { os: 'Ubuntu Linux 24.04.1 LTS', fam: 'ubu', life: 'GA' },
+                esx7: { os: 'VMware ESXi 7.0 U3 7.0.3 build-21424296', fam: 'esx', life: 'EOL/EOS' },
+                esx8: { os: 'VMware ESXi 8.0 U3 8.0.3 build-24022510', fam: 'esx', life: 'GA' },
+                vc7: { os: 'VMware vCenter Server Appliance 7.0.3', fam: 'vc', life: 'EOL/EOS' },
+                forti: { os: 'Fortinet FortiOS 7.2.5', fam: 'forti', life: 'GA' },
+                iosxe: { os: 'Cisco IOS XE 17.6.4', fam: 'iosxe', life: 'GA' }
+            };
+            // [count, name pattern, service, team, tier (0 = not set), OS choices, Internet-facing share, appliance (no Automox agent)]
+            static ROLES = [
+                [6, 'S-dc0N', 'Active Directory', 'Platform', 1, ['w2019', 'w2022'], 0, 0], [4, 'S-dns0N', 'DNS', 'Platform', 1, ['rhel94', 'rhel810'], 0, 0],
+                [2, 'S-dhcp0N', 'DHCP', 'Platform', 1, ['w2019'], 0, 0], [24, 'S-web0N', 'Web Hosting', 'Platform', 1, ['u2204', 'u2004', 'rhel94'], 0.7, 0],
+                [14, 'S-db0N', 'Database', 'Platform', 1, ['rhel86', 'rhel94', 'w2016'], 0, 0], [8, 'S-bkp0N', 'Backup', 'Platform', 1, ['w2019', 'w2022'], 0, 0],
+                [4, 'S-asg0N', 'Backup', 'Platform', 1, ['rhel810'], 0, 0], [6, 'S-jump0N', 'Jumpbox', 'Platform', 1, ['w2022'], 1, 0],
+                [3, 'S-syslog0N', 'Syslog', 'Platform', 1, ['u2204'], 0, 0], [6, 'S-mon0N', 'Monitoring', 'Platform', 2, ['u2004', 'u2204'], 0, 0],
+                [3, 'S-relay0N', 'SMTP', 'Platform', 2, ['rhel94'], 0.5, 0], [2, 'S-av0N', 'Anti-virus', 'Platform', 2, ['w2019'], 0, 0],
+                [3, 'S-vc0N', 'VM Orchestration', 'Platform', 2, ['vc7'], 0, 1], [20, 'S-esx0N', 'Hypervisor', 'Platform', 1, ['esx7', 'esx8', 'esx8'], 0, 1],
+                [16, 'S-k8s0N', 'Containers', 'Platform', 2, ['u2204', 'u2404'], 0, 0], [4, 'S-app0N', 'Legacy application', 'Platform', 3, ['w2012', 'c7'], 0, 0],
+                [8, 'S-test0N', 'Test', 'Platform', 3, ['u2404', 'w2022', 'rhel94'], 0, 0],
+                [6, 'S-fw0N', 'Firewall', 'Network', 1, ['forti'], 1, 1], [10, 'S-sw0N', 'Switching', 'Network', 2, ['iosxe'], 0, 1], [4, 'S-lb0N', 'Load balancing', 'Network', 1, ['u2204'], 1, 1],
+                [60, 'CORP-L-25-NNNN', 'Laptop', 'Corporate IT', 3, ['w11a', 'w11b', 'w11b', 'w10'], 0, 0], [4, 'S-file0N', 'File server', 'Corporate IT', 2, ['w2019'], 0, 0],
+                [2, 'S-print0N', 'Print', 'Corporate IT', 3, ['w2016'], 0, 0],
+                [3, 'S-siem0N', 'SIEM', 'Security', 2, ['rhel94'], 0, 0], [2, 'S-scan0N', 'Vulnerability scanning', 'Security', 2, ['u2204'], 0, 0], [2, 'S-vault0N', 'Secrets', 'Security', 1, ['rhel94'], 0, 0]
+            ];
+            static estate() {
+                if (this._estate) return this._estate;
+                const R = this.rng(7474), pick = (a) => a[Math.floor(R() * a.length)], sites = ['lon1', 'man1', 'edi1'];
+                const machines = []; let id = 41000000, ipn = 10;
+                this.ROLES.forEach(([n, pat, service, team, tier, oses, inet, appliance]) => {
+                    for (let i = 1; i <= n; i++) {
+                        const site = sites[(i - 1) % 3];
+                        let short = pat.replace('S', site).replace('0N', String(i).padStart(2, '0')).replace('NNNN', String(1000 + Math.floor(R() * 8999)));
+                        const corp = team === 'Corporate IT' && short.startsWith('CORP');
+                        const fqdn = short + (corp ? '.corp.acme.example' : '.acme-cloud.example');
+                        const osk = pick(oses), O = this.OS[osk];
+                        machines.push({ id: String(id++), short, fqdn, service, team, tier: R() < 0.1 ? 0 : tier, osk, os: O.os, fam: O.fam, life: O.life,
+                            exposure: R() < inet ? 'Internet Facing' : (R() < 0.06 ? 'Unknown' : 'Internal'), appliance: !!appliance,
+                            ip: `10.${20 + sites.indexOf(site)}.${Math.floor(ipn / 250)}.${(ipn++ % 250) + 2}`, hygiene: 0.35 + R() * 0.6,
+                            scanAgo: R() < 0.04 ? 20 + Math.floor(R() * 25) : Math.floor(R() * 3), inRegister: true });
+                    }
+                });
+                // a handful Qualys finds that nobody has registered yet (they land in the Review Queue as Unrecognised)
+                ['lon1-web25', 'man1-k8s17', 'edi1-test09', 'CORP-L-25-7731', 'lon1-tmp-build01', 'man1-db15', '10.21.9.44', 'edi1-relay04'].forEach((s, i) => {
+                    const osk = pick(['u2204', 'w2022', 'rhel94', 'w11b']), O = this.OS[osk];
+                    machines.push({ id: String(id++), short: s, fqdn: /^\d/.test(s) ? s : s + (s.startsWith('CORP') ? '.corp.acme.example' : '.acme-cloud.example'), service: '', team: '', tier: 0, osk, os: O.os, fam: O.fam, life: O.life,
+                        exposure: 'Unknown', appliance: false, ip: `10.2${i % 3}.9.${40 + i}`, hygiene: 0.3 + R() * 0.4, scanAgo: Math.floor(R() * 3), inRegister: false });
+                });
+                this._estate = { machines, catalog: this.catalog(R), dets: null };
+                this._estate.dets = this.findings(this._estate, R);
+                return this._estate;
+            }
+
+            // The Qualys-style checks (QIDs 9xxxxx are made up; titles are our own; CVE numbers are real public ones).
+            static catalog(R) {
+                const C = [], today = new Date(), mon = (k) => { const d = new Date(today); d.setUTCMonth(d.getUTCMonth() - k, 12); return d; };
+                const K = ['CISA Known Exploited Vulnerabilities', 'Active Attacks'], P = ['Public Exploit'], RCE = ['Remote Code Execution'];
+                let q = 910000;
+                const add = (o) => C.push({ qid: String(q++), cat: 'General', solution: 'Apply the vendor update. Restart if the update asks for it, then rescan to confirm.', ...o });
+                for (let k = 6; k >= 0; k--) {
+                    const d = mon(k), M = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+                    add({ title: `Microsoft Windows Security Update for ${M}`, sev: k < 2 ? 4 : 5, fam: ['win', 'wincl'], patch: true, pub: d, rti: k === 3 ? [...K, ...RCE] : (k % 2 ? P : []), cves: k === 3 ? ['CVE-2024-21412'] : [], qds: k === 3 ? 95 : 72 - k, cat: 'Windows' });
+                    add({ title: `Red Hat Update for kernel (RHSA-${d.getUTCFullYear()}:${1000 + k * 37})`, sev: 4, fam: ['rhel'], patch: true, pub: d, rti: k === 4 ? [...K, 'Privilege Escalation'] : [], cves: k === 4 ? ['CVE-2024-1086'] : [], qds: k === 4 ? 92 : 55, cat: 'RedHat' });
+                    add({ title: `Ubuntu Security Notification for Linux kernel (USN-${7100 + k * 13}-1)`, sev: 4, fam: ['ubu'], patch: true, pub: d, rti: k === 4 ? [...K] : [], cves: k === 4 ? ['CVE-2024-1086'] : [], qds: k === 4 ? 92 : 52, cat: 'Ubuntu' });
+                }
+                [[mon(5), 'OpenSSH Signal Handler Race Condition (regreSSHion)', ['ubu', 'rhel'], 4, ['CVE-2024-6387'], [...RCE, ...P], 78],
+                 [mon(6), 'OpenSSH Terrapin Prefix Truncation Weakness', ['ubu', 'rhel', 'esx'], 3, ['CVE-2023-48795'], [], 38],
+                 [mon(6), 'glibc ld.so Buffer Overflow (Looney Tunables)', ['rhel', 'ubu'], 4, ['CVE-2023-4911'], [...K, 'Privilege Escalation'], 93],
+                 [mon(6), 'polkit pkexec Local Privilege Escalation (PwnKit)', ['rhel'], 4, ['CVE-2021-4034'], [...K, 'Privilege Escalation'], 94],
+                 [mon(3), 'curl SOCKS5 Heap Buffer Overflow', ['ubu', 'rhel'], 4, ['CVE-2023-38545'], P, 48],
+                 [mon(4), 'OpenSSL X.400 Address Type Confusion', ['ubu', 'rhel'], 4, ['CVE-2023-0286'], [], 44],
+                 [mon(2), 'Apache HTTP Server Request Smuggling', ['ubu', 'rhel'], 4, ['CVE-2023-25690'], P, 61],
+                 [mon(1), 'HTTP/2 Rapid Reset Denial of Service', ['ubu', 'rhel', 'win'], 4, ['CVE-2023-44487'], [...K, 'Denial Of Service'], 90],
+                 [mon(6), 'Microsoft WinVerifyTrust Signature Validation Weakness', ['win', 'wincl'], 3, ['CVE-2013-3900'], K, 95],
+                 [mon(1), 'Google Chrome Prior to the Current Stable Release', ['wincl'], 4, ['CVE-2023-4863'], K, 96],
+                 [mon(2), 'Mozilla Firefox Prior to the Current Release', ['wincl'], 4, [], [], 45],
+                 [mon(3), 'Microsoft .NET 8 Security Update', ['win', 'wincl'], 4, [], [], 42],
+                 [mon(4), 'VMware ESXi Active Directory Authentication Bypass', ['esx'], 4, ['CVE-2024-37085'], [...K, 'Ransomware'], 97],
+                 [mon(5), 'VMware vCenter Server Out-of-Bounds Write', ['vc'], 5, ['CVE-2023-34048'], [...K, ...RCE], 98],
+                 [mon(4), 'Fortinet FortiOS SSL VPN Out-of-Bounds Write', ['forti'], 5, ['CVE-2024-21762'], [...K, ...RCE, 'Unauthenticated Exploitation'], 99],
+                 [mon(6), 'Cisco IOS XE Web UI Privilege Escalation', ['iosxe'], 5, ['CVE-2023-20198'], [...K, 'Privilege Escalation'], 99]
+                ].forEach(([pub, title, fam, sev, cves, rti, qds]) => add({ title, sev, fam, patch: true, pub, rti, cves, qds }));
+                add({ title: 'Apache Log4j Remote Code Execution (Log4Shell)', sev: 5, fam: ['app'], patch: true, pub: mon(6), rti: [...K, ...RCE, 'Ransomware', 'Wormable'], cves: ['CVE-2021-44228'], qds: 100 });
+                add({ title: 'Microsoft SMBv1 Server Remote Code Execution', sev: 5, fam: ['legacy'], patch: true, pub: mon(6), rti: [...K, ...RCE, 'Wormable', 'Ransomware'], cves: ['CVE-2017-0144'], qds: 100 });
+                add({ title: 'EOL/Obsolete Operating System: Microsoft Windows Server 2012 R2 Detected', sev: 5, fam: ['w2012'], patch: false, pub: mon(6), rti: [], cves: [], qds: 70, cat: 'EOL' });
+                add({ title: 'EOL/Obsolete Operating System: CentOS Linux 7 Detected', sev: 5, fam: ['c7'], patch: false, pub: mon(6), rti: [], cves: [], qds: 70, cat: 'EOL' });
+                add({ title: 'EOL/Obsolete Software: Microsoft .NET Version 6 Detected', sev: 4, fam: ['win'], patch: false, pub: mon(6), rti: [], cves: [], qds: 50, cat: 'EOL' });
+                add({ title: 'TLS Version 1.0 Protocol Enabled', sev: 3, fam: ['win', 'ubu', 'rhel', 'forti', 'iosxe'], patch: false, pub: mon(6), rti: [], cves: [], qds: 28, solution: 'Turn off TLS 1.0 and 1.1 in the service configuration.' });
+                add({ title: 'SMB Signing Not Required', sev: 2, fam: ['win', 'wincl'], patch: false, pub: mon(6), rti: [], cves: [], qds: 18, solution: 'Require SMB signing by group policy.' });
+                add({ title: 'SSL Certificate Expired', sev: 2, fam: ['ubu', 'rhel', 'win'], patch: false, pub: mon(6), rti: [], cves: [], qds: 15, solution: 'Replace the certificate.' });
+                return C;
+            }
+            // Findings per machine: what it runs decides what it can have; its "hygiene" decides how much is still open.
+            static findings(E, R) {
+                const day = 864e5, now = Date.now(), dets = [];
+                E.machines.forEach(m => {
+                    const fams = new Set([m.fam, m.osk]);
+                    if (m.service === 'Legacy application') fams.add('legacy');
+                    if (['Web Hosting', 'Database'].includes(m.service) && R() < 0.15) fams.add('app');
+                    E.catalog.forEach(c => {
+                        if (!c.fam.some(f => fams.has(f))) return;
+                        const age = (now - c.pub) / day;
+                        let p = c.cat === 'EOL' ? 1 : (1 - m.hygiene) * Math.min(1, 0.25 + age / 240);
+                        if (c.rti.includes('Active Attacks')) p *= 0.6;
+                        if (R() > p) return;
+                        const first = new Date(Math.min(now - day, c.pub.getTime() + (1 + R() * 12) * day));
+                        dets.push({ host: m.id, qid: c.qid, port: c.title.includes('TLS') ? '443' : (c.title.includes('SMB') ? '445' : '0'), proto: c.title.includes('TLS') || c.title.includes('SMB') ? 'tcp' : '',
+                            first: first.toISOString(), fixDay: c.patch ? Math.ceil(-Math.log(1 - R()) / (0.012 + m.hygiene * 0.05)) : 999, appearDay: 0 });
+                    });
+                });
+                // a few that appear later (new this month), so "Simulate next day" also shows new findings
+                const nov = E.catalog.filter(c => c.title.includes('Windows Security Update') || c.title.includes('kernel')).slice(-3);
+                for (let i = 0; i < 70; i++) {
+                    const m = E.machines[Math.floor(R() * E.machines.length)], c = nov[Math.floor(R() * nov.length)];
+                    if (!c.fam.includes(m.fam)) continue;
+                    dets.push({ host: m.id, qid: c.qid, port: '0', proto: '', first: '', fixDay: 999, appearDay: 1 + Math.floor(R() * 20) });
+                }
+                return dets;
+            }
+
+            // The Qualys API package for a simulated day (the shape the real server sends).
+            static qxPackage(day, meta) {
+                const E = this.estate(), now = Date.now(), dayMs = 864e5, at = (meta && meta.at) || new Date().toISOString();
+                const byHost = new Map(E.machines.map(m => [m.id, []]));
+                E.dets.forEach(d => {
+                    if (d.appearDay > day) return;
+                    const first = d.first || new Date(now - (day - d.appearDay) * dayMs - 3600e3).toISOString();
+                    const fixed = d.fixDay <= day;
+                    const c = this._cat || (this._cat = new Map(E.catalog.map(x => [x.qid, x])));
+                    const q = c.get(d.qid);
+                    byHost.get(d.host).push([d.qid, 'Confirmed', q.sev, fixed ? 'FIXED' : 'ACTIVE', d.proto, d.port, q.qds, first, at, 3, fixed ? at : '']);
+                });
+                const hosts = E.machines.map(m => {
+                    const rows = byHost.get(m.id), open = rows.filter(r => r[3] !== 'FIXED');
+                    const mx = Math.max(0, ...open.map(r => r[6]));
+                    const cr = m.tier === 1 ? 5 : (m.tier === 2 ? 3 : (m.tier === 3 ? 2 : 3));
+                    return { a: m.id, n: m.fqdn, os: m.os, tags: m.team ? 'Cloud Agent,' + m.team : 'Cloud Agent', ip: m.ip, tr: Math.min(1000, Math.round(mx * (cr + 2) * 1.3 + open.length * 2)), cr,
+                        scan: new Date(now - m.scanAgo * dayMs).toISOString(), d: rows };
+                });
+                const qids = E.catalog.map(c => ({ qid: c.qid, title: c.title, sev: c.sev, solution: c.solution, threat: 'Sample data: a made-up check for the CyberView demo.', category: c.cat,
+                    rti: c.rti, patchable: c.patch, published: c.pub.toISOString(), patchReleased: '', cvss: 0, cveCount: c.cves.length, cves: c.cves }));
+                return { meta: meta || { syncId: 'demo-preview', at, scope: '' }, qids, hosts };
+            }
+            // Automox for a simulated day: agents on the main team's machines (not appliances) and the laptops.
+            static axData(day, meta) {
+                const E = this.estate(), R = this.rng(99), now = Date.now(), dayMs = 864e5, pkg = this.qxPackage(day, null);
+                const cat = this._cat, byId = new Map(pkg.hosts.map(h => [h.a, h]));
+                const devices = [], pending = [], installed = [];
+                E.machines.forEach((m, i) => {
+                    if (m.appliance || !(m.team === 'Platform' || m.team === 'Corporate IT' || !m.inRegister)) { R(); R(); return; }
+                    if (R() < 0.07) { R(); return; }                                  // no agent on this one
+                    const stale = R() < 0.05, fail = R() < 0.12, reboot = R() < 0.08, did = String(5000 + i);
+                    devices.push({ id: did, name: m.fqdn, display: m.short, os: m.os.split(' ').slice(0, 6).join(' '), osFamily: m.fam.startsWith('win') ? 'Windows' : 'Linux', osVersion: '', serial: '', ips: [m.ip],
+                        agent: '2.4.33', lastSeen: new Date(now - (stale ? 12 : R()) * dayMs).toISOString(), lastDisconnect: '', connected: !stale, needsReboot: reboot, pending: 0, upToDate: false,
+                        needsAttention: fail, lastLoggedIn: '', nextPatch: new Date(now + (1 + Math.floor(R() * 6)) * dayMs).toISOString(), compliant: !fail,
+                        policies: [{ id: 'p1', name: 'Patch everything - weekly', type: 'patch', compliant: !fail, lastRun: new Date(now - 2 * dayMs).toISOString(), pendingCount: null, willReboot: reboot },
+                            { id: 'p2', name: 'Required agents', type: 'required_software', compliant: true, lastRun: new Date(now - 6 * dayMs).toISOString(), pendingCount: null, willReboot: false }],
+                        deviceStatus: stale ? 'disconnected' : 'ready', agentStatus: stale ? 'disconnected' : 'connected', group: '1', tags: [], created: '' });
+                    (byId.get(m.id).d || []).forEach(r => {
+                        const q = cat.get(r[0]); if (!q.patch || !q.cves.length) return;
+                        const p = { d: did, n: q.title.replace(/^(.*?)( \(|$).*/, '$1') + ' update', v: '', sev: q.sev >= 5 ? 'critical' : (q.sev === 4 ? 'high' : 'medium'), cves: q.cves,
+                            kev: q.rti.includes('CISA Known Exploited Vulnerabilities') ? q.cves : [], cveScore: null, epss: null, installed: r[3] === 'FIXED', ignored: false, deferred: '', reboot: false, managed: true };
+                        (p.installed ? installed : pending).push(p);
+                    });
+                });
+                return { meta: meta || null, devices, pending, installed, done: [] };
+            }
+
+            // ---------- first load: settings, the register, the first sync, tasks, exceptions and 30 days of history
+            static async firstLoad(app) {
+                if ((StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).length) return;
+                StorageService.toast('Building the ACME Cloud Ltd demo…');
+                const E = this.estate(), now = Date.now(), day = 864e5;
+                OrgSettings.save({ orgName: this.ORG, teams: ['Platform', 'Network', 'Corporate IT', 'Security'], mainTeam: 'Platform',
+                    domainSuffixes: ['.acme-cloud.example', '.corp.acme.example'],
+                    ownerRules: [{ type: 'starts', value: 'corp-', team: 'Corporate IT' }, { type: 'pattern', value: '-(fw|sw|lb)\\d', team: 'Network' }, { type: 'pattern', value: '-(siem|scan|vault)\\d', team: 'Security' }, { type: 'pattern', value: '^(lon|man|edi)1-', team: 'Platform' }],
+                    serviceRules: [['dc', 'Active Directory'], ['dns', 'DNS'], ['dhcp', 'DHCP'], ['web', 'Web Hosting'], ['db', 'Database'], ['bkp', 'Backup'], ['asg', 'Backup'], ['jump', 'Jumpbox'], ['syslog', 'Syslog'],
+                        ['mon', 'Monitoring'], ['relay', 'SMTP'], ['av', 'Anti-virus'], ['vc', 'VM Orchestration'], ['esx', 'Hypervisor'], ['k8s', 'Containers'], ['test', 'Test'], ['tmp', 'Test']]
+                        .map(([v, sv]) => ({ field: 'name', type: 'pattern', value: '-' + v + '\\d', service: sv })),
+                    serviceOwners: [{ service: 'Monitoring', team: 'Platform' }, { service: 'Backup', team: 'Platform' }],
+                    aiTeam: 'the ACME Cloud platform operations team', queryIntro: 'Filter the export to your own assets and the findings that matter, then import each file.',
+                    queryTips: [{ label: 'Known exploited and patchable', query: '(finding.vulnerability.threatIntel.isCisaKnownExploitedVuln:TRUE) and (finding.isQualysPatchable:TRUE)' }],
+                    savedAt: new Date().toISOString(), savedBy: 'demo', savedFrom: 'demo data' });
+                StatusEngine.saveSettings({ goLive: new Date(now - 45 * day).toISOString().slice(0, 10) });
+                const reg = E.machines.filter(m => m.inRegister).map(m => {
+                    const r = { assetId: m.id, hostId: null, hardwareUuid: null, normalizedName: AssetIdentityService.normalize(m.fqdn), originalName: m.fqdn, ipv4Address: m.ip, ipv6Address: '',
+                        os: m.os, osCategory: '', osVersion: '', tags: 'Cloud Agent', metadata: {}, owner: m.team, ownershipSource: 'Demo data', service: m.service, status: 'Approved',
+                        environment: m.service === 'Test' ? 'Test' : 'Production', exposure: m.exposure, criticality: 'Medium', lastSeen: new Date(now - day).toISOString(),
+                        osLifecycle: m.life, hardwareName: m.appliance ? 'Appliance' : 'Virtual Machine', hwLifecycle: m.service === 'Switching' && m.short.endsWith('1') ? 'EOS' : 'GA', lifecycleSeen: new Date().toISOString(), qualysCriticality: 0 };
+                    if (m.tier) StatusEngine.setTier(r, m.tier);
+                    if (m.appliance) r.patchNA = true;
+                    return r;
+                });
+                StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
+                // the first sync, applied the normal way
+                const S = { day: 0 }; this.saveState(S);
+                this.finishJob('ax', 'schedule'); this.finishJob('qx', 'schedule');
+                await app.qxApply(false);
+                // tasks: two on P1 fixes, one overdue, one fixed awaiting scan, one end-of-life upgrade
+                const vd = await app.getVulnData(), byQid = new Map(); vd.dets.forEach(d => { if (!byQid.has(d.qid)) byQid.set(d.qid, []); byQid.get(d.qid).push(d); });
+                const top = [...byQid].filter(([q]) => (vd.qmap.get(q) || {}).rti?.length).sort((a, b) => b[1].length - a[1].length).slice(0, 4);
+                const mk = (q, list, extra) => {
+                    const t = vd.qmap.get(q) || {}, names = [...new Set(list.map(d => d.asset))].slice(0, 25);
+                    const source = { kind: 'qid', key: q, label: 'QID ' + q, qids: [q] };
+                    return { type: 'vuln', title: 'Fix: ' + t.title, source, priority: 'P1', priorityRank: 1, assignee: '', ticket: 'CHG-' + (4100 + Number(q) % 900), team: 'Platform',
+                        assets: names.map(n => ({ name: n, state: 'open', chk: RemediationVerifier.reasons({ source }, {}) })), comment: 'Sample task created for the demo.', ...extra };
+                };
+                const tasks = [];
+                if (top[0]) tasks.push(mk(...top[0], { status: 'In progress', due: RemediationService.addDays(9) }));
+                if (top[1]) tasks.push(mk(...top[1], { status: 'Planned', due: RemediationService.addDays(-4) }));
+                if (top[2]) tasks.push(mk(...top[2], { status: 'Open', due: RemediationService.addDays(21) }));
+                const w12 = reg.filter(r => /2012 R2/.test(r.os));
+                if (w12.length) tasks.push({ type: 'eol', title: 'Upgrade Windows Server 2012 R2 (no security fixes)', source: { kind: 'os', key: 'Windows Server 2012 R2', label: 'Windows Server 2012 R2', match: 'Windows Server 2012 R2' },
+                    priority: 'Unsupported', priorityRank: 0, assignee: '', ticket: 'CHG-4021', team: 'Platform', status: 'Planned', due: RemediationService.addDays(30),
+                    assets: w12.map(r => ({ name: r.normalizedName, state: 'open', chk: RemediationVerifier.reasons({ source: { kind: 'os' } }, r) })), comment: 'Sample end-of-life upgrade.' });
+                try { await RemediationService.create(tasks); } catch (e) { console.error('[Demo] tasks', e); }
+                // exceptions: one in date (per finding), one expired (counts again, shows as a problem)
+                const tls = E.catalog.find(c => c.title.startsWith('TLS')), log4 = E.catalog.find(c => c.title.startsWith('SMB Signing'));
+                const tlsHost = vd.dets.find(d => d.qid === tls.qid), logHost = vd.dets.find(d => d.qid === (log4 && log4.qid) && d.asset !== (tlsHost && tlsHost.asset));
+                const ra = [];
+                const one = (d, q, exp, rev, reason) => ({ id: 'RA-demo-' + ra.length, asset: d.asset, owner: 'Platform', service: '', reason, control: 'Firewall rule limits access to the management network',
+                    approver: 'Head of Platform', status: 'Risk Accepted', accDate: new Date(now - 60 * day).toISOString().slice(0, 10), revDate: rev, expDate: exp, scope: 'finding', qids: [q], proposer: 'demo' });
+                if (tlsHost) ra.push(one(tlsHost, tls.qid, new Date(now + 120 * day).toISOString().slice(0, 10), new Date(now + 60 * day).toISOString().slice(0, 10), 'Legacy client needs TLS 1.0 until it is replaced in Q1.'));
+                if (logHost) ra.push(one(logHost, log4.qid, new Date(now - 5 * day).toISOString().slice(0, 10), new Date(now - 20 * day).toISOString().slice(0, 10), 'Old file server needs unsigned SMB until it is retired; temporary acceptance.'));
+                StorageService.save(StorageService.KEYS.RISK_ACCEPTANCES, ra);
+                app.invalidateVulnData();
+                // 30 days of history leading up to today (made from today's figures, improving towards now)
+                try {
+                    const hist = app.statusHistory(), last = hist[hist.length - 1];
+                    if (last) {
+                        const past = [];
+                        for (let k = 30; k >= 1; k--) {
+                            const f = k / 30;
+                            past.push({ ...last, at: new Date(now - k * day + 7 * 3600e3).toISOString(), source: 'sync', syncId: 'demo-hist-' + k,
+                                teams: last.teams.map(t => ({ ...t, compliance: t.compliance == null ? t.compliance : Math.max(0, Math.round(t.compliance - 18 * f + (k % 3))), over12: Math.round((t.over12 || 0) * (1 + 0.8 * f)),
+                                    bl1: Math.round((t.bl1 || 0) * (1 + 0.9 * f)), bl2: Math.round((t.bl2 || 0) * (1 + 0.6 * f)), bl12: Math.round((t.bl12 || 0) * (1 + 0.7 * f)) })) });
+                        }
+                        StorageService.save(StorageService.KEYS.STATUS_HISTORY, [...past, ...hist]);
+                    }
+                } catch (e) { console.error('[Demo] history', e); }
+                StorageService.toast('Demo ready: ' + this.ORG);
+            }
         }
 
         // Filter choices remembered per person, in this browser only (v4.3). A private window or cleared site data simply starts with the defaults.
@@ -2917,7 +3318,7 @@
             static data = null;
             static _m = null;
             static _loading = null;
-            static on() { return StorageService.mode === 'server'; }
+            static on() { return Demo.api(); }
             static time(s) { if (!s) return 0; const t = Date.parse(String(s).replace(/([+-]\d\d)(\d\d)$/, '$1:$2')); return isNaN(t) ? 0 : t; }
             static ago(s) {
                 const t = this.time(s); if (!t) return 'never';
@@ -3472,7 +3873,7 @@
                 this.updateGlobalBadges();
                 // Recount old summaries first, then apply a Qualys API sync nobody has applied yet (editors, server mode).
                 StatusEngine.ensureGoLive();
-                (async () => { await this.recountVulnSummaries(); if (StorageService.mode === 'server') { await this.qxApply(true); this.qxWatch(); if (this.qx?.job?.running) this.qxPoll(); } })();
+                (async () => { await this.recountVulnSummaries(); if (StorageService.mode === 'server') { /* the demo applies its syncs itself */ await this.qxApply(true); this.qxWatch(); if (this.qx?.job?.running) this.qxPoll(); } })();
                 this.switchView('dashboard');
                 document.getElementById('report-date-main').textContent = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric', day: 'numeric' });
             }
@@ -3519,7 +3920,7 @@
                 const products = reg.map(r => EolDates.match(r.os)?.product).filter(Boolean);
                 const [vd, dates] = await Promise.all([this.getVulnData(), EolDates.load(products).catch(() => ({ data: {}, failed: products })), RemediationService.refreshQuiet()]);
                 let axOk = false;
-                if (StorageService.mode === 'server') { try { axOk = !!(await AutomoxService.ensure()); } catch (e) { axOk = false; } }
+                if (Demo.api()) { try { axOk = !!(await AutomoxService.ensure()); } catch (e) { axOk = false; } }
                 const m = axOk ? AutomoxService.match() : null;
                 const cache = new Map();
                 const life = (r) => {
@@ -3545,7 +3946,7 @@
                 row('Asset export (register)', seen.length ? Math.max(...seen) : 0, S.staleDays.assets);
                 const meta = this.loadVulnMeta(), lastImp = [...(meta.imports || [])].reverse()[0];
                 row('Qualys findings', lastImp ? StatusEngine.time(lastImp.at) : 0, S.staleDays.findings, lastImp ? (lastImp.source === 'api' ? `API sync (${lastImp.scope || 'every host'})` : 'CSV import: ' + lastImp.file) : '');
-                if (StorageService.mode === 'server' && AutomoxService.status?.configured) row('Automox', StatusEngine.time(AutomoxService.status?.last?.at), S.staleDays.automox);
+                if (Demo.api() && AutomoxService.status?.configured) row('Automox', StatusEngine.time(AutomoxService.status?.last?.at), S.staleDays.automox);
                 const c = EolDates.readCache(), ats = Object.values(c).map(x => x.at).filter(Boolean);
                 row('End-of-life dates', ats.length ? Math.min(...ats) : 0, S.staleDays.eol, (dates?.failed || []).length ? `could not refresh: ${dates.failed.join(', ')}` : 'endoflife.date + your table');
                 out.push({ label: 'Tasks and exceptions', t: now, days: 0, stale: false, note: 'live' });
@@ -3824,7 +4225,7 @@
                 OrgSettings.save({ orgName: v('org-name-in').trim(), tierLabels, teams, mainTeam: teams.includes(main) ? main : teams[0], domainSuffixes: domains, ownerRules: own.out, serviceRules: svc.out, serviceOwners: svcOwners,
                     aiTeam: v('org-ai').trim(), queryIntro: v('org-qintro').trim(), queryTips: queries, savedAt: new Date().toISOString(), savedBy: (this.me && this.me.user) || '', savedFrom: 'Organisation setup page' });
                 this.fillTeamSelects(); this.renderOrgSetup(); StorageService.toast('Organisation setup saved');
-                if (StorageService.mode === 'server') this.qxApply(true);
+                if (StorageService.mode === 'server') this.qxApply(true);     // (the demo applies its syncs itself)
             }
             exportOrgSetup() {
                 const { allTeams, _compiled, _svc, ...plain } = OrgSettings.get();
@@ -3947,7 +4348,7 @@
 
             // ---------- Qualys API sync (server mode, server/qualys.py). The login never reaches the page.
             async qxStatus() {
-                if (StorageService.mode !== 'server') return (this.qx = null);
+                if (!Demo.api()) return (this.qx = null);
                 try { const r = await fetch('api/qualys/status', { cache: 'no-store' }); this.qx = r.ok ? await r.json() : null; }
                 catch (e) { this.qx = null; }
                 this.qxBadge();
@@ -4072,6 +4473,7 @@
                 box.classList.toggle('hidden', !st?.configured);
                 btn.classList.toggle('hidden', !st?.configured);
                 btn.disabled = !!(st?.job?.running || st?.blocked || this._qxApplying);
+                if (Demo.ON) { btn.textContent = "⟳ Simulate next day's sync"; btn.onclick = () => Demo.nextDay(); }
             }
             async qxRender() {
                 const st = await this.qxStatus();
@@ -4497,7 +4899,7 @@
             renderDashboard() {
                 const register = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 const queue = ReviewQueueService.getQueue().filter(x => x.status === 'PENDING' || x.status === 'IN_REVIEW');
-                document.getElementById('dash-coverage').innerHTML = this.coverageHTML('ALL');
+                document.getElementById('dash-coverage').innerHTML = (StorageService.mode !== 'server' && !Demo.ON && !register.length) ? Demo.welcomeHTML() : this.coverageHTML('ALL');
                 this.renderDashAutomox();
                 this.renderDashStatus();
                 const drawRem = () => { const el = document.getElementById('dash-remediation'); if (el) el.innerHTML = RemediationStats.html(RemediationStats.compute(RemediationService.list())); };
@@ -7554,6 +7956,7 @@ Finish with a "Verify" section saying how to confirm in Qualys (agent check-in o
 
         window.onload = async () => {
             if (window.app) return;
+            Demo.boot();
             try { await StorageService.init(); }
             catch (e) {
                 console.error('[Start]', e);
@@ -7561,6 +7964,11 @@ Finish with a "Verify" section saying how to confirm in Qualys (agent check-in o
                 return;
             }
             window.app = new App(); window.app.init(); window.app.initAccount();
+            if (Demo.ON && StorageService.mode !== 'server') {
+                Demo.paintBanner();
+                try { await Demo.firstLoad(window.app); } catch (e) { console.error('[Demo]', e); StorageService.toast('The demo could not be built: ' + e.message); }
+                window.app.fillTeamSelects(); window.app.switchView('dashboard'); Demo.paintBanner();
+            }
         };
     </script>
 </body>

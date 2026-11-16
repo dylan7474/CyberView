@@ -19,6 +19,17 @@ git clone https://github.com/dylan7474/CyberView.git && cd CyberView
 
 Then open the portal, create the administrator (👥 Users), fill in **⚙ Organisation setup**, and either connect the Qualys API (`./deploy.sh qualys ...`) or import a Qualys CSV export from *Vuln Management → Data & imports*.
 
+## Try the demo
+
+**https://dylan7474.github.io/CyberView/?demo** opens CyberView in your browser with a made-up company, **ACME Cloud Ltd**, and sample data. No server, no sign-in, nothing to install.
+
+- About 230 machines across four teams (Platform, Network, Corporate IT, Security), with services, tiers, exposure and some end-of-life operating systems; a few machines the scanner found that nobody has registered yet (in the Review Queue).
+- Qualys-style findings and Automox patching, tasks, an exception that is in date and one that has expired, and 30 days of history for the trend charts.
+- **⟳ Simulate next day's sync** pretends a day has passed: Automox and Qualys sync, some findings are fixed (tasks tick off), a few new ones appear.
+- Everything you change stays in your browser until **↺ Reset demo** (start again) or **Leave demo** (remove it). It is kept apart from any real data in the same browser.
+
+**Nothing in the demo is real.** Machine names, check numbers (QIDs 9xxxxx), titles, owners and figures are invented. The CVE numbers are real public ones, so *Public fix data* can look them up. Users, roles and the History page need the real server, so they are not in the demo.
+
 ## Overview
 
 CyberView is an asset governance layer between discovery tools and operational reporting.

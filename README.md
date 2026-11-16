@@ -173,7 +173,7 @@ flowchart LR
 
 *Example:* a severity 5 finding (Scheduled) on an internal Tier 3 server is **P4**, due 180 days after Qualys first found it. The same finding on an Internet-facing Tier 1 server is **P2** (P3 moved up one step), due in 30 days.
 
-Administrators can change all these numbers on the **📐 Status Rules** page. Everyone can read them there.
+Administrators can change all these numbers on the **⚙ Organisation setup → Status rules**. Everyone can read them there.
 
 ### Two ready-made rule sets
 
@@ -264,7 +264,7 @@ Jobs 2 and 3 are the big ones, but each is done once per machine. Jobs 1, 5 and 
 | Which machines run an OS that is out of support, or soon will be? | ⏳ End of Life Report |
 | Which machines are not being patched? | 🩹 Patch Coverage |
 | What did we accept, and when does it expire? | ✅ Risk Acceptances |
-| What do the rules say? | 📐 Status Rules |
+| What do the rules say? | ⚙ Organisation setup → Status rules |
 
 ### When the numbers look wrong
 
@@ -359,7 +359,7 @@ flowchart LR
 | Whether a finding is open | Its Qualys status: New, Active and Re-Opened are open. **Fixed is never counted as open** (v3.12.1); it only verifies remediation. |
 
 ### From findings to priorities
-- **Action priority P1-P4** (v3.15) = the finding tier (below) × the asset's Tier, from the matrix on the **📐 Status Rules** page (Fix now: P1 on Tier 1 and 2, P2 on Tier 3; This sprint: P2/P2/P3; Scheduled: P3/P3/P4; Routine: P4). Internet-facing assets are one step more urgent. Unknown exposure counts as Internal.
+- **Action priority P1-P4** (v3.15) = the finding tier (below) × the asset's Tier, from the matrix on the **⚙ Organisation setup → Status rules** (Fix now: P1 on Tier 1 and 2, P2 on Tier 3; This sprint: P2/P2/P3; Scheduled: P3/P3/P4; Routine: P4). Internet-facing assets are one step more urgent. Unknown exposure counts as Internal.
 - **Due date** = first found + the SLA for its priority (P1 14 days, P2 30, P3 90, P4 180). Findings first found **before the go-live date** (the day the rules were first used, or as set) are the **Backlog**: due at go-live + their backlog target (P1 60 days, P2 90, P3 90, P4 180), and reported apart. A task never moves a finding's due date.
 - **Tier of a finding:**
   - **Fix now:** the QID is known exploited (CISA KEV, active attacks, ransomware, wormable, zero day).
@@ -451,7 +451,7 @@ The register keyword box and the End of Life asset list share one search:
 
 Phase A of the joined-up status design (`docs/vulnerability-status-design.md`):
 - **Tier** column, filter (including "? Tier not set"), Edit and bulk edit in the Asset Register. The Review Queue's bulk *Approve* asks for Tier and exposure (both optional), and since v4.2 each row has its own Tier and Exposure choices for the single *Approve* button.
-- **📐 Status Rules** page: the data gaps (no tier, unknown exposure, old criticality values), the priority matrix, the Internet-facing step, SLA days, go-live date and backlog targets, the status check limits, the teams patched by Automox, and the staleness limits. Only administrators can change them; everyone can read them.
+- **⚙ Organisation setup → Status rules**: the data gaps (no tier, unknown exposure, old criticality values), the priority matrix, the Internet-facing step, SLA days, go-live date and backlog targets, the status check limits, the teams patched by Automox, and the staleness limits. Only administrators can change them; everyone can read them.
 - Every open finding gets a priority, a due date and a backlog flag. Tasks made with *Track* take the most urgent priority of their findings and their earliest due date. Older tasks show their tier as P1-P4. The SLA settings are now named P1-P4.
 - A Qualys API sync records each asset's last scan date (for the scan coverage check in phase B).
 
@@ -475,7 +475,7 @@ Phase B of the status design. **🚦 Status** joins every source into one status
 - **Team page:** the assets that need doing now (✖ and ▲) first, with all five checks per asset. It can be printed.
 - **Data as of:** every source with its date, flagged when older than its limit (Status Rules page). It is also shown in the Team Risk Report.
 - **Priorities elsewhere:** Vulnerability Management ranks machines and fixes by priority (see *Where to focus*, v3.19). The Team Risk Report ranks assets by worst priority, then Tier, then TruRisk. An asset's findings show their priority and due date.
-- The limits are all on the 📐 Status Rules page. Only administrators can change them; the server refuses changes from anyone else, except that an editor's page sets the go-live date once, when it is still empty.
+- The limits are all on ⚙ Organisation setup → Status rules. Only administrators can change them; the server refuses changes from anyone else, except that an editor's page sets the go-live date once, when it is still empty.
 - **Automox does not apply to some assets** (appliances, network devices). Tick *Cannot take an Automox agent* in Edit, or use the bulk *Automox* field: the patching check then shows n/a instead of ✖ no agent.
 - **Scan dates** from the sync are kept in their own record (`gov_scan_dates`), so the daily apply does not rewrite the register under other people's edits.
 - **Speed at all-hosts scale (v3.18.1):** the findings download is sent in large blocks and compressed by the web proxy (180,000 findings: 65 MB → 5 MB, and 52 s → 1.5 s on the server), so the Status page opens in a few seconds.
@@ -518,7 +518,7 @@ Phase D of the status design.
 | ⟳ **Automox will patch by** *date* | A waiting patch names the finding's CVE (or, marked ≈, matches its package name, as for Linux kernels), the agent and policy are healthy, and the device's next patch window is within the period. |
 | ✓ **Patched in the last** *N* **days** | Qualys no longer finds it, or Automox has installed the patch and Qualys has still to rescan. |
 
-- **The period** is 7 days by default; change it on 📐 Status Rules (*Patch Plan looks ahead*).
+- **The period** is 7 days by default; change it on ⚙ Organisation setup → Status rules (*Patch Plan looks ahead*).
 - Each section lists its fixes in the same order as *Fixes that clear the most*, with the reasons in words and counts, and a **⬇ List** of machine names (one per line, an Ansible inventory) per fix and for the whole section. The gap's list is the manual work.
 - Clicking a fix opens its page with the team and urgency kept.
 - **Limits:** the match between a finding and an Automox patch is by CVE, else by package name (≈). Automox names CVEs mostly for Windows updates, so a Linux "patch everything" policy may fix more than the plan shows. Reading Automox's policy settings to close that gap is the planned next step.
@@ -533,7 +533,7 @@ Under the Qualys data box, the Dashboard shows a matching Automox box (same layo
 
 ### Organisation setup
 
-Everything specific to one organisation now lives on the **⚙ Organisation setup** page. It is stored in the database (`gov_org_settings`) and is part of every backup and restore. Only administrators can change it; the server refuses changes from anyone else. Everyone can read it.
+Everything specific to one organisation now lives on the **⚙ Organisation setup** page. Since v4.5.1 it is the one settings page, in two parts chosen at the top (the chosen one marked ●): **⚙ Organisation** (below) and **📐 Status rules** (priorities, due dates, backlog, status checks, the Patch Plan period). It also holds **Manual imports (rarely needed)**: the Qualys asset export (still the only source of end-of-life lifecycle stages and hardware models, which the API does not supply) and a findings CSV for when the API sync is not available. Where the Qualys API sync is in use (a server, or the demo), the separate *Import Data* page and the CSV import on Vuln Management are hidden; a copy with no server keeps them, since imports are its only way in. It is stored in the database (`gov_org_settings`) and is part of every backup and restore. Only administrators can change it; the server refuses changes from anyone else. Everyone can read it.
 
 - **Tier names and meanings.** The three tiers start as *Critical*, *Supporting* and *Other* (after the NCSC's guidance on critical assets and the systems they rely on). Rename them to suit your organisation. People set each machine's tier by hand in the Asset Register.
 - **Teams** (the asset owners) and the **main team**. The main team owns the machines on the inventory list (Import Data), is counted on the Dashboard, is shown first on Patch Coverage, and is the default team patched by Automox. Every team list in the portal (filters, bulk edit, the Review Queue buttons, reports, tasks) is built from these. A team that is still used in the register always stays in the lists, so no asset loses its owner.

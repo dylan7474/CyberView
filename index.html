@@ -36,6 +36,9 @@
         /* roles (server mode only): admin-only things hide for everyone else, write-only things hide for viewers */
         body:not(.server-mode) .server-only { display: none !important; }
         body.demo-mode aside .server-only.demo-ok { display: flex !important; }
+        /* manual imports: hidden where the Qualys API sync is in use (server or demo); moved to Organisation setup (v4.5.1) */
+        body.server-mode .local-only, body.demo-mode .local-only { display: none !important; }
+        body:not(.server-mode):not(.demo-mode) .api-only { display: none !important; }
         body.server-mode:not(.role-admin) .admin-only { display: none !important; }
         body.role-viewer .write-only { display: none !important; }
         /* dialogs scroll inside the window instead of running off the bottom on short screens */
@@ -66,7 +69,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.5.0 · 16 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.5.1 · 16 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -76,7 +79,7 @@
         </div>
         <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
             <button onclick="app.switchView('dashboard')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📊 Dashboard</button>
-            <button onclick="app.switchView('import')" class="write-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📥 Import Data</button>
+            <button onclick="app.switchView('import')" class="local-only write-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📥 Import Data</button>
             <button onclick="app.switchView('review')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition justify-between">
                 <span>📋 Review Queue</span>
                 <span id="nav-review-badge" class="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full hidden">0</span>
@@ -91,7 +94,6 @@
             <button onclick="app.switchView('risk-accept')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">✅ Risk Acceptances</button>
             <button onclick="app.switchView('status')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🚦 Status</button>
             <button onclick="app.switchView('health')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩺 Data Health</button>
-            <button onclick="app.switchView('status-rules')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📐 Status Rules</button>
             <button onclick="app.switchView('org')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⚙ Organisation setup</button>
             <button onclick="app.switchView('reports')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📄 Team Risk Reports</button>
             <button onclick="app.switchView('eol')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⏳ End of Life Report</button>
@@ -186,6 +188,7 @@
 
             <!-- VIEW: IMPORT WIZARD -->
             <section id="view-import" class="view-section">
+                <p class="api-only text-sm text-gray-600 mb-4">Manual imports are rarely needed now that Qualys syncs by its API. Reached from ⚙ Organisation setup → Manual imports. <a href="#" onclick="app.switchView('org'); return false;" class="text-blue-700 underline">Back to Organisation setup</a></p>
                 <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden">
                     <div class="p-8">
                         <h3 class="text-xl font-semibold mb-2">Qualys Asset Import Wizard</h3>
@@ -384,12 +387,12 @@
                     <div class="flex flex-wrap items-center gap-2">
                         <input type="file" id="vuln-file-input" accept=".csv" class="hidden" onchange="app.importVulnData(event)">
                         <button id="qx-sync-btn" type="button" onclick="app.qxSync()" class="hidden write-only bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium shadow hover:bg-blue-600 disabled:opacity-50" title="Fetch every finding from the Qualys API now (the server keeps the login)">⟳ Sync from Qualys</button>
-                        <label for="vuln-file-input" class="cursor-pointer bg-slate-800 text-white px-4 py-2 rounded text-sm font-medium shadow hover:bg-slate-700">📥 Import Vuln Export</label>
-                        <label class="flex items-center gap-1 text-xs text-gray-600" title="Off: detections for assets in the new file replace the old ones and every other asset is kept. On: wipe all vulnerability data first."><input type="checkbox" id="vuln-import-replace" class="rounded border-gray-300"> Replace all existing data</label>
+                        <label for="vuln-file-input" class="local-only cursor-pointer bg-slate-800 text-white px-4 py-2 rounded text-sm font-medium shadow hover:bg-slate-700">📥 Import Vuln Export</label>
+                        <label class="local-only flex items-center gap-1 text-xs text-gray-600" title="Off: detections for assets in the new file replace the old ones and every other asset is kept. On: wipe all vulnerability data first."><input type="checkbox" id="vuln-import-replace" class="rounded border-gray-300"> Replace all existing data</label>
                     </div>
                     <div id="qx-status" class="hidden"></div>
                 <!-- Recommended Qualys query -->
-                <details class="bg-slate-50 border border-slate-300 rounded p-3 text-sm">
+                <details class="local-only bg-slate-50 border border-slate-300 rounded p-3 text-sm">
                     <summary class="cursor-pointer font-semibold text-slate-800">Qualys export query that keeps the file under the 50,000-row cap</summary>
                     <div id="vuln-query-tips"></div>
                 </details>
@@ -438,7 +441,7 @@
                         <p class="text-xs text-gray-600">Ranked by urgency first (P1, then P2…), overdue first, then the most machines, then the most Internet-facing or Tier 1 machines (the CISA SSVC and NCSC approach). Related updates are one row.</p></div>
                     <div id="vuln-sec-fixes"></div>
                 </div>
-                <p class="text-xs text-gray-500">To compare teams, open <a href="#" onclick="app.switchView('status'); return false;" class="text-blue-700 underline">🚦 Status</a>. The rules behind P1-P4 are on <a href="#" onclick="app.switchView('status-rules'); return false;" class="text-blue-700 underline">📐 Status Rules</a>.</p>
+                <p class="text-xs text-gray-500">To compare teams, open <a href="#" onclick="app.switchView('status'); return false;" class="text-blue-700 underline">🚦 Status</a>. The rules behind P1-P4 are in <a href="#" onclick="app.switchView('status-rules'); return false;" class="text-blue-700 underline">⚙ Organisation setup → Status rules</a>.</p>
             </section>
 
             <!-- VIEW: INSPECT (asset / vulnerability drill-down) -->
@@ -541,13 +544,15 @@
             </section>
 
             <section id="view-org" class="view-section space-y-4">
+                <div class="settings-parts"></div>
                 <div><h3 class="text-xl font-semibold">Organisation setup</h3>
                 <p class="text-sm text-gray-600">Everything specific to your organisation: teams, how machine names are matched, and the rules that suggest an owner and a service for new machines. Kept in the database and in backups. Only administrators can change it.</p></div>
                 <div id="org-body" class="space-y-4 text-sm"></div>
             </section>
 
             <section id="view-status-rules" class="view-section space-y-4">
-                <div><h3 class="text-xl font-semibold">Status Rules</h3>
+                <div class="settings-parts"></div>
+                <div><h3 class="text-xl font-semibold">Status rules</h3>
                 <p class="text-sm text-gray-600">How findings become priorities and due dates, and the limits the status checks use. The design is in <code>docs/vulnerability-status-design.md</code>; the README explains each rule.</p></div>
                 <div id="sr-body" class="space-y-4 text-sm"></div>
             </section>
@@ -658,7 +663,7 @@
                         </div>
                         <div id="rpt-ai-out" class="text-sm text-gray-800"></div>
                     </div>
-                    <p class="mt-6 text-[11px] text-gray-500"><strong>How this is scored.</strong> Each open finding gets an action priority P1-P4 from its finding tier and its asset's Tier (set by people; not set counts as Tier 2), with Internet-facing assets more urgent, and a due date counted from when it was first found (findings from before go-live are backlog with their own targets). The exact rules, days and tier names in use are on the Status Rules and Organisation setup pages. Assets rank by worst priority, then Tier, then TruRisk (0-1000; Low &lt;500, Medium 500-699, High 700-849, Critical 850+). TruRisk is one score per asset, so it is never added up across findings. Finding tiers come from Qualys signals: <em>Fix now</em> = CISA KEV, active attacks, ransomware, wormable or zero-day; <em>This sprint</em> = QVS 70+ or remote code execution with a public exploit; <em>Scheduled</em> = severity 5 or QVS 40+; otherwise <em>Routine</em>. Fixes are grouped by QID and ranked by priority, then assets affected × QVS.</p>
+                    <p class="mt-6 text-[11px] text-gray-500"><strong>How this is scored.</strong> Each open finding gets an action priority P1-P4 from its finding tier and its asset's Tier (set by people; not set counts as Tier 2), with Internet-facing assets more urgent, and a due date counted from when it was first found (findings from before go-live are backlog with their own targets). The exact rules, days and tier names in use are in Organisation setup (Status rules and Organisation). Assets rank by worst priority, then Tier, then TruRisk (0-1000; Low &lt;500, Medium 500-699, High 700-849, Critical 850+). TruRisk is one score per asset, so it is never added up across findings. Finding tiers come from Qualys signals: <em>Fix now</em> = CISA KEV, active attacks, ransomware, wormable or zero-day; <em>This sprint</em> = QVS 70+ or remote code execution with a public exploit; <em>Scheduled</em> = severity 5 or QVS 40+; otherwise <em>Routine</em>. Fixes are grouped by QID and ranked by priority, then assets affected × QVS.</p>
                 </div>
             </section>
 
@@ -3913,15 +3918,16 @@
                 target.classList.add('active');
                 this.currentView = viewId;
                 OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
-                const TITLES = { plan: 'Patch Plan', dashboard: 'Dashboard', import: 'Import Data', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Status Rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
+                const TITLES = { import: Demo.api() ? 'Manual import' : 'Import Data', plan: 'Patch Plan', dashboard: 'Dashboard', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Organisation setup · Status rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
                 const pt = document.getElementById('page-title'); if (pt) pt.textContent = TITLES[viewId] || 'CyberView';
-                const navView = viewId === 'inspect' ? (this.inspectReturn || '') : viewId;
+                const navView = viewId === 'inspect' ? (this.inspectReturn || '') : ((viewId === 'import' && Demo.api()) || viewId === 'status-rules' ? 'org' : viewId);
                 document.querySelectorAll('aside .nav-btn').forEach(b => { const on = (b.getAttribute('onclick') || '').includes(`'${navView}'`); b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
                 
                 if (viewId === 'dashboard') this.renderDashboard();
                 if (viewId === 'review') this.renderReviewQueue();
                 if (viewId === 'register') this.renderRegister();
                 if (viewId === 'health') this.renderHealth();
+                if (viewId === 'status-rules' || viewId === 'org') document.querySelectorAll('.settings-parts').forEach(el => { el.innerHTML = App.settingsPartsHTML(viewId); });
                 if (viewId === 'status-rules') this.renderStatusRules();
                 if (viewId === 'org') this.renderOrgSetup();
                 if (viewId === 'status') this.renderStatus();
@@ -3961,7 +3967,7 @@
                 this._status = res;
                 return res;
             }
-            // When each source was last refreshed, flagged when older than the limits on the Status Rules page.
+            // When each source was last refreshed, flagged when older than the limits in Organisation setup → Status rules.
             dataAsOf(reg, dates) {
                 const S = StatusEngine.settings(), now = Date.now(), out = [];
                 const age = (t) => t ? Math.floor((now - t) / StatusEngine.DAY) : null;
@@ -3991,7 +3997,7 @@
                 sel.value = this.stScope || 'ALL';
                 $('st-date').textContent = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
                 const S = st.S, live = S.goLive, tgt = (p) => live ? new Date(StatusEngine.time(live) + S.backlogTargets[p] * StatusEngine.DAY).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '?';
-                const head = `<p class="text-xs text-gray-600">Headline: the share of <strong>new</strong> P1/P2 findings (first found since go-live ${esc(live || '?')}) still within their due date. Backlog P1/P2 (found before go-live) have targets ${esc(tgt(1))} (P1) and ${esc(tgt(2))} (P2). Rules: 📐 Status Rules.</p>`;
+                const head = `<p class="text-xs text-gray-600">Headline: the share of <strong>new</strong> P1/P2 findings (first found since go-live ${esc(live || '?')}) still within their due date. Backlog P1/P2 (found before go-live) have targets ${esc(tgt(1))} (P1) and ${esc(tgt(2))} (P2). Rules: ⚙ Organisation setup → Status rules.</p>`;
                 // Change since about a day ago (the previous daily snapshot): ▲ better / ▼ worse, in words for screen readers.
                 const delta = (t, k, unit, upIsGood) => {
                     if (!t.prev || t.prev[k] === undefined) return '';
@@ -4215,9 +4221,28 @@
                         <label class="block text-xs">Qualys export tip (Data &amp; imports)<br><input id="org-qintro" value="${esc(S.queryIntro || '')}" class="border rounded px-2 py-1 w-full" ${dis}></label>
                         <label class="block text-xs">Example export queries, one per line: <code>label =&gt; query</code>${ta('org-queries', (S.queryTips || []).map(q => `${q.label} => ${q.query}`).join('\n'), 3)}</label>
                     </div>
+                    <div class="bg-white border rounded p-4 space-y-2"><h4 class="font-bold">Manual imports (rarely needed)</h4>
+                        <p class="text-xs text-gray-600">${Demo.api() ? 'Findings and Automox data arrive by their API syncs, so these imports are not needed day to day.' : 'This copy has no server, so imports are how data gets in.'} The Qualys <strong>asset export</strong> is still the only source of the <strong>end-of-life lifecycle stages and hardware models</strong> (the Qualys API does not supply them), so import it now and then for the End of Life Report. A findings CSV is only for when the API sync is not available.</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="app.switchView('import')" class="write-only border px-3 py-1.5 rounded text-sm bg-white hover:bg-gray-50">📥 Import a Qualys asset export or inventory list</button>
+                            <button onclick="app.orgImportFindings()" class="write-only border px-3 py-1.5 rounded text-sm bg-white hover:bg-gray-50">📥 Import a Qualys findings CSV</button>
+                        </div>
+                    </div>
                     <div class="flex flex-wrap gap-3">${admin ? `<button onclick="app.saveOrgSetup()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">Save setup</button>
                         <label class="border px-4 py-2 rounded text-sm cursor-pointer bg-white hover:bg-gray-50">Import JSON<input type="file" accept=".json,application/json" class="hidden" onchange="app.importOrgSetup(event)"></label>` : '<p class="text-sm text-gray-600">Only an administrator can change the setup.</p>'}
                         <button onclick="app.exportOrgSetup()" class="border px-4 py-2 rounded text-sm bg-white hover:bg-gray-50">Export JSON</button></div>`;
+            }
+            // Organisation setup is the one settings page (v4.5.1): its two parts, the chosen one marked with ● and a heavy outline.
+            static settingsPartsHTML(active) {
+                const b = (v, label, help) => { const on = v === active; return `<button role="tab" aria-selected="${on}" onclick="app.switchView('${v}')" title="${esc(help)}" class="px-4 py-2 rounded-lg text-sm ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${label}</button>`; };
+                return `<div role="tablist" class="flex flex-wrap gap-2 print-hide">${b('org', '⚙ Organisation', 'Teams, tiers, name matching, rules, manual imports')}${b('status-rules', '📐 Status rules', 'Priorities, due dates, backlog, status checks, Patch Plan period')}</div>`;
+            }
+
+            // The findings CSV import lives on Vuln Management (its progress shows there): go there, open the panel, pick the file.
+            orgImportFindings() {
+                this.switchView('vuln'); this.vulnToggleData(true);
+                document.querySelectorAll('#vuln-data-panel .local-only').forEach(el => el.classList.remove('local-only'));   // show the import options for this one import
+                document.getElementById('vuln-file-input').click();
             }
             orgTry() {
                 const v = document.getElementById('org-try').value, out = document.getElementById('org-try-out');
@@ -4303,7 +4328,7 @@
                 const T = OrgSettings.teams();
                 $('plan-team').innerHTML = ['ALL', ...T].map(t => `<option value="${esc(t)}" ${t === f.team ? 'selected' : ''}>${t === 'ALL' ? 'All teams' : esc(t)}</option>`).join('');
                 const end = Date.now() + days * 864e5, endTxt = new Date(end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-                $('plan-window').innerHTML = `Looking ahead <strong>${days} days</strong> (to ${esc(endTxt)}) <span class="text-xs text-gray-500">· change on Status Rules</span>`;
+                $('plan-window').innerHTML = `Looking ahead <strong>${days} days</strong> (to ${esc(endTxt)}) <span class="text-xs text-gray-500">· change in Organisation setup → Status rules</span>`;
                 const U = [['ALL', 'All'], ['1', 'P1'], ['2', 'P1–P2'], ['3', 'P1–P3']];
                 $('plan-urgency').innerHTML = U.map(([v, l]) => { const on = f.p === v; return `<button role="radio" aria-checked="${on}" onclick="app.planSet('p', '${v}')" class="px-3 py-1 rounded-full text-sm whitespace-nowrap ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${l}</button>`; }).join('');
                 if (!Demo.api()) { body.innerHTML = '<div class="bg-white border rounded-lg p-4 text-sm text-gray-700">The Patch Plan needs Automox, which runs on the CyberView server. Here you can still see every finding in Vuln Management.</div>'; $('plan-summary').textContent = ''; return; }

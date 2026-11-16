@@ -7,7 +7,7 @@ CyberView shows a security or infrastructure team where to focus. It joins your 
 - **Or with no server at all:** open `index.html` in a browser and the data stays in that browser. That is enough to try it with CSV exports.
 - **Never colour alone:** every status has a word or a symbol, so it works for colour-blind readers and in print.
 
-New here? Read **How it works, in plain words** below. The examples in this README use a team called *Platform*; your own team names come from the setup page.
+**In a hurry?** The one-page [quick guide](docs/quick-guide.md). New here? Read **How it works, in plain words** below. The examples in this README use a team called *Platform*; your own team names come from the setup page.
 
 ## Quick start
 

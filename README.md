@@ -507,6 +507,22 @@ Phase D of the status design.
   - **Backlog P1/P2 still open against the target:** the dashed line reaches zero for P1 by go-live + 60 days and for P2 by go-live + 90 days, starting from the backlog at go-live.
   - Hover a point for its value. A table view of the last 30 snapshots is underneath.
 
+### Patch Plan (v4.5, on the demo first)
+
+**🗓️ Patch Plan** sets every open Qualys finding against Automox and puts it in exactly one of four sections, for a team and an urgency (All, P1, P1–P2, P1–P3):
+
+| Section | Rule |
+|---|---|
+| ✋ **Manual remediation: the gap** | The team is not patched by Automox, the machine cannot take an agent or has none, Automox has no waiting patch for it, or no patch exists at all (configuration findings, end of life). Automox's automation will not fix these. |
+| ⚠ **Automox has a patch, but it is blocked** | A waiting patch exists, but the agent has not checked in, the patch policy is failing, a reboot is pending, the patch is deferred, or the next patch window is after the period. |
+| ⟳ **Automox will patch by** *date* | A waiting patch names the finding's CVE (or, marked ≈, matches its package name, as for Linux kernels), the agent and policy are healthy, and the device's next patch window is within the period. |
+| ✓ **Patched in the last** *N* **days** | Qualys no longer finds it, or Automox has installed the patch and Qualys has still to rescan. |
+
+- **The period** is 7 days by default; change it on 📐 Status Rules (*Patch Plan looks ahead*).
+- Each section lists its fixes in the same order as *Fixes that clear the most*, with the reasons in words and counts, and a **⬇ List** of machine names (one per line, an Ansible inventory) per fix and for the whole section. The gap's list is the manual work.
+- Clicking a fix opens its page with the team and urgency kept.
+- **Limits:** the match between a finding and an Automox patch is by CVE, else by package name (≈). Automox names CVEs mostly for Windows updates, so a Linux "patch everything" policy may fix more than the plan shows. Reading Automox's policy settings to close that gap is the planned next step.
+
 ### Remembered filters (v4.3)
 
 Filter choices are remembered **per person, in their own browser**, and come back on the next visit: Vuln Management (team, exposure, risk, urgency, more filters, grouping, rows shown), the Asset Register and Review Queue filters, the team on Status, Team Risk Reports, End of Life (and its status, reason, criticality and field filters), Patch Coverage (team and priority), and Remediation. Searches typed into boxes are not remembered. Nothing is stored on the server; a private window, another browser or cleared site data simply starts with the defaults. *Clear filters* on Vuln Management goes back to the defaults (and remembers that).

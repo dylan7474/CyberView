@@ -66,7 +66,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.4.0 · 16 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.5.0 · 16 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -86,6 +86,7 @@
                 <span>🛡️ Vuln Management</span>
                 <span id="nav-vuln-badge" class="hidden ml-auto w-fit bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"></span>
             </button>
+            <button onclick="app.switchView('plan')" class="server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🗓️ Patch Plan</button>
             <button onclick="app.switchView('remediation')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🛠️ Remediation</button>
             <button onclick="app.switchView('risk-accept')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">✅ Risk Acceptances</button>
             <button onclick="app.switchView('status')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🚦 Status</button>
@@ -512,6 +513,25 @@
             </section>
 
             <!-- VIEW: DATA HEALTH -->
+            <!-- VIEW: PATCH PLAN (v4.5): Qualys findings against Automox: patched, will be patched, blocked, and the gap -->
+            <section id="view-plan" class="view-section space-y-4">
+                <div><h3 class="text-xl font-semibold">Patch Plan</h3>
+                    <p class="text-sm text-gray-600">Every open Qualys finding, set against Automox: what has been patched, what Automox will patch in the coming days, what it has a patch for but cannot install, and the gap that needs manual remediation.</p></div>
+                <div class="bg-white p-4 rounded-lg shadow border space-y-3">
+                    <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+                        <span class="text-sm font-semibold text-gray-800 w-20">Showing</span>
+                        <label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Team</span><select id="plan-team" onchange="app.planSet('team', this.value)" class="border-gray-300 rounded text-sm"></select></label>
+                        <span class="text-sm text-gray-700" id="plan-window"></span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+                        <span class="text-sm font-semibold text-gray-800 w-20">Urgency</span>
+                        <div id="plan-urgency" role="radiogroup" aria-label="Urgency" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+                    <p id="plan-summary" class="text-sm text-gray-800 border-t pt-3"></p>
+                </div>
+                <div id="plan-body" class="space-y-4"></div>
+            </section>
+
             <section id="view-status" class="view-section space-y-4">
                 <div class="flex flex-wrap justify-between items-end gap-3">
                     <div><h3 class="text-xl font-semibold">Vulnerability Status</h3><p class="text-sm text-gray-600"><span id="st-date"></span> · every source joined: findings, scan coverage, end of life, patching, exceptions.</p></div>
@@ -1614,11 +1634,12 @@
                 const K = ['CISA Known Exploited Vulnerabilities', 'Active Attacks'], P = ['Public Exploit'], RCE = ['Remote Code Execution'];
                 let q = 910000;
                 const add = (o) => C.push({ qid: String(q++), cat: 'General', solution: 'Apply the vendor update. Restart if the update asks for it, then rescan to confirm.', ...o });
+                const WINCVE = ['CVE-2024-49112', 'CVE-2024-38063', 'CVE-2024-38077', 'CVE-2024-21412', 'CVE-2024-30080', 'CVE-2024-30078', 'CVE-2024-43491'];   // real Windows CVEs (only index 3 is on the KEV list)
                 for (let k = 6; k >= 0; k--) {
                     const d = mon(k), M = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-                    add({ title: `Microsoft Windows Security Update for ${M}`, sev: k < 2 ? 4 : 5, fam: ['win', 'wincl'], patch: true, pub: d, rti: k === 3 ? [...K, ...RCE] : (k % 2 ? P : []), cves: k === 3 ? ['CVE-2024-21412'] : [], qds: k === 3 ? 95 : 72 - k, cat: 'Windows' });
+                    add({ title: `Microsoft Windows Security Update for ${M}`, sev: k < 2 ? 4 : 5, fam: ['win', 'wincl'], patch: true, pub: d, rti: k === 3 ? [...K, ...RCE] : (k % 2 ? P : []), cves: [WINCVE[6 - k]], qds: k === 3 ? 95 : 72 - k, cat: 'Windows' });
                     add({ title: `Red Hat Update for kernel (RHSA-${d.getUTCFullYear()}:${1000 + k * 37})`, sev: 4, fam: ['rhel'], patch: true, pub: d, rti: k === 4 ? [...K, 'Privilege Escalation'] : [], cves: k === 4 ? ['CVE-2024-1086'] : [], qds: k === 4 ? 92 : 55, cat: 'RedHat' });
-                    add({ title: `Ubuntu Security Notification for Linux kernel (USN-${7100 + k * 13}-1)`, sev: 4, fam: ['ubu'], patch: true, pub: d, rti: k === 4 ? [...K] : [], cves: k === 4 ? ['CVE-2024-1086'] : [], qds: k === 4 ? 92 : 52, cat: 'Ubuntu' });
+                    add({ title: `Ubuntu Security Update for linux-image (USN-${7100 + k * 13}-1)`, sev: 4, fam: ['ubu'], patch: true, pub: d, rti: k === 4 ? [...K] : [], cves: k === 4 ? ['CVE-2024-1086'] : [], qds: k === 4 ? 92 : 52, cat: 'Ubuntu' });
                 }
                 [[mon(5), 'OpenSSH Signal Handler Race Condition (regreSSHion)', ['ubu', 'rhel'], 4, ['CVE-2024-6387'], [...RCE, ...P], 78],
                  [mon(6), 'OpenSSH Terrapin Prefix Truncation Weakness', ['ubu', 'rhel', 'esx'], 3, ['CVE-2023-48795'], [], 38],
@@ -1714,8 +1735,10 @@
                             { id: 'p2', name: 'Required agents', type: 'required_software', compliant: true, lastRun: new Date(now - 6 * dayMs).toISOString(), pendingCount: null, willReboot: false }],
                         deviceStatus: stale ? 'disconnected' : 'ready', agentStatus: stale ? 'disconnected' : 'connected', group: '1', tags: [], created: '' });
                     (byId.get(m.id).d || []).forEach(r => {
-                        const q = cat.get(r[0]); if (!q.patch || !q.cves.length) return;
-                        const p = { d: did, n: q.title.replace(/^(.*?)( \(|$).*/, '$1') + ' update', v: '', sev: q.sev >= 5 ? 'critical' : (q.sev === 4 ? 'high' : 'medium'), cves: q.cves,
+                        const q = cat.get(r[0]); if (!q.patch) return;
+                        const pk = (q.title.match(/Update for ([\w.+-]+)/i) || [])[1];
+                        if (!q.cves.length && !(pk && (m.fam === 'rhel' || m.fam === 'ubu'))) return;
+                        const p = { d: did, n: q.cves.length ? q.title.replace(/^(.*?)( \(|$).*/, '$1') + ' update' : `${pk.toLowerCase()}-${m.fam === 'rhel' ? '5.14.0-503.' + (10 + Number(r[0]) % 30) + '.1.el9_5' : '6.8.0-' + (40 + Number(r[0]) % 20) + '-generic'}`, v: '', sev: q.sev >= 5 ? 'critical' : (q.sev === 4 ? 'high' : 'medium'), cves: q.cves,
                             kev: q.rti.includes('CISA Known Exploited Vulnerabilities') ? q.cves : [], cveScore: null, epss: null, installed: r[3] === 'FIXED', ignored: false, deferred: '', reboot: false, managed: true };
                         (p.installed ? installed : pending).push(p);
                     });
@@ -2167,7 +2190,7 @@
                 backlogTargets: { 1: 60, 2: 90, 3: 90, 4: 180 },                     // backlog due: days after go-live
                 scanOkDays: 14, scanStaleDays: 30,
                 eolWatchMonths: 12, eolActionMonths: 6,
-                automoxTeams: null, rebootDays: 7, agentStaleDays: 7,               // null = the main team (Organisation setup)
+                automoxTeams: null, rebootDays: 7, agentStaleDays: 7, patchPlanDays: 7,      // Patch Plan: how far ahead "will be patched" looks               // null = the main team (Organisation setup)
                 team: { onTrack: 95, slipping: 80, coverageMin: 80, tierGapMax: 20 },
                 staleDays: { assets: 30, findings: 2, automox: 7, eol: 7 }
             };
@@ -3890,7 +3913,7 @@
                 target.classList.add('active');
                 this.currentView = viewId;
                 OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
-                const TITLES = { dashboard: 'Dashboard', import: 'Import Data', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Status Rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
+                const TITLES = { plan: 'Patch Plan', dashboard: 'Dashboard', import: 'Import Data', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Status Rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
                 const pt = document.getElementById('page-title'); if (pt) pt.textContent = TITLES[viewId] || 'CyberView';
                 const navView = viewId === 'inspect' ? (this.inspectReturn || '') : viewId;
                 document.querySelectorAll('aside .nav-btn').forEach(b => { const on = (b.getAttribute('onclick') || '').includes(`'${navView}'`); b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
@@ -3905,6 +3928,7 @@
                 if (viewId === 'reports') this.renderReports();
                 if (viewId === 'eol') this.renderEOL();
                 if (viewId === 'automox') this.renderAutomox();
+                if (viewId === 'plan') this.renderPlan();
                 if (viewId === 'remediation') this.renderRemediation(true);
                 if (viewId === 'vuln') this.renderVulnDashboard();
                 if (viewId === 'risk-accept') this.renderRiskAcceptances();
@@ -4245,6 +4269,122 @@
                 ev.target.value = '';
             }
 
+            // =================== Patch Plan (v4.5) ===================
+            get planF() { if (!this._planF) { const p = Prefs.get('plan', {}); this._planF = { team: p.team || OrgSettings.mainTeam(), p: p.p || 'ALL', open: p.open || { manual: true } }; } return this._planF; }
+            planSet(k, v) { this.planF[k] = v; const f = this.planF; Prefs.set('plan', { team: f.team, p: f.p, open: f.open }); this.renderPlan(); }
+            planToggle(b) { const o = this.planF.open; o[b] = !o[b]; this.planSet('open', o); }
+
+            // One open finding (or one fixed recently) -> its bucket and the reason, from the same matching Patch Coverage uses.
+            static planClassify(d, r, m, end, S, q, autoTeam) {
+                if (!autoTeam) return { b: 'manual', why: 'team not patched by Automox' };
+                if (r && r.patchNA) return { b: 'manual', why: 'cannot take an Automox agent' };
+                const x = m.byAsset.get(d.asset) || {}, dev = x.dev;
+                if (!dev) return { b: 'manual', why: x.how === 'ambiguous' || x.how === 'duplicate' ? 'Automox match to check' : 'no Automox agent' };
+                if (AutomoxService.installedFor(dev, d.cves).length) return { b: 'done', why: 'installed by Automox, waiting for Qualys to rescan' };
+                const w = AutomoxService.waitingFor(dev, d, q.title);
+                if (!w.pkgs.length) return { b: 'manual', why: q.patchable ? 'Automox has no waiting patch for it' : 'no patch exists (configuration or end of life)' };
+                const approx = w.by === 'name';
+                const block = [];
+                if (AutomoxService.stale(dev)) block.push(`agent not seen for ${Math.floor((Date.now() - AutomoxService.time(dev.lastSeen)) / 864e5)} days`);
+                if (dev.compliant === false) block.push('patch policy failing');
+                if (dev.needsReboot) block.push('reboot pending');
+                const next = AutomoxService.time(dev.nextPatch);
+                if (!next) block.push('no patch window scheduled');
+                else if (next > end) block.push('next patch window ' + new Date(next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+                const def = w.pkgs.map(p => AutomoxService.time(p.deferred)).filter(Boolean);
+                if (def.length && Math.min(...def) > end) block.push('patch deferred');
+                if (block.length) return { b: 'blocked', why: block.join(', '), approx };
+                return { b: 'will', why: approx ? 'waiting patch matched by package name (≈)' : 'waiting patch names its CVE', when: next, approx };
+            }
+
+            async renderPlan() {
+                const $ = (id) => document.getElementById(id), body = $('plan-body'); if (!body) return;
+                const f = this.planF, S = StatusEngine.settings(), days = +S.patchPlanDays || 7;
+                const T = OrgSettings.teams();
+                $('plan-team').innerHTML = ['ALL', ...T].map(t => `<option value="${esc(t)}" ${t === f.team ? 'selected' : ''}>${t === 'ALL' ? 'All teams' : esc(t)}</option>`).join('');
+                const end = Date.now() + days * 864e5, endTxt = new Date(end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                $('plan-window').innerHTML = `Looking ahead <strong>${days} days</strong> (to ${esc(endTxt)}) <span class="text-xs text-gray-500">· change on Status Rules</span>`;
+                const U = [['ALL', 'All'], ['1', 'P1'], ['2', 'P1–P2'], ['3', 'P1–P3']];
+                $('plan-urgency').innerHTML = U.map(([v, l]) => { const on = f.p === v; return `<button role="radio" aria-checked="${on}" onclick="app.planSet('p', '${v}')" class="px-3 py-1 rounded-full text-sm whitespace-nowrap ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${l}</button>`; }).join('');
+                if (!Demo.api()) { body.innerHTML = '<div class="bg-white border rounded-lg p-4 text-sm text-gray-700">The Patch Plan needs Automox, which runs on the CyberView server. Here you can still see every finding in Vuln Management.</div>'; $('plan-summary').textContent = ''; return; }
+                body.innerHTML = '<p class="text-gray-500 italic p-4">Working it out…</p>';
+                let D = null; try { D = await AutomoxService.ensure(); } catch (e) { D = null; }
+                const { dets, vd, regMap } = await this.scopedData({ owner: f.team, riskStatus: 'Open', p: f.p });
+                if (this.currentView !== 'plan') return;
+                if (!D) { body.innerHTML = '<div class="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-900">⚠ No Automox data yet. Open Patch Coverage and press Sync from Automox.</div>'; $('plan-summary').textContent = ''; return; }
+                const m = AutomoxService.match(), auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
+                const B = { manual: [], blocked: [], will: [], done: [] };
+                dets.forEach(d => {
+                    const r = regMap.get(d.asset) || {}, q = vd.qmap.get(d.qid) || {};
+                    const c = App.planClassify(d, r, m, end, S, q, auto.has(String(r.owner || '').toLowerCase()));
+                    B[c.b].push({ ...d, _why: c.why, _when: c.when, _approx: c.approx });
+                });
+                // fixed according to Qualys in the last N days, in the same scope (the "done" half that Qualys has already confirmed)
+                const since = Date.now() - days * 864e5, scope = new Set([...regMap.values()].filter(r => (f.team === 'ALL' || r.owner === f.team)).map(r => r.normalizedName));
+                const fixed = (vd.all || []).filter(d => !RemediationVerifier.ACTIVE(d.status) && scope.has(d.asset) && AutomoxService.time(d.last) >= since);
+                fixed.forEach(d => { const q = vd.qmap.get(d.qid) || {}; const t = PriorityEngine.tier(d, q); const p = StatusEngine.priority(StatusEngine.findingTier({ ...d, tier: t }, S), regMap.get(d.asset), S);
+                    if (f.p === 'ALL' || p <= +f.p) B.done.push({ ...d, tier: t, p, _why: 'fixed: Qualys no longer finds it' }); });
+                this._plan = B;
+                const n = (a) => fmtNum(a.length), mach = (a) => fmtNum(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
+                const scopeTxt = [f.team === 'ALL' ? 'All teams' : f.team, f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : ''].filter(Boolean).join(' · ');
+                const open = dets.length, covered = B.will.length;
+                $('plan-summary').innerHTML = `<strong>${esc(scopeTxt)}:</strong> ${fmtNum(open)} open findings · <strong>✋ ${n(B.manual)} need manual remediation</strong> · ⚠ ${n(B.blocked)} blocked · ⟳ ${n(B.will)} Automox will patch by ${esc(endTxt)}${open ? ` (${Math.round(covered * 100 / open)}% of open)` : ''} · ✓ ${n(B.done)} patched in the last ${days} days`;
+                const SECS = [
+                    ['manual', '✋', 'Manual remediation: the gap', 'No Automox agent, or no Automox patch for it. These will not be fixed by Automox\'s automation.', 'border-red-300'],
+                    ['blocked', '⚠', 'Automox has a patch, but it is blocked', 'A waiting patch exists, but the agent, the policy, a reboot or the schedule stops it being installed in time.', 'border-amber-300'],
+                    ['will', '⟳', `Automox will patch by ${endTxt}`, `A waiting patch names the finding's CVE (or, marked ≈, matches its package name), the agent and policy are healthy, and the next patch window is within ${days} days. Qualys confirms the fix at its next scan.`, 'border-sky-300'],
+                    ['done', '✓', `Patched in the last ${days} days`, 'Qualys no longer finds it, or Automox has installed the patch and Qualys has still to rescan.', 'border-emerald-300']
+                ];
+                body.innerHTML = SECS.map(([k, sym, title, help, border]) => {
+                    const a = B[k], isOpen = !!f.open[k];
+                    return `<div class="bg-white rounded-lg shadow border-2 ${border}">
+                        <button onclick="app.planToggle('${k}')" aria-expanded="${isOpen}" class="w-full text-left px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+                            <span class="font-semibold text-gray-900">${sym} ${esc(title)}</span>
+                            <span class="text-sm text-gray-700">${n(a)} findings · ${mach(a)} machines${p12(a) ? ` · <strong>${fmtNum(p12(a))} P1/P2</strong>` : ''}</span>
+                            <span class="ml-auto text-xs text-blue-700 underline">${isOpen ? 'Hide ▾' : 'Show ▸'}</span></button>
+                        ${isOpen ? `<div class="border-t"><p class="px-4 py-2 text-xs text-gray-600">${esc(help)}</p>${this.planTable(k, a, regMap, vd)}</div>` : ''}</div>`;
+                }).join('');
+            }
+
+            // One row per fix: how many machines, the reasons, when; the machine list for automation.
+            planTable(k, a, regMap, vd) {
+                if (!a.length) return '<p class="px-4 pb-4 text-sm text-gray-500 italic">None.</p>';
+                const by = new Map();
+                a.forEach(d => {
+                    let g = by.get(d.qid);
+                    if (!g) by.set(d.qid, g = { qid: d.qid, title: (vd.qmap.get(d.qid) || {}).title || 'QID ' + d.qid, p: 5, assets: new Set(), why: new Map(), when: [], overdue: 0, qvs: 0, key1: 0 });
+                    g.p = Math.min(g.p, d.p || 5); g.assets.add(d.asset); g.why.set(d._why, (g.why.get(d._why) || 0) + 1); if (d._when) g.when.push(d._when); if (d.overdue) g.overdue++; g.qvs = Math.max(g.qvs, d.qvs || 0);
+                });
+                by.forEach(g => { g.assets.forEach(x => { const r = regMap.get(x); if (r && (r.exposure === 'Internet Facing' || StatusEngine.tierOf(r) === 1)) g.key1++; }); });
+                const rows = [...by.values()].sort(App.vulnFixCmp);
+                const shown = this._planShow?.[k] ? rows : rows.slice(0, 15);
+                const day = (t) => new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                const tr = (g, i) => {
+                    const why = [...g.why].sort((x, y) => y[1] - x[1]).map(([w, c]) => `${esc(w)}${g.why.size > 1 || c > 1 ? ` (${fmtNum(c)})` : ''}`).join(' · ');
+                    const when = k === 'will' && g.when.length ? (Math.min(...g.when) === Math.max(...g.when) ? day(Math.min(...g.when)) : `${day(Math.min(...g.when))} – ${day(Math.max(...g.when))}`) : '';
+                    return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-q="${esc(g.qid)}" onclick="app.inspectQid(this.dataset.q, 'plan')">
+                        <td class="px-3 py-2 text-right text-gray-500">${i + 1}</td>
+                        <td class="px-3 py-2 text-gray-800"><span class="block truncate max-w-md" title="${esc(g.title)}">${esc(g.title)}</span></td>
+                        <td class="px-3 py-2 text-center">${g.p < 5 ? StatusEngine.pBadge(g.p) : '-'}</td>
+                        <td class="px-3 py-2 text-right font-semibold">${fmtNum(g.assets.size)}</td>
+                        <td class="px-3 py-2 text-xs text-gray-700">${why}</td>
+                        <td class="px-3 py-2 text-xs whitespace-nowrap">${when}${g.overdue && k !== 'done' ? ` <strong>✖ ${fmtNum(g.overdue)} overdue</strong>` : ''}</td>
+                        <td class="px-3 py-2 text-right"><button class="text-[10px] text-gray-700 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap" title="Download the names of these machines, one per line (an Ansible inventory)" data-k="${k}" data-q="${esc(g.qid)}" onclick="event.stopPropagation(); app.planList(this.dataset.k, this.dataset.q)">⬇ List</button></td></tr>`;
+                };
+                return `<table class="w-full text-sm"><thead class="bg-gray-100 text-gray-600 text-xs uppercase"><tr><th class="px-3 py-2 text-right">#</th><th class="px-3 py-2 text-left">Fix</th><th class="px-3 py-2">P</th><th class="px-3 py-2 text-right">Machines</th><th class="px-3 py-2 text-left">Why</th><th class="px-3 py-2 text-left">${k === 'will' ? 'Patch window' : 'Due'}</th><th class="px-3 py-2"></th></tr></thead>
+                    <tbody class="divide-y">${shown.map(tr).join('')}</tbody></table>
+                    <div class="flex items-center justify-between px-4 py-2 border-t bg-gray-50 text-xs text-gray-600 rounded-b-lg"><span>${fmtNum(shown.length)} of ${fmtNum(rows.length)} fixes${rows.length > shown.length ? ` <button onclick="app._planShow = { ...(app._planShow || {}), ${k}: true }; app.renderPlan()" class="ml-2 text-blue-700 underline">Show all</button>` : ''}</span>
+                    <button onclick="app.planList('${k}')" class="border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Every machine in this section, one name per line">⬇ Machine list for this section</button></div>`;
+            }
+            planList(k, qid) {
+                const a = (this._plan?.[k] || []).filter(d => !qid || String(d.qid) === String(qid));
+                const names = App.hostNames(new Set(a.map(d => d.asset)));
+                if (!names.length) { StorageService.toast('No machines to export'); return; }
+                const f = this.planF, label = { manual: 'manual', blocked: 'blocked', will: 'automox-will-patch', done: 'patched' }[k];
+                App.downloadList(`plan_${label}${qid ? '_' + qid : ''}_${(f.team === 'ALL' ? 'all-teams' : f.team).replace(/[^A-Za-z0-9_-]+/g, '')}`, names);
+                StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
+            }
+
             renderStatusRules() {
                 const S = StatusEngine.settings(), sla = RemediationService.sla();
                 const admin = !this.me || this.me.role === 'admin';
@@ -4291,6 +4431,7 @@
                         <div class="flex flex-wrap gap-4 items-end text-xs">
                             <label>Scan OK within (days)<br>${num('scanOkDays', S.scanOkDays)}</label><label>Scan too old after (days)<br>${num('scanStaleDays', S.scanStaleDays)}</label>
                             <label>EOL watch (months)<br>${num('eolWatchMonths', S.eolWatchMonths)}</label><label>EOL action (months)<br>${num('eolActionMonths', S.eolActionMonths)}</label>
+                            <label>Patch Plan looks ahead (days)<br>${num('patchPlanDays', S.patchPlanDays || 7, 'w-20', 1, 90)}</label>
                             <label>Reboot pending too long (days)<br>${num('rebootDays', S.rebootDays)}</label><label>Agent stale after (days)<br>${num('agentStaleDays', S.agentStaleDays)}</label>
                             <label>Teams patched by Automox (comma separated)<br><input type="text" data-k="automoxTeams" value="${esc((S.automoxTeams || []).join(', '))}" class="sr-in border rounded px-2 py-1 w-64" ${dis}></label>
                         </div>
@@ -7175,6 +7316,7 @@
                 if (from === 'vuln') scope = { ...this.vulnState.filters };
                 else if (from === 'report' && this.reportCtx) scope = { owner: this.reportCtx.scope, riskStatus: this.reportCtx.riskStatusFilter };
                 else if (from === 'ax' && this.axState) scope = { owner: this.axState.scope || 'ALL' };
+                else if (from === 'plan') { const f = this.planF; scope = { owner: f.team, riskStatus: 'Open', p: f.p }; }
                 else if (from === 'eol') scope = { owner: (document.getElementById('eol-scope-selector') || {}).value || 'ALL' };
                 else if (!from && this.currentView === 'inspect') scope = [...this.inspectState.stack].reverse().find(x => x.type === 'qid')?.scope || null;
                 this.inspectNav({ type: 'qid', id: String(qid), scope: App.inspectScope(scope) });
@@ -7234,7 +7376,7 @@
                 const e = this.inspectState.stack[this.inspectState.stack.length - 1];
                 if (!e) return;
                 document.getElementById('view-container').scrollTop = 0;
-                const retLabel = { automox: 'Patch Coverage', reports: 'Report', eol: 'End of Life Report', vuln: 'Vuln Management', dashboard: 'Dashboard', 'risk-accept': 'Risk Acceptances', register: 'Register' }[this.inspectReturn] || 'Back';
+                const retLabel = { plan: 'Patch Plan', automox: 'Patch Coverage', reports: 'Report', eol: 'End of Life Report', vuln: 'Vuln Management', dashboard: 'Dashboard', 'risk-accept': 'Risk Acceptances', register: 'Register' }[this.inspectReturn] || 'Back';
                 const crumbs = this.inspectState.stack.map((s, i) => {
                     const label = s.type === 'asset' ? s.id : 'QID ' + s.id;
                     const last = i === this.inspectState.stack.length - 1;

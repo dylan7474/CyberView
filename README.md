@@ -149,7 +149,7 @@ flowchart LR
 | **Scheduled** | Severity 5, or QDS 40 or more. |
 | **Routine** | Everything else. |
 
-**Step 2: how important is the machine?** Its Tier comes from the register. Tier 1 = crown jewels, Tier 2 = normal, Tier 3 = least critical.
+**Step 2: how important is the machine?** Its Tier comes from the register, where people set it by hand, like the owner. Tier 1 = Critical (it delivers a key service, or a critical service relies on it), Tier 2 = Supporting, Tier 3 = Other. You can give the tiers your own names and meanings on the Organisation setup page.
 
 **Step 3: read the priority from the table.** An Internet-facing machine moves one step more urgent (P3 becomes P2, for example).
 
@@ -163,6 +163,29 @@ flowchart LR
 *Example:* a severity 5 finding (Scheduled) on an internal Tier 3 server is **P4**, due 180 days after Qualys first found it. The same finding on an Internet-facing Tier 1 server is **P2** (P3 moved up one step), due in 30 days.
 
 Administrators can change all these numbers on the **📐 Status Rules** page. Everyone can read them there.
+
+### Two ready-made rule sets
+
+The table and days above are the **Standard** rule set. The Status Rules page can switch to a second one with one button, and back again.
+
+| | Standard | UK (NCSC + Cyber Essentials) |
+|---|---|---|
+| What the machine's Tier does | Changes the priority (the table above) | Decides what is worked on first; it never extends a deadline |
+| Known exploited | P1 on Tier 1 and 2, P2 on Tier 3 | P1 on every machine |
+| Severity 4 or 5 with a patch | Follows its Qualys score | At least P2 |
+| Due, from first found | P1 14 days, P2 30, P3 90, P4 180 | P1 14 days, P2 14, P3 30, P4 90 |
+| Internet-facing machines | One step more urgent | One step more urgent, and P1 and P2 due in 5 days |
+
+**Where the UK figures come from:**
+- **NCSC vulnerability management guidance:** prioritise Internet-facing services; update them within 5 days, operating systems and applications within 7, internal services within 14; go faster when a vulnerability is being exploited.
+- **Cyber Essentials:** critical and high-risk fixes within 14 days of release, on every device in scope.
+- **The P3 and P4 days** (30 and 90) are not set by either source; they are this portal's choice for lower-severity findings, and can be changed.
+
+**Two limits to know about:**
+- The clock starts when the scanner **first finds** the problem, not when the vendor released the patch (the Qualys API sync does not supply the patch release date). With a daily sync the two are usually a day or so apart, but a machine that is scanned late gets its 14 days from the scan.
+- "Critical and high" is taken as **Qualys severity 4 or 5 with a patch available**. The API sync carries no CVSS scores, so the Cyber Essentials test of CVSS 7 or above cannot be applied exactly.
+
+Switching rule set works out the priority and due date of every open finding again. Expect many more P1 and P2 findings under the UK set, because it treats every patchable severity 4 or 5 finding as urgent.
 
 ### New findings and the backlog
 
@@ -477,6 +500,7 @@ Phase D of the status design.
 
 Everything specific to one organisation now lives on the **⚙ Organisation setup** page. It is stored in the database (`gov_org_settings`) and is part of every backup and restore. Only administrators can change it; the server refuses changes from anyone else. Everyone can read it.
 
+- **Tier names and meanings.** The three tiers start as *Critical*, *Supporting* and *Other* (after the NCSC's guidance on critical assets and the systems they rely on). Rename them to suit your organisation. People set each machine's tier by hand in the Asset Register.
 - **Teams** (the asset owners) and the **main team**. The main team owns the machines on the inventory list (Import Data), is counted on the Dashboard, is shown first on Patch Coverage, and is the default team patched by Automox. Every team list in the portal (filters, bulk edit, the Review Queue buttons, reports, tasks) is built from these. A team that is still used in the register always stays in the lists, so no asset loses its owner.
 - **Domain suffixes**, removed from the end of machine names before Qualys, Automox and the register are matched. **Changing them changes how machines are matched**, so take a backup first; the page asks before saving a change.
 - **Rules that suggest an owner and a service for new machines.** One rule per line, the first match wins: `starts`, `contains`, `ends` or `pattern` (a regular expression), the text, `=>`, then the result. For example `contains bkp => Platform`, or `tags contains monitoring => Monitoring` for a rule on the Qualys tags. A third list turns a service into an owner when no name rule matched (`Database => Platform`). **Try a name** shows how a name is matched and what it would get. People still decide in the Review Queue.

@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 import automox
 import qualys
 
-VERSION = "4.7.2"
+VERSION = "4.8.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -39,7 +39,7 @@ FIELD_MAP = {
     "vulnDetails": "gov_vuln_details", "vulnMeta": "gov_vuln_meta", "riskAcceptances": "gov_risk_acceptances",
     "eolDates": "gov_eol_dates", "remediation": "gov_remediation", "remediationSettings": "gov_remediation_settings",
     "automoxLinks": "gov_automox_links", "statusSettings": "gov_status_settings", "statusHistory": "gov_status_history", "scanDates": "gov_scan_dates",
-    "orgSettings": "gov_org_settings",
+    "orgSettings": "gov_org_settings", "planForecast": "gov_plan_forecast",
 }
 # collections whose edits are written to the change history, and the field that identifies a record
 TRACKED = {"gov_asset_register": ("normalizedName", "normalizedName"), "gov_risk_acceptances": ("id", "asset"),
@@ -50,7 +50,7 @@ COLLECTIONS = {
     "gov_asset_register", "gov_review_queue", "gov_ownership_ledger", "gov_platform_inventory",
     "gov_vuln_asset_summary", "gov_vuln_service_summary", "gov_vuln_cve_summary", "gov_vuln_details",
     "gov_vuln_meta", "gov_risk_acceptances", "gov_eol_dates", "gov_remediation", "gov_remediation_settings",
-    "gov_automox_links", "gov_status_settings", "gov_status_history", "gov_scan_dates", "gov_org_settings",
+    "gov_automox_links", "gov_status_settings", "gov_status_history", "gov_scan_dates", "gov_org_settings", "gov_plan_forecast",
 }
 # Saved one record at a time through /api/tasks, never as a whole collection (a stale page would wipe other people's work).
 PER_RECORD = {"gov_remediation"}

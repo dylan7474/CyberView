@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.7.2 · 17 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.8.0 · 17 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1113,6 +1113,7 @@
                 STATUS_SETTINGS: 'gov_status_settings',
                 STATUS_HISTORY: 'gov_status_history',
                 SCAN_DATES: 'gov_scan_dates',
+                PLAN_FORECAST: 'gov_plan_forecast',
                 ORG_SETTINGS: 'gov_org_settings'
             };
             // Saved record by record through api/tasks in server mode, never as a whole collection.
@@ -1321,7 +1322,7 @@
                 a.click();
             }
 
-            static BACKUP_KEYS = { assetRegister: 'ASSET_REGISTER', reviewQueue: 'REVIEW_QUEUE', ownershipLedger: 'OWNERSHIP_LEDGER', platformInventory: 'PLATFORM_INVENTORY', vulnAssetSummary: 'VULN_ASSET_SUMMARY', vulnServiceSummary: 'VULN_SERVICE_SUMMARY', vulnCveSummary: 'VULN_CVE_SUMMARY', vulnDetails: 'VULN_DETAILS', vulnMeta: 'VULN_META', riskAcceptances: 'RISK_ACCEPTANCES', eolDates: 'EOL_DATES', remediation: 'REMEDIATION', remediationSettings: 'REMEDIATION_SETTINGS', automoxLinks: 'AUTOMOX_LINKS', statusSettings: 'STATUS_SETTINGS', statusHistory: 'STATUS_HISTORY', scanDates: 'SCAN_DATES', orgSettings: 'ORG_SETTINGS' };
+            static BACKUP_KEYS = { assetRegister: 'ASSET_REGISTER', reviewQueue: 'REVIEW_QUEUE', ownershipLedger: 'OWNERSHIP_LEDGER', platformInventory: 'PLATFORM_INVENTORY', vulnAssetSummary: 'VULN_ASSET_SUMMARY', vulnServiceSummary: 'VULN_SERVICE_SUMMARY', vulnCveSummary: 'VULN_CVE_SUMMARY', vulnDetails: 'VULN_DETAILS', vulnMeta: 'VULN_META', riskAcceptances: 'RISK_ACCEPTANCES', eolDates: 'EOL_DATES', remediation: 'REMEDIATION', remediationSettings: 'REMEDIATION_SETTINGS', automoxLinks: 'AUTOMOX_LINKS', statusSettings: 'STATUS_SETTINGS', statusHistory: 'STATUS_HISTORY', scanDates: 'SCAN_DATES', planForecast: 'PLAN_FORECAST', orgSettings: 'ORG_SETTINGS' };
 
             // Replace everything with the contents of a backup made by exportDatabase. Fields the backup lacks are cleared, so the result matches the backup.
             static async importDatabase(db) {
@@ -1438,6 +1439,8 @@
             static ORG = 'ACME Cloud Ltd';
             static ON = (() => { try { return localStorage.getItem('cyberview.demo') === '1'; } catch (e) { return false; } })();
             static api() { return StorageService.mode === 'server' || this.ON; }
+            // The demo's clock: each "Simulate next day" moves it a day ahead of the real one (for Automox's patch runs and the forecast check).
+            static now() { return Date.now() + (this.ON ? (this.state().day || 0) * 864e5 : 0); }
 
             // ---------- turning it on and off
             static boot() {
@@ -1685,7 +1688,9 @@
                         if (R() > p) return;
                         const first = new Date(Math.min(now - day, c.pub.getTime() + (1 + R() * 12) * day));
                         dets.push({ host: m.id, qid: c.qid, port: c.title.includes('TLS') ? '443' : (c.title.includes('SMB') ? '445' : '0'), proto: c.title.includes('TLS') || c.title.includes('SMB') ? 'tcp' : '',
-                            first: first.toISOString(), fixDay: c.patch ? Math.ceil(-Math.log(1 - R()) / (0.012 + m.hygiene * 0.05)) : 999, appearDay: 0 });
+                            first: first.toISOString(), fixDay: !c.patch ? 999 : ((m.team === 'Platform' || m.team === 'Corporate IT') && !m.appliance && R() < 0.8
+                                ? 1 + Math.floor(R() * 8)                                     // Automox installs it at the next weekly run (most of the time)
+                                : Math.ceil(-Math.log(1 - R()) / (0.012 + m.hygiene * 0.05))), appearDay: 0 });
                     });
                 });
                 // a few that appear later (new this month), so "Simulate next day" also shows new findings
@@ -1715,7 +1720,7 @@
                     const mx = Math.max(0, ...open.map(r => r[6]));
                     const cr = m.tier === 1 ? 5 : (m.tier === 2 ? 3 : (m.tier === 3 ? 2 : 3));
                     return { a: m.id, n: m.fqdn, os: m.os, tags: m.team ? 'Cloud Agent,' + m.team : 'Cloud Agent', ip: m.ip, tr: Math.min(1000, Math.round(mx * (cr + 2) * 1.3 + open.length * 2)), cr,
-                        scan: new Date(now - m.scanAgo * dayMs).toISOString(), d: rows };
+                        scan: new Date(this.now() - m.scanAgo * dayMs).toISOString(), d: rows };
                 });
                 const qids = E.catalog.map(c => ({ qid: c.qid, title: c.title, sev: c.sev, solution: c.solution, threat: 'Sample data: a made-up check for the CyberView demo.', category: c.cat,
                     rti: c.rti, patchable: c.patch, published: c.pub.toISOString(), patchReleased: '', cvss: 0, cveCount: c.cves.length, cves: c.cves }));
@@ -1723,11 +1728,11 @@
             }
             // Automox for a simulated day: agents on the main team's machines (not appliances) and the laptops.
             static axData(day, meta) {
-                const E = this.estate(), R = this.rng(99), now = Date.now(), dayMs = 864e5, pkg = this.qxPackage(day, null);
+                const E = this.estate(), R = this.rng(99), now = this.now(), dayMs = 864e5, pkg = this.qxPackage(day, null);
                 const cat = this._cat, byId = new Map(pkg.hosts.map(h => [h.a, h]));
                 const devices = [], pending = [], installed = [];
                 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                const nextOf = (wd, hh) => { const d = new Date(); d.setHours(hh, 0, 0, 0); let add = (wd - ((d.getDay() + 6) % 7) + 7) % 7; if (add === 0 && d.getTime() <= now) add = 7; d.setDate(d.getDate() + add); return d.toISOString(); };
+                const nextOf = (wd, hh) => { const d = new Date(now); d.setHours(hh, 0, 0, 0); let add = (wd - ((d.getDay() + 6) % 7) + 7) % 7; if (add === 0 && d.getTime() <= now) add = 7; d.setDate(d.getDate() + add); return d.toISOString(); };
                 const policies = DAYS.map((nm, wd) => ({ id: 'pw' + wd, name: `Weekly ${nm} 21:00`, type: 'patch', active: true, auto: true, reboot: true, rule: 'all', sev: null, next: nextOf(wd, 21), days: 2 ** (wd + 1), weeks: 62, time: '21:00', devices: null }));
                 policies.push({ id: 'pm', name: 'Monthly 3rd Thursday 09:00 (appliance group)', type: 'patch', active: true, auto: true, reboot: true, rule: 'all', sev: null, next: new Date(now + 26 * dayMs).toISOString(), days: 16, weeks: 8, time: '09:00', devices: null });
                 policies.push({ id: 'px', name: 'Apply Critical Patches (old)', type: 'patch', active: false, auto: false, reboot: false, rule: 'filter', sev: ['high', 'critical'], next: '', days: 254, weeks: 62, time: '17:00', devices: null });
@@ -1826,6 +1831,75 @@
                     }
                 } catch (e) { console.error('[Demo] history', e); }
                 StorageService.toast('Demo ready: ' + this.ORG);
+            }
+        }
+
+        // =====================================================================================================
+        // Patch Plan forecast check (v4.8): did Automox patch what the plan said it would?
+        // After each applied Qualys sync, every finding in "Automox will patch" becomes a PROMISE (machine + QID +
+        // the patch run Automox gave), recorded once and never moved. GRACE days after that run (time for Qualys to
+        // rescan) the promise is settled: KEPT when Qualys no longer finds it, MISSED when it is still open (and the
+        // machine has been scanned since the run). Findings excepted meanwhile, or machines gone from the register,
+        // are dropped, not counted. Kept in gov_plan_forecast (in backups): open promises, weekly totals per team,
+        // and the last 300 misses.
+        // =====================================================================================================
+        class PlanForecast {
+            static GRACE = 2;            // days after the patch run before Qualys is expected to show the fix
+            static WAIT = 7;             // further days to wait for a rescan before a still-open finding counts as missed
+            static now() { return Demo.now(); }
+            static load() { const o = StorageService.load(StorageService.KEYS.PLAN_FORECAST); return (o && !Array.isArray(o) && o.promises) ? o : { promises: {}, results: [], misses: [] }; }
+            static weekOf(t) { const d = new Date(t); d.setUTCHours(0, 0, 0, 0); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); }
+            static async update(app) {
+                if (app.me && app.me.role === 'viewer') return null;
+                const PB = await app.planBuckets('ALL', 'ALL');
+                if (!PB || !PB.policiesRead) return null;            // no promises without Automox's schedules
+                const F = this.load(), now = this.now(), day = 864e5, vd = PB.vd;
+                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const open = new Set(vd.dets.map(d => d.asset + '|' + d.qid)), excepted = new Set((vd.excepted || []).map(d => d.asset + '|' + d.qid));
+                const sd = StorageService.load(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
+                const why = new Map(); ['manual', 'blocked', 'will'].forEach(b => PB.B[b].forEach(d => why.set(d.asset + '|' + d.qid, b === 'will' ? 'Automox still has it waiting' : d._why)));
+                const tally = (w, t, kept) => { let r = F.results.find(x => x.w === w && x.t === t); if (!r) F.results.push(r = { w, t, k: 0, m: 0 }); if (kept) r.k++; else r.m++; };
+                let kept = 0, missed = 0, dropped = 0;
+                for (const [key, pr] of Object.entries(F.promises)) {
+                    const [a, q] = key.split('|'), due = pr.r + this.GRACE * day;
+                    if (now < due) continue;
+                    const r = reg.get(a);
+                    if (!r || r.riskStatus === 'Risk Accepted' || excepted.has(key)) { delete F.promises[key]; dropped++; continue; }
+                    if (!open.has(key)) { tally(this.weekOf(pr.r), pr.t, true); delete F.promises[key]; kept++; continue; }
+                    const rescanned = StatusEngine.time(scans[a]) >= pr.r;
+                    if (!rescanned && now < due + this.WAIT * day) continue;                   // wait for Qualys to look again
+                    tally(this.weekOf(pr.r), pr.t, false);
+                    F.misses.push({ a, q, t: pr.t, r: pr.r, at: now, why: rescanned ? (why.get(key) || 'still open') : 'not rescanned since the patch run' });
+                    delete F.promises[key]; missed++;
+                }
+                let added = 0;
+                PB.B.will.forEach(d => {
+                    const key = d.asset + '|' + d.qid; if (F.promises[key] || !d._when) return;
+                    F.promises[key] = { a: now, r: d._when, t: (reg.get(d.asset) || {}).owner || 'Unknown', p: d.p || 5 };
+                    added++;
+                });
+                const cut = this.weekOf(now - 120 * day);
+                F.results = F.results.filter(x => x.w >= cut);
+                F.misses = F.misses.slice(-300);
+                StorageService.save(StorageService.KEYS.PLAN_FORECAST, F);
+                return { added, kept, missed, dropped };
+            }
+            // For a team ('ALL' = every team): the last `weeks` weeks of settled promises, what is still to be checked, and the misses.
+            static summary(team, weeks = 4) {
+                const F = this.load(), now = this.now(), day = 864e5, from = this.weekOf(now - (weeks * 7 - 1) * day);
+                const mine = (t) => team === 'ALL' || t === team;
+                const res = F.results.filter(x => x.w >= from && mine(x.t));
+                const byWeek = new Map(); res.forEach(x => { const e = byWeek.get(x.w) || { w: x.w, k: 0, m: 0 }; e.k += x.k; e.m += x.m; byWeek.set(x.w, e); });
+                const k = res.reduce((n, x) => n + x.k, 0), m = res.reduce((n, x) => n + x.m, 0);
+                const pend = Object.values(F.promises).filter(p => mine(p.t));
+                const next = pend.length ? Math.min(...pend.map(p => p.r + this.GRACE * day)) : 0;
+                return { kept: k, missed: m, pct: k + m ? Math.round(k * 100 / (k + m)) : null, weeks: [...byWeek.values()].sort((a, b) => b.w.localeCompare(a.w)),
+                    pending: pend.length, next, misses: F.misses.filter(x => mine(x.t) && x.at >= now - weeks * 7 * day) };
+            }
+            static line(team) {
+                const s = this.summary(team);
+                if (s.pct === null) return s.pending ? `📏 Forecast check: ${fmtNum(s.pending)} findings Automox said it would patch are waiting to be checked (first check ${new Date(s.next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}).` : '';
+                return `📏 Last 4 weeks: Automox patched <strong>${s.pct}%</strong> of what it said it would (${fmtNum(s.kept)} kept, ${fmtNum(s.missed)} missed)${s.pending ? `; ${fmtNum(s.pending)} more to check` : ''}.`;
             }
         }
 
@@ -3355,7 +3429,7 @@
                 const d = (Date.now() - t) / 864e5;
                 return d < 1 / 24 ? 'just now' : d < 1 ? Math.round(d * 24) + ' h ago' : Math.round(d) + ' d ago';
             }
-            static stale(dev) { const t = this.time(dev?.lastSeen); return !t || Date.now() - t > this.STALE_DAYS * 864e5; }
+            static stale(dev) { const t = this.time(dev?.lastSeen); return !t || Demo.now() - t > this.STALE_DAYS * 864e5; }
 
             static async loadStatus() {
                 if (!this.on()) return null;
@@ -3476,7 +3550,7 @@
             // (next_remediation). Only active, automatic patch policies count, and only if they would install these patches
             // (rule "all", or a severity filter that includes them). Returns { t, policy } or { t: 0, why }.
             static nextRun(dev, pkgs = []) {
-                const P = this.data?.polById, now = Date.now(), cand = [];
+                const P = this.data?.polById, now = Demo.now(), cand = [];
                 let patchPol = 0, autoPol = 0, covers = 0;
                 (dev.policies || []).forEach(dp => {
                     const p = P && P.get(String(dp.id)); if (!p || p.type !== 'patch') return;
@@ -4354,7 +4428,7 @@
 
             // The four Patch Plan sections for a team and urgency (shared by the Patch Plan page and the Team Risk Report). null = no Automox data.
             async planBuckets(team, pmax) {
-                const S = StatusEngine.settings(), days = +S.patchPlanDays || 7, end = Date.now() + days * 864e5;
+                const S = StatusEngine.settings(), days = +S.patchPlanDays || 7, end = Demo.now() + days * 864e5;     // Demo.now() = the real clock outside the demo
                 let D = null; if (Demo.api()) { try { D = await AutomoxService.ensure(); } catch (e) { D = null; } }
                 const { dets, vd, regMap } = await this.scopedData({ owner: team, riskStatus: 'Open', p: pmax });
                 if (!D) return null;
@@ -4384,7 +4458,7 @@
                 const f = this.planF, S = StatusEngine.settings(), days = +S.patchPlanDays || 7;
                 const T = OrgSettings.teams();
                 $('plan-team').innerHTML = ['ALL', ...T].map(t => `<option value="${esc(t)}" ${t === f.team ? 'selected' : ''}>${t === 'ALL' ? 'All teams' : esc(t)}</option>`).join('');
-                const end = Date.now() + days * 864e5, endTxt = new Date(end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                const end = Demo.now() + days * 864e5, endTxt = new Date(end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
                 $('plan-window').innerHTML = `Looking ahead <strong>${days} days</strong> (to ${esc(endTxt)}) <span class="text-xs text-gray-500">· change in Organisation setup → Status rules</span>`;
                 const U = [['ALL', 'All'], ['1', 'P1'], ['2', 'P1–P2'], ['3', 'P1–P3']];
                 $('plan-urgency').innerHTML = U.map(([v, l]) => { const on = f.p === v; return `<button role="radio" aria-checked="${on}" onclick="app.planSet('p', '${v}')" class="px-3 py-1 rounded-full text-sm whitespace-nowrap ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${l}</button>`; }).join('');
@@ -4407,6 +4481,7 @@
                     ['will', '⟳', `Automox will patch by ${endTxt}`, `A waiting patch names the finding's CVE (or, marked ≈, matches its package name), the agent is healthy, and an active automatic patch policy that installs it runs within ${days} days (its next run, from Automox). Qualys confirms the fix at its next scan.`, 'border-sky-300'],
                     ['done', '✓', `Patched in the last ${days} days`, 'Qualys no longer finds it, or Automox has installed the patch and Qualys has still to rescan.', 'border-emerald-300']
                 ];
+                const fc = this.planForecastHTML(f.team, vd);
                 body.innerHTML = note + SECS.map(([k, sym, title, help, border]) => {
                     const a = B[k], isOpen = !!f.open[k];
                     return `<div class="bg-white rounded-lg shadow border-2 ${border}">
@@ -4415,7 +4490,7 @@
                             <span class="text-sm text-gray-700">${n(a)} findings · ${mach(a)} machines${p12(a) ? ` · <strong>${fmtNum(p12(a))} P1/P2</strong>` : ''}</span>
                             <span class="ml-auto text-xs text-blue-700 underline">${isOpen ? 'Hide ▾' : 'Show ▸'}</span></button>
                         ${isOpen ? `<div class="border-t"><p class="px-4 py-2 text-xs text-gray-600">${esc(help)}</p>${this.planTable(k, a, regMap, vd)}</div>` : ''}</div>`;
-                }).join('');
+                }).join('') + fc;
             }
 
             // One row per fix: how many machines, the reasons, when; the machine list for automation.
@@ -4447,6 +4522,31 @@
                     <tbody class="divide-y">${shown.map(tr).join('')}</tbody></table>
                     <div class="flex items-center justify-between px-4 py-2 border-t bg-gray-50 text-xs text-gray-600 rounded-b-lg"><span>${fmtNum(shown.length)} of ${fmtNum(rows.length)} fixes${rows.length > shown.length ? ` <button onclick="app._planShow = { ...(app._planShow || {}), ${k}: true }; app.renderPlan()" class="ml-2 text-blue-700 underline">Show all</button>` : ''}</span>
                     <button onclick="app.planList('${k}')" class="border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Every machine in this section, one name per line">⬇ Machine list for this section</button></div>`;
+            }
+            // 📏 Did Automox do what it said? (the forecast check)
+            planForecastHTML(team, vd) {
+                const s = PlanForecast.summary(team), sev = (n) => fmtNum(n), day = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                const head = `<h4 class="font-semibold text-gray-900">📏 Did Automox do what it said?</h4><p class="text-xs text-gray-600">Every finding in "Automox will patch" is a promise, with the patch run Automox gave. ${PlanForecast.GRACE} days after that run (time for Qualys to rescan) it is checked: ✓ kept if Qualys no longer finds it, ✗ missed if it is still there. Promises are never moved; exceptions and machines that leave the register are not counted.</p>`;
+                let body;
+                if (s.pct === null) body = `<p class="text-sm text-gray-700">${s.pending ? `Nothing settled yet. ${sev(s.pending)} promises are waiting; the first is checked on ${esc(day(s.next))}.` : 'No promises yet: they are recorded with the next applied Qualys sync.'}</p>`;
+                else {
+                    const weeks = s.weeks.map(w => `<tr><td class="px-2 py-1">${esc(day(Date.parse(w.w)))}</td><td class="px-2 py-1 text-right font-mono">${sev(w.k)}</td><td class="px-2 py-1 text-right font-mono">${sev(w.m)}</td><td class="px-2 py-1 text-right font-mono font-semibold">${w.k + w.m ? Math.round(w.k * 100 / (w.k + w.m)) + '%' : '-'}</td></tr>`).join('');
+                    const byQ = new Map(); s.misses.forEach(x => { const g = byQ.get(x.q) || { q: x.q, a: new Set(), why: new Map() }; g.a.add(x.a); g.why.set(x.why, (g.why.get(x.why) || 0) + 1); byQ.set(x.q, g); });
+                    const miss = [...byQ.values()].sort((a, b) => b.a.size - a.a.size).slice(0, 10).map(g => `<tr class="align-top"><td class="px-2 py-1">${esc((vd.qmap.get(g.q) || {}).title || 'QID ' + g.q)}</td><td class="px-2 py-1 text-right font-mono">${sev(g.a.size)}</td><td class="px-2 py-1 text-xs text-gray-700">${[...g.why].sort((x, y) => y[1] - x[1]).map(([w, c]) => `${esc(w)} (${sev(c)})`).join(' · ')}</td><td class="px-2 py-1 text-right"><button class="text-[10px] border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap" data-q="${esc(g.q)}" onclick="app.planMissList(this.dataset.q)" title="The machines where Automox missed this fix, one name per line">⬇ List</button></td></tr>`).join('');
+                    body = `<p class="text-sm">Last 4 weeks: Automox patched <strong>${s.pct}%</strong> of what it said it would: ✓ ${sev(s.kept)} kept · ✗ ${sev(s.missed)} missed${s.pending ? ` · ${sev(s.pending)} still to check` : ''}.</p>
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div class="self-start"><table class="text-sm"><thead class="text-xs uppercase text-gray-500"><tr><th class="px-2 py-1 text-left">Patch runs in the week of</th><th class="px-2 py-1 text-right">✓ Kept</th><th class="px-2 py-1 text-right">✗ Missed</th><th class="px-2 py-1 text-right">Kept</th></tr></thead><tbody class="divide-y">${weeks}</tbody></table></div>
+                            <div class="lg:col-span-2">${miss ? `<table class="w-full text-sm"><thead class="text-xs uppercase text-gray-500"><tr><th class="px-2 py-1 text-left">Missed fix</th><th class="px-2 py-1 text-right">Machines</th><th class="px-2 py-1 text-left">Why, as far as we can tell</th><th></th></tr></thead><tbody class="divide-y">${miss}</tbody></table>` : '<p class="text-sm text-gray-600">No misses in the last 4 weeks.</p>'}</div>
+                        </div>`;
+                }
+                return `<div class="bg-white rounded-lg shadow border-2 border-slate-300 p-4 space-y-3">${head}${body}</div>`;
+            }
+            planMissList(qid) {
+                const s = PlanForecast.summary(this.planF.team);
+                const names = App.hostNames(new Set(s.misses.filter(x => String(x.q) === String(qid)).map(x => x.a)));
+                if (!names.length) { StorageService.toast('No machines to export'); return; }
+                App.downloadList(`automox_missed_${qid}`, names);
+                StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
             }
             planList(k, qid) {
                 const a = (this._plan?.[k] || []).filter(d => !qid || String(d.qid) === String(qid));
@@ -4755,6 +4855,7 @@
                     A.secs.check = (Date.now() - A.ts) / 1000; A.done = true;
                     await fetch('api/qualys/applied', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ syncId: L.syncId, summary: res }) });
                     try { await this.saveStatusSnapshot('sync', L.syncId); } catch (e) { console.error('[Status] snapshot', e); }
+                    try { await PlanForecast.update(this); } catch (e) { console.error('[Patch Plan] forecast check', e); }
                     StorageService.toast(`Qualys sync applied: ${fmtNum(res.detections)} findings on ${fmtNum(res.assets)} assets${res.unrecognised ? `, ${fmtNum(res.unrecognised)} new Unrecognised assets in the Review Queue` : ''}`);
                     this.updateGlobalBadges();
                 } catch (e) {
@@ -5150,7 +5251,7 @@
                 if (PB) {
                     const { B } = PB, endTxt = new Date(PB.end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
                     const v = (a) => `${sev(a.length)} findings · ${mach(a)} machines${p12(a) ? ` · ${sev(p12(a))} P1/P2` : ''}`;
-                    plan = App.planPolicyNote(PB) + `<p class="text-sm text-gray-600">${esc(f.team === 'ALL' ? 'All teams' : f.team)}, the next ${PB.days} days</p>` + row('✋', '<strong>Manual remediation</strong>', v(B.manual)) + row('⚠', 'Automox patch blocked', v(B.blocked)) + row('⟳', `Automox will patch by ${esc(endTxt)}`, v(B.will)) + row('✓', `Patched in the last ${PB.days} days`, v(B.done));
+                    plan = App.planPolicyNote(PB) + `<p class="text-sm text-gray-600">${esc(f.team === 'ALL' ? 'All teams' : f.team)}, the next ${PB.days} days</p>` + row('✋', '<strong>Manual remediation</strong>', v(B.manual)) + row('⚠', 'Automox patch blocked', v(B.blocked)) + row('⟳', `Automox will patch by ${esc(endTxt)}`, v(B.will)) + row('✓', `Patched in the last ${PB.days} days`, v(B.done)) + (PlanForecast.line(f.team) ? `<p class="text-sm text-gray-700">${PlanForecast.line(f.team)}</p>` : '');
                 } else plan = '<p class="text-sm text-gray-600">Needs Automox data: the CyberView server, after a Sync from Automox.</p>';
                 document.getElementById('ds-plan').innerHTML = card('🗓️ Patch Plan', plan, Demo.api() ? 'plan' : '', 'Open the Patch Plan');
                 // End of life and data freshness, from the Status engine (every source joined)
@@ -7325,6 +7426,7 @@
                     const topGap = [...gap.values()].sort((x, y) => x.p - y.p || y.a.size - x.a.size).slice(0, 5);
                     $('rpt-plan').innerHTML = App.planPolicyNote(PB) + row('✋', '<strong>Manual remediation (the gap)</strong>', B.manual) + row('⚠', 'Automox patch blocked', B.blocked) + row('⟳', `Automox will patch by ${esc(endTxt)}`, B.will) + row('✓', `Patched in the last ${PB.days} days`, B.done)
                         + (topGap.length ? `<p class="text-xs font-semibold text-gray-700 pt-2">Largest manual fixes</p><ul class="text-xs text-gray-700 list-disc pl-5">${topGap.map(g => `<li>${g.p < 5 ? 'P' + g.p + ' · ' : ''}${esc(g.title)}: ${sev(g.a.size)} machine${g.a.size === 1 ? '' : 's'}</li>`).join('')}</ul>` : '')
+                        + (PlanForecast.line(scope) ? `<p class="text-sm pt-1">${PlanForecast.line(scope)}</p>` : '')
                         + '<p class="text-[11px] text-gray-500">Full lists and machine lists for Ansible: 🗓️ Patch Plan.</p>';
                 } else {
                     $('rpt-plan-window').textContent = '';

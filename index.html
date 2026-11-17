@@ -39,6 +39,11 @@
         /* manual imports: hidden where the Qualys API sync is in use (server or demo); moved to Organisation setup (v4.5.1) */
         body.server-mode .local-only, body.demo-mode .local-only { display: none !important; }
         body:not(.server-mode):not(.demo-mode) .api-only { display: none !important; }
+        /* Simple view (v4.7, the default): four pages in the sidebar and a four-panel Dashboard; Advanced shows everything */
+        body.simple-view aside nav .nav-btn:not(.simple-ok) { display: none !important; }
+        body.simple-view aside .adv-only { display: none !important; }
+        body.simple-view #view-dashboard > :not(.simple-keep) { display: none !important; }
+        body:not(.simple-view) #dash-simple { display: none !important; }
         body.server-mode:not(.role-admin) .admin-only { display: none !important; }
         body.role-viewer .write-only { display: none !important; }
         /* dialogs scroll inside the window instead of running off the bottom on short screens */
@@ -69,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.6.0 · 17 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.7.0 · 17 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -77,8 +82,9 @@
             </div>
             <div id="setup-banner" class="hidden mt-3 text-[11px] bg-red-50 border border-red-300 text-red-800 rounded-lg p-2">No users yet, so anyone who can reach this page can use and change everything. <button onclick="app.switchView('users')" class="underline font-bold">Create the administrator</button></div>
         </div>
+        <div class="px-3 pt-3 print-hide" id="view-mode"></div>
         <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
-            <button onclick="app.switchView('dashboard')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📊 Dashboard</button>
+            <button onclick="app.switchView('dashboard')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📊 Dashboard</button>
             <button onclick="app.switchView('import')" class="local-only write-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📥 Import Data</button>
             <button onclick="app.switchView('review')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition justify-between">
                 <span>📋 Review Queue</span>
@@ -89,20 +95,20 @@
                 <span>🛡️ Vuln Management</span>
                 <span id="nav-vuln-badge" class="hidden ml-auto w-fit bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"></span>
             </button>
-            <button onclick="app.switchView('plan')" class="server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🗓️ Patch Plan</button>
+            <button onclick="app.switchView('plan')" class="simple-ok server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🗓️ Patch Plan</button>
             <button onclick="app.switchView('remediation')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🛠️ Remediation</button>
             <button onclick="app.switchView('risk-accept')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">✅ Risk Acceptances</button>
             <button onclick="app.switchView('status')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🚦 Status</button>
             <button onclick="app.switchView('health')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩺 Data Health</button>
             <button onclick="app.switchView('org')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⚙ Organisation setup</button>
-            <button onclick="app.switchView('reports')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📄 Team Risk Reports</button>
-            <button onclick="app.switchView('eol')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⏳ End of Life Report</button>
+            <button onclick="app.switchView('reports')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📄 Team Risk Reports</button>
+            <button onclick="app.switchView('eol')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⏳ End of Life Report</button>
             <button onclick="app.switchView('automox')" class="server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩹 Patch Coverage</button>
             <button onclick="app.switchView('history')" class="server-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🕘 History</button>
             <button onclick="app.switchView('backup')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">💾 Backup &amp; Restore</button>
             <button onclick="app.switchView('users')" class="server-only admin-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">👥 Users</button>
         </nav>
-        <div class="p-4 border-t border-slate-200 print-hide">
+        <div class="adv-only p-4 border-t border-slate-200 print-hide">
             <button onclick="app.openAISettings()" class="w-full border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold py-2 rounded-lg transition mb-2">🤖 AI Settings</button>
             <button onclick="app.exportDatabase()" class="w-full border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold py-2 rounded-lg transition mb-2">💾 Backup DB (JSON)</button>
             <input type="file" id="restore-file-input" accept=".json,application/json" class="hidden admin-only" onchange="app.handleRestoreFile(event)">
@@ -128,14 +134,15 @@
             
             <!-- VIEW: DASHBOARD -->
             <section id="view-dashboard" class="view-section active space-y-6">
-                <div class="bg-gradient-to-r from-indigo-700 via-indigo-700 to-slate-900 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+                <div class="simple-keep bg-gradient-to-r from-indigo-700 via-indigo-700 to-slate-900 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
                     <div class="absolute -right-10 -top-16 w-56 h-56 rounded-full border-[18px] border-white/10" aria-hidden="true"></div>
                     <h2 class="text-2xl font-bold tracking-tight">CyberView <span id="hero-org" class="font-normal text-indigo-200 text-lg ml-2"></span></h2>
                     <p class="text-sm text-indigo-100 mt-1 max-w-2xl">One view of who owns each machine, what is wrong with it, and where to focus: Qualys findings, patching, end of life and remediation joined to your asset register.</p>
                 </div>
                 <div id="dash-coverage"></div>
                 <div id="dash-automox" class="hidden"></div>
-                <div id="dash-status"></div>
+                <div id="dash-status" class="simple-keep"></div>
+                <div id="dash-simple" class="simple-keep space-y-6"></div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div class="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
                         <p class="text-sm text-gray-500 font-medium uppercase">Total Assets</p>
@@ -3911,6 +3918,7 @@
 
             init() {
                 Prefs.listen();
+                this.applyViewMode();
                 OrgSettings.ensureSaved();          // v3.20: copy the built-in organisation values into the database once (administrators)
                 this.fillTeamSelects();
                 this.reviewState.filters = { state: document.getElementById('review-filter-state').value, owner: document.getElementById('review-filter-owner').value, service: document.getElementById('review-filter-service').value, search: '' };
@@ -4312,8 +4320,12 @@
             }
 
             // =================== Patch Plan (v4.5) ===================
-            get planF() { if (!this._planF) { const p = Prefs.get('plan', {}); this._planF = { team: p.team || OrgSettings.mainTeam(), p: p.p || 'ALL', open: p.open || { manual: true } }; } return this._planF; }
-            planSet(k, v) { this.planF[k] = v; const f = this.planF; Prefs.set('plan', { team: f.team, p: f.p, open: f.open }); this.renderPlan(); }
+            // The team is the one chosen on the Patch Plan, else the main team as it is NOW (not cached: the setup can change).
+            get planF() {
+                if (!this._planF) { const p = Prefs.get('plan', {}); this._planF = { team: p.team || null, p: p.p || 'ALL', open: p.open || { manual: true } }; }
+                const f = this._planF; return f.team ? f : { ...f, team: OrgSettings.mainTeam() };
+            }
+            planSet(k, v) { this.planF; this._planF[k] = v; const f = this._planF; Prefs.set('plan', { team: f.team, p: f.p, open: f.open }); this.renderPlan(); }
             planToggle(b) { const o = this.planF.open; o[b] = !o[b]; this.planSet('open', o); }
 
             // One open finding (or one fixed recently) -> its bucket and the reason, from the same matching Patch Coverage uses.
@@ -5090,10 +5102,63 @@
                 el.innerHTML = `<div class="flex items-start gap-3"><div class="text-xl leading-none">${ok ? '✅' : '⚠️'}</div><div class="flex-1 space-y-1.5">${lines.join('')}</div></div>`;
             }
 
+            // ---- Simple / Advanced view (v4.7): Simple is the default, remembered per person in this browser.
+            static viewMode() { return Prefs.get('view', 'simple') === 'advanced' ? 'advanced' : 'simple'; }
+            applyViewMode() {
+                const m = App.viewMode();
+                document.body.classList.toggle('simple-view', m === 'simple');
+                const el = document.getElementById('view-mode'); if (!el) return;
+                const b = (v, label, help) => { const on = v === m; return `<button role="radio" aria-checked="${on}" onclick="app.setViewMode('${v}')" title="${esc(help)}" class="flex-1 px-2 py-1.5 rounded-lg text-xs ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}">${on ? '●' : '○'} ${label}</button>`; };
+                el.innerHTML = `<div role="radiogroup" aria-label="View" class="flex gap-1.5">${b('simple', 'Simple', 'Dashboard, Patch Plan, Team Risk Reports and End of Life')}${b('advanced', 'Advanced', 'Every page and setting')}</div>`;
+            }
+            setViewMode(m) {
+                Prefs.set('view', m === 'advanced' ? 'advanced' : 'simple');
+                this.applyViewMode();
+                const keep = ['dashboard', 'plan', 'reports', 'eol', 'inspect'];
+                this.switchView(m === 'simple' && !keep.includes(this.currentView) ? 'dashboard' : (this.currentView || 'dashboard'));
+            }
+
+            // The Simple view's Dashboard panels (team status is the existing panel above them).
+            async renderDashSimple() {
+                const el = document.getElementById('dash-simple'); if (!el || App.viewMode() !== 'simple') return;
+                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER) || [];
+                if (StorageService.mode !== 'server' && !Demo.ON && !reg.length) { el.innerHTML = Demo.welcomeHTML(); return; }
+                const card = (title, body, link, linkText) => `<div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">${title}</h3>${link ? `<a href="#" onclick="app.switchView('${link}'); return false;" class="text-sm text-blue-700 underline whitespace-nowrap">${linkText} →</a>` : ''}</div>${body}</div>`;
+                const row = (sym, label, value, sub = '') => `<div class="flex justify-between items-baseline gap-3 border rounded-lg px-3 py-2"><span>${sym} ${label}${sub ? ` <span class="text-xs text-gray-500">${sub}</span>` : ''}</span><span class="font-semibold text-right text-sm">${value}</span></div>`;
+                el.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div id="ds-plan">${card('🗓️ Patch Plan', '<p class="text-sm text-gray-500 italic">Working it out…</p>')}</div><div id="ds-eol">${card('⏳ End of life', '<p class="text-sm text-gray-500 italic">Working it out…</p>')}</div></div><div id="ds-fresh"></div>`;
+                // Patch Plan: the team chosen on the Patch Plan page (the main team at first)
+                const f = this.planF, sev = (n) => fmtNum(n);
+                let PB = null; try { PB = await this.planBuckets(f.team, 'ALL'); } catch (e) { PB = null; }
+                if (this.currentView !== 'dashboard') return;
+                const mach = (a) => sev(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
+                let plan;
+                if (PB) {
+                    const { B } = PB, endTxt = new Date(PB.end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                    const v = (a) => `${sev(a.length)} findings · ${mach(a)} machines${p12(a) ? ` · ${sev(p12(a))} P1/P2` : ''}`;
+                    plan = `<p class="text-sm text-gray-600">${esc(f.team === 'ALL' ? 'All teams' : f.team)}, the next ${PB.days} days</p>` + row('✋', '<strong>Manual remediation</strong>', v(B.manual)) + row('⚠', 'Automox patch blocked', v(B.blocked)) + row('⟳', `Automox will patch by ${esc(endTxt)}`, v(B.will)) + row('✓', `Patched in the last ${PB.days} days`, v(B.done));
+                } else plan = '<p class="text-sm text-gray-600">Needs Automox data: the CyberView server, after a Sync from Automox.</p>';
+                document.getElementById('ds-plan').innerHTML = card('🗓️ Patch Plan', plan, Demo.api() ? 'plan' : '', 'Open the Patch Plan');
+                // End of life and data freshness, from the Status engine (every source joined)
+                let st = null; try { st = await this.statusData(); } catch (e) { st = null; }
+                if (this.currentView !== 'dashboard') return;
+                if (st) {
+                    const a = (st.assets || []).filter(x => !x.r?.unrecognised), by = (k) => a.filter(x => x.checks?.eol?.s === k);
+                    const S = StatusEngine.settings(), t1 = by('x').filter(x => x.tier === 1).length;
+                    const eol = row('⛔', '<strong>No security fixes any more</strong>', `${sev(by('x').length)} machines`, t1 ? `${sev(t1)} of them Tier 1` : '')
+                        + row('🔶', `Fixes end within ${S.eolActionMonths || 6} months`, `${sev(by('a').length)} machines`)
+                        + row('⚠', `Fixes end within ${S.eolWatchMonths || 12} months`, `${sev(by('w').length)} machines`)
+                        + row('?', 'Operating system not recognised', `${sev(by('u').length)} machines`);
+                    document.getElementById('ds-eol').innerHTML = card('⏳ End of life', eol, 'eol', 'Open the report');
+                    const rows = st.asOf || [];
+                    document.getElementById('ds-fresh').innerHTML = `<div class="bg-white rounded-lg shadow px-5 py-3 text-sm flex flex-wrap gap-x-6 gap-y-1"><span class="font-semibold">Data as of</span>${rows.map(x => `<span>${x.stale ? '⚠' : '✓'} ${esc(x.label)}: ${x.t ? esc(new Date(x.t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : 'never'}${x.stale ? ' <strong>(old)</strong>' : ''}</span>`).join('')}</div>`;
+                } else document.getElementById('ds-eol').innerHTML = card('⏳ End of life', '<p class="text-sm text-gray-600">Not available.</p>', 'eol', 'Open the report');
+            }
+
             renderDashboard() {
                 const register = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 const queue = ReviewQueueService.getQueue().filter(x => x.status === 'PENDING' || x.status === 'IN_REVIEW');
                 document.getElementById('dash-coverage').innerHTML = (StorageService.mode !== 'server' && !Demo.ON && !register.length) ? Demo.welcomeHTML() : this.coverageHTML('ALL');
+                this.renderDashSimple();
                 this.renderDashAutomox();
                 this.renderDashStatus();
                 const drawRem = () => { const el = document.getElementById('dash-remediation'); if (el) el.innerHTML = RemediationStats.html(RemediationStats.compute(RemediationService.list())); };

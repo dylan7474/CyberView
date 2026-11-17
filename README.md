@@ -524,6 +524,14 @@ Phase D of the status design.
 - **When Automox will patch (v4.5.2):** Automox does not report a next patch time for devices (checked on a live account: empty for all 275). Each Automox sync therefore also reads the **patch policies** (read-only): their next run (`next_remediation`), whether they are active and automatic, and which patches they install (all, or a severity filter). A device's next patch run is the earliest of its policies that would install the waiting patch. Patch Coverage shows it on each device as *Next patch run*, with the policy's name.
 - **Limits:** the match between a finding and an Automox patch is by CVE, else by package name (≈). Automox names CVEs mostly for Windows updates, so a Linux "patch everything" policy may fix more than the plan shows. Policy contents beyond "all" or a severity filter (named patches, advanced rules) are not read.
 
+### Simple and Advanced views (v4.7)
+
+A switch at the top of the sidebar: **● Simple / ○ Advanced**. It is remembered per person, in their browser, and **Simple is the default** for everyone.
+
+- **Simple** shows four pages: 📊 Dashboard, 🗓️ Patch Plan, 📄 Team Risk Reports and ⏳ End of Life Report. Its Dashboard has four panels: status by team, the Patch Plan for this week (the team chosen on the Patch Plan, else the main team), end of life (no security fixes any more / ending within 6 and 12 months / not recognised), and *Data as of* in one line.
+- **Advanced** shows every page and setting, and the full Dashboard, as before.
+- It is a layout, not access control: anyone can switch. Links from a Simple page to an Advanced one (a fix's page, Organisation setup) still work. Who may change what is still decided by the user roles.
+
 ### Team Risk Report (v4.6)
 
 The printable report for one team (or the whole estate), rebuilt to match the pages people work from. Choose the team and risk status at the top, then **🖨️ Print PDF**.

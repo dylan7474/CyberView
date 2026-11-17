@@ -514,14 +514,15 @@ Phase D of the status design.
 | Section | Rule |
 |---|---|
 | ✋ **Manual remediation: the gap** | The team is not patched by Automox, the machine cannot take an agent or has none, Automox has no waiting patch for it, or no patch exists at all (configuration findings, end of life). Automox's automation will not fix these. |
-| ⚠ **Automox has a patch, but it is blocked** | A waiting patch exists, but the agent has not checked in, the patch policy is failing, a reboot is pending, the patch is deferred, or the next patch window is after the period. |
-| ⟳ **Automox will patch by** *date* | A waiting patch names the finding's CVE (or, marked ≈, matches its package name, as for Linux kernels), the agent and policy are healthy, and the device's next patch window is within the period. |
+| ⚠ **Automox has a patch, but it is blocked** | A waiting patch exists, but the agent has not checked in, a reboot is pending, the patch is deferred, the device has no active automatic patch policy that installs it, or that policy's next run is after the period. |
+| ⟳ **Automox will patch by** *date* | A waiting patch names the finding's CVE (or, marked ≈, matches its package name, as for Linux kernels), the agent is healthy, and an active automatic patch policy that installs it runs within the period. A policy that shows *not compliant* is a note, not a block: Automox retries at the next run. |
 | ✓ **Patched in the last** *N* **days** | Qualys no longer finds it, or Automox has installed the patch and Qualys has still to rescan. |
 
 - **The period** is 7 days by default; change it on ⚙ Organisation setup → Status rules (*Patch Plan looks ahead*).
 - Each section lists its fixes in the same order as *Fixes that clear the most*, with the reasons in words and counts, and a **⬇ List** of machine names (one per line, an Ansible inventory) per fix and for the whole section. The gap's list is the manual work.
 - Clicking a fix opens its page with the team and urgency kept.
-- **Limits:** the match between a finding and an Automox patch is by CVE, else by package name (≈). Automox names CVEs mostly for Windows updates, so a Linux "patch everything" policy may fix more than the plan shows. Reading Automox's policy settings to close that gap is the planned next step.
+- **When Automox will patch (v4.5.2):** Automox does not report a next patch time for devices (checked on a live account: empty for all 275). Each Automox sync therefore also reads the **patch policies** (read-only): their next run (`next_remediation`), whether they are active and automatic, and which patches they install (all, or a severity filter). A device's next patch run is the earliest of its policies that would install the waiting patch. Patch Coverage shows it on each device as *Next patch run*, with the policy's name.
+- **Limits:** the match between a finding and an Automox patch is by CVE, else by package name (≈). Automox names CVEs mostly for Windows updates, so a Linux "patch everything" policy may fix more than the plan shows. Policy contents beyond "all" or a severity filter (named patches, advanced rules) are not read.
 
 ### Remembered filters (v4.3)
 

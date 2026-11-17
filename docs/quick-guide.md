@@ -15,11 +15,12 @@ CyberView turns your scanner output into a short, ranked to-do list, team by tea
 
 - One machine, one record: Qualys, Automox and the register are matched by asset ID, name or IP.
 - Every finding gets a **priority (P1–P4)** from how dangerous it is and how critical the machine is, with Internet-facing machines one step more urgent. Then a **due date**.
-- Choose a built-in rule set: **Standard**, or **UK** (NCSC and Cyber Essentials deadlines, 5 days for Internet-facing).
+- One settings page, **Organisation setup**: teams, tiers, name matching and the status rules. Choose a built-in rule set: **Standard**, or **UK** (NCSC and Cyber Essentials deadlines, 5 days for Internet-facing).
 - Tasks and accepted risks are tracked against the same data, and each morning's sync ticks fixes off automatically.
 
 ## What you get
 
+- **Patch Plan:** every open finding set against Automox: what's patched, what Automox will patch in the next 7 days, what's blocked, and the gap that needs manual remediation, with machine lists for Ansible.
 - **Vuln Management:** *Machines to fix first* and *Fixes that clear the most*, with one-click machine lists ready for Ansible.
 - **Status:** one headline per team (On track / Slipping / Behind), with trend charts.
 - **Team Risk Report:** a print-ready report per team.

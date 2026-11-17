@@ -240,6 +240,20 @@ def normalise_device(d):
     }
 
 
+def normalise_policy(p):
+    """A policy's schedule and what it installs (v4.5.2). next_remediation is Automox's own next run; devices do not report one."""
+    cfg = p.get("configuration") if isinstance(p.get("configuration"), dict) else {}
+    sev = cfg.get("severity_filter")
+    return {
+        "id": _s(p.get("id"), 20), "name": _s(p.get("name"), 120), "type": _s(p.get("policy_type_name"), 30),
+        "active": _s(p.get("status"), 20).lower() == "active", "auto": _bool(cfg.get("auto_patch")), "reboot": _bool(cfg.get("auto_reboot")),
+        "rule": _s(cfg.get("patch_rule"), 20).lower(), "sev": [_s(x, 20).lower() for x in sev] if isinstance(sev, list) else None,
+        "next": _s(p.get("next_remediation"), 40), "days": p.get("schedule_days") if isinstance(p.get("schedule_days"), int) else None,
+        "weeks": p.get("schedule_weeks_of_month") if isinstance(p.get("schedule_weeks_of_month"), int) else None,
+        "time": _s(p.get("schedule_time"), 10), "devices": p.get("server_count") if isinstance(p.get("server_count"), int) else None,
+    }
+
+
 def normalise_package(p, device_id=None):
     cves = [_s(c, 30).upper() for c in _list(p.get("cves"))[:80] if str(c).upper().startswith("CVE-")]
     kev = [_s(c, 30).upper() for c in _list(p.get("kev_cves"))[:40] if str(c).upper().startswith("CVE-")]
@@ -371,6 +385,14 @@ def sync(user, ids):
         warnings.append("Pending patches came back without a device id, so they cannot be linked to devices.")
     pending = [p for p in pending if p["d"]]
 
+    # Patch policies: their schedules give each device's next patch run (read-only; a failure only loses the forecast).
+    _phase("policies")
+    policies = None
+    try:
+        policies = [normalise_policy(p) for p in paged("/policies", {"o": org}, progress=lambda n: _phase("policies", n))]
+    except AxError as e:
+        warnings.append(f"Patch policies could not be read ({e}), so the Patch Plan cannot tell when patches will be installed.")
+
     # Installed packages that carry CVEs, only for the devices the page asked about (assets with open tasks).
     want = [i for i in ids if i in known]
     if len(want) > MAX_DEVICE_CALLS:
@@ -421,8 +443,11 @@ def sync(user, ids):
         for i in range(0, len(rows), 1000):
             cur.executemany("INSERT INTO automox (kind, k, doc) VALUES (%s,%s,%s)", rows[i:i + 1000])
         _put_meta(cur, "req", {"ids": ids, "at": now_iso()})
+        if policies is not None:
+            _put_meta(cur, "pol", policies)
     return {"at": stamp, "by": user, "newlyInstalled": len(done), "org": org, "orgName": org_name, "devices": len(devices), "pending": len(pending),
             "installed": len(installed), "installedDevices": len(want), "checkedIds": want, "warnings": warnings,
+            "policies": None if policies is None else len(policies),
             "deviceFields": device_fields[:80], "packageFields": package_fields[:80]}
 
 
@@ -435,7 +460,8 @@ def data_json():
         for kind, doc in cur.fetchall():
             parts[kind].append(doc)
         meta = _meta(cur, "last")
-    return ('{"meta":' + json.dumps(meta) + ',"devices":[' + ",".join(parts["dev"]) + '],"pending":[' + ",".join(parts["pend"])
+        pol = _meta(cur, "pol") or []
+    return ('{"meta":' + json.dumps(meta) + ',"policies":' + json.dumps(pol) + ',"devices":[' + ",".join(parts["dev"]) + '],"pending":[' + ",".join(parts["pend"])
             + '],"installed":[' + ",".join(parts["inst"]) + '],"done":[' + ",".join(parts["done"]) + "]}")
 
 

@@ -69,7 +69,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.5.1 · 16 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.5.2 · 17 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1729,14 +1729,19 @@
                 const E = this.estate(), R = this.rng(99), now = Date.now(), dayMs = 864e5, pkg = this.qxPackage(day, null);
                 const cat = this._cat, byId = new Map(pkg.hosts.map(h => [h.a, h]));
                 const devices = [], pending = [], installed = [];
+                const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                const nextOf = (wd, hh) => { const d = new Date(); d.setHours(hh, 0, 0, 0); let add = (wd - ((d.getDay() + 6) % 7) + 7) % 7; if (add === 0 && d.getTime() <= now) add = 7; d.setDate(d.getDate() + add); return d.toISOString(); };
+                const policies = DAYS.map((nm, wd) => ({ id: 'pw' + wd, name: `Weekly ${nm} 21:00`, type: 'patch', active: true, auto: true, reboot: true, rule: 'all', sev: null, next: nextOf(wd, 21), days: 2 ** (wd + 1), weeks: 62, time: '21:00', devices: null }));
+                policies.push({ id: 'pm', name: 'Monthly 3rd Thursday 09:00 (appliance group)', type: 'patch', active: true, auto: true, reboot: true, rule: 'all', sev: null, next: new Date(now + 26 * dayMs).toISOString(), days: 16, weeks: 8, time: '09:00', devices: null });
+                policies.push({ id: 'px', name: 'Apply Critical Patches (old)', type: 'patch', active: false, auto: false, reboot: false, rule: 'filter', sev: ['high', 'critical'], next: '', days: 254, weeks: 62, time: '17:00', devices: null });
                 E.machines.forEach((m, i) => {
                     if (m.appliance || !(m.team === 'Platform' || m.team === 'Corporate IT' || !m.inRegister)) { R(); R(); return; }
                     if (R() < 0.07) { R(); return; }                                  // no agent on this one
                     const stale = R() < 0.05, fail = R() < 0.12, reboot = R() < 0.08, did = String(5000 + i);
                     devices.push({ id: did, name: m.fqdn, display: m.short, os: m.os.split(' ').slice(0, 6).join(' '), osFamily: m.fam.startsWith('win') ? 'Windows' : 'Linux', osVersion: '', serial: '', ips: [m.ip],
                         agent: '2.4.33', lastSeen: new Date(now - (stale ? 12 : R()) * dayMs).toISOString(), lastDisconnect: '', connected: !stale, needsReboot: reboot, pending: 0, upToDate: false,
-                        needsAttention: fail, lastLoggedIn: '', nextPatch: new Date(now + (1 + Math.floor(R() * 6)) * dayMs).toISOString(), compliant: !fail,
-                        policies: [{ id: 'p1', name: 'Patch everything - weekly', type: 'patch', compliant: !fail, lastRun: new Date(now - 2 * dayMs).toISOString(), pendingCount: null, willReboot: reboot },
+                        needsAttention: fail, lastLoggedIn: '', nextPatch: '', compliant: !fail,
+                        policies: [{ id: i % 23 === 0 ? 'px' : (i % 11 === 0 ? 'pm' : 'pw' + (i % 7)), name: '', type: 'patch', compliant: !fail, lastRun: new Date(now - 2 * dayMs).toISOString(), pendingCount: null, willReboot: reboot },
                             { id: 'p2', name: 'Required agents', type: 'required_software', compliant: true, lastRun: new Date(now - 6 * dayMs).toISOString(), pendingCount: null, willReboot: false }],
                         deviceStatus: stale ? 'disconnected' : 'ready', agentStatus: stale ? 'disconnected' : 'connected', group: '1', tags: [], created: '' });
                     (byId.get(m.id).d || []).forEach(r => {
@@ -1748,7 +1753,7 @@
                         (p.installed ? installed : pending).push(p);
                     });
                 });
-                return { meta: meta || null, devices, pending, installed, done: [] };
+                return { meta: meta || null, policies, devices, pending, installed, done: [] };
             }
 
             // ---------- first load: settings, the register, the first sync, tasks, exceptions and 30 days of history
@@ -3395,7 +3400,8 @@
                 // Fixes the server SAW go from waiting to installed between two syncs, with the sync time (Automox has no install date).
                 const doneCve = new Map();
                 (raw.done || []).forEach(x => { const d = String(x.d); if (!doneCve.has(d)) doneCve.set(d, new Map()); doneCve.get(d).set(x.cve, x); });
-                return { meta: raw.meta || null, devices: [...byId.values()], byId, pendBy, pendCve, instCve, doneCve, checked: new Set((raw.meta?.checkedIds || []).map(String)) };
+                const polById = new Map((raw.policies || []).map(p => [String(p.id), p]));
+                return { meta: raw.meta || null, devices: [...byId.values()], byId, pendBy, pendCve, instCve, doneCve, polById, checked: new Set((raw.meta?.checkedIds || []).map(String)) };
             }
 
             static key(n) { return n ? AssetIdentityService.normalize(n) : ''; }
@@ -3468,6 +3474,27 @@
             static waitingFor(dev, d, title) {
                 const c = this.pendingFor(dev, d.cves); if (c.length) return { pkgs: c, by: 'cve' };
                 const n = this.pendingByName(dev, title); return n.length ? { pkgs: n, by: 'name' } : { pkgs: [], by: '' };
+            }
+            // When Automox will next install patches on this device (v4.5.2). Devices do not report it; their patch policies do
+            // (next_remediation). Only active, automatic patch policies count, and only if they would install these patches
+            // (rule "all", or a severity filter that includes them). Returns { t, policy } or { t: 0, why }.
+            static nextRun(dev, pkgs = []) {
+                const P = this.data?.polById, now = Date.now(), cand = [];
+                let patchPol = 0, autoPol = 0, covers = 0;
+                (dev.policies || []).forEach(dp => {
+                    const p = P && P.get(String(dp.id)); if (!p || p.type !== 'patch') return;
+                    patchPol++; if (!p.active || p.auto === false) return;
+                    autoPol++;
+                    const ok = p.rule === 'all' || (p.rule === 'filter' && Array.isArray(p.sev) && (!pkgs.length || pkgs.some(k => p.sev.includes(k.sev))));
+                    if (!ok) return;
+                    covers++;
+                    const t = this.time(p.next); if (t > now) cand.push({ t, policy: p });
+                });
+                const own = this.time(dev.nextPatch); if (own > now) cand.push({ t: own, policy: null });
+                cand.sort((a, b) => a.t - b.t);
+                if (cand.length) return cand[0];
+                if (!P || !P.size) return { t: 0, why: 'no patch window reported (patch policies not read yet: sync Automox)' };
+                return { t: 0, why: !patchPol ? 'no patch policy on this device' : (!autoPol ? 'patch policy inactive or not automatic' : (!covers ? 'patch policy does not install this patch' : 'patch policy has no next run')) };
             }
             static installedFor(dev, cves) {
                 if (!dev || !cves?.length) return [];
@@ -4311,15 +4338,16 @@
                 const approx = w.by === 'name';
                 const block = [];
                 if (AutomoxService.stale(dev)) block.push(`agent not seen for ${Math.floor((Date.now() - AutomoxService.time(dev.lastSeen)) / 864e5)} days`);
-                if (dev.compliant === false) block.push('patch policy failing');
                 if (dev.needsReboot) block.push('reboot pending');
-                const next = AutomoxService.time(dev.nextPatch);
-                if (!next) block.push('no patch window scheduled');
-                else if (next > end) block.push('next patch window ' + new Date(next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+                const nr = AutomoxService.nextRun(dev, w.pkgs), next = nr.t;
+                if (!next) block.push(nr.why);
+                else if (next > end) block.push('next patch run ' + new Date(next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + (nr.policy ? ` (${nr.policy.name})` : ''));
                 const def = w.pkgs.map(p => AutomoxService.time(p.deferred)).filter(Boolean);
                 if (def.length && Math.min(...def) > end) block.push('patch deferred');
                 if (block.length) return { b: 'blocked', why: block.join(', '), approx };
-                return { b: 'will', why: approx ? 'waiting patch matched by package name (≈)' : 'waiting patch names its CVE', when: next, approx };
+                // A policy that shows "not compliant" has patches still to install; Automox retries them at the next run, so it is a note, not a block.
+                const note = dev.compliant === false ? ' (policy shows not compliant)' : '';
+                return { b: 'will', why: (approx ? 'waiting patch matched by package name (≈)' : 'waiting patch names its CVE') + note, when: next, approx };
             }
 
             async renderPlan() {
@@ -4356,8 +4384,8 @@
                 $('plan-summary').innerHTML = `<strong>${esc(scopeTxt)}:</strong> ${fmtNum(open)} open findings · <strong>✋ ${n(B.manual)} need manual remediation</strong> · ⚠ ${n(B.blocked)} blocked · ⟳ ${n(B.will)} Automox will patch by ${esc(endTxt)}${open ? ` (${Math.round(covered * 100 / open)}% of open)` : ''} · ✓ ${n(B.done)} patched in the last ${days} days`;
                 const SECS = [
                     ['manual', '✋', 'Manual remediation: the gap', 'No Automox agent, or no Automox patch for it. These will not be fixed by Automox\'s automation.', 'border-red-300'],
-                    ['blocked', '⚠', 'Automox has a patch, but it is blocked', 'A waiting patch exists, but the agent, the policy, a reboot or the schedule stops it being installed in time.', 'border-amber-300'],
-                    ['will', '⟳', `Automox will patch by ${endTxt}`, `A waiting patch names the finding's CVE (or, marked ≈, matches its package name), the agent and policy are healthy, and the next patch window is within ${days} days. Qualys confirms the fix at its next scan.`, 'border-sky-300'],
+                    ['blocked', '⚠', 'Automox has a patch, but it is blocked', 'A waiting patch exists, but a stale agent, a pending reboot, no automatic patch policy, or a next run after the period stops it being installed in time.', 'border-amber-300'],
+                    ['will', '⟳', `Automox will patch by ${endTxt}`, `A waiting patch names the finding's CVE (or, marked ≈, matches its package name), the agent is healthy, and an active automatic patch policy that installs it runs within ${days} days (its next run, from Automox). Qualys confirms the fix at its next scan.`, 'border-sky-300'],
                     ['done', '✓', `Patched in the last ${days} days`, 'Qualys no longer finds it, or Automox has installed the patch and Qualys has still to rescan.', 'border-emerald-300']
                 ];
                 body.innerHTML = SECS.map(([k, sym, title, help, border]) => {
@@ -4396,7 +4424,7 @@
                         <td class="px-3 py-2 text-xs whitespace-nowrap">${when}${g.overdue && k !== 'done' ? ` <strong>✖ ${fmtNum(g.overdue)} overdue</strong>` : ''}</td>
                         <td class="px-3 py-2 text-right"><button class="text-[10px] text-gray-700 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap" title="Download the names of these machines, one per line (an Ansible inventory)" data-k="${k}" data-q="${esc(g.qid)}" onclick="event.stopPropagation(); app.planList(this.dataset.k, this.dataset.q)">⬇ List</button></td></tr>`;
                 };
-                return `<table class="w-full text-sm"><thead class="bg-gray-100 text-gray-600 text-xs uppercase"><tr><th class="px-3 py-2 text-right">#</th><th class="px-3 py-2 text-left">Fix</th><th class="px-3 py-2">P</th><th class="px-3 py-2 text-right">Machines</th><th class="px-3 py-2 text-left">Why</th><th class="px-3 py-2 text-left">${k === 'will' ? 'Patch window' : 'Due'}</th><th class="px-3 py-2"></th></tr></thead>
+                return `<table class="w-full text-sm"><thead class="bg-gray-100 text-gray-600 text-xs uppercase"><tr><th class="px-3 py-2 text-right">#</th><th class="px-3 py-2 text-left">Fix</th><th class="px-3 py-2">P</th><th class="px-3 py-2 text-right">Machines</th><th class="px-3 py-2 text-left">Why</th><th class="px-3 py-2 text-left">${k === 'will' ? 'Next patch run' : 'Due'}</th><th class="px-3 py-2"></th></tr></thead>
                     <tbody class="divide-y">${shown.map(tr).join('')}</tbody></table>
                     <div class="flex items-center justify-between px-4 py-2 border-t bg-gray-50 text-xs text-gray-600 rounded-b-lg"><span>${fmtNum(shown.length)} of ${fmtNum(rows.length)} fixes${rows.length > shown.length ? ` <button onclick="app._planShow = { ...(app._planShow || {}), ${k}: true }; app.renderPlan()" class="ml-2 text-blue-700 underline">Show all</button>` : ''}</span>
                     <button onclick="app.planList('${k}')" class="border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Every machine in this section, one name per line">⬇ Machine list for this section</button></div>`;
@@ -5007,7 +5035,7 @@
                         <div><p class="text-[10px] uppercase text-gray-500 font-semibold">OS (Automox)</p>${esc(d.os)} ${esc(d.osVersion)}</div>
                         <div><p class="text-[10px] uppercase text-gray-500 font-semibold">Waiting patches</p><strong>${fmtNum(d.pending)}</strong>${d.sev.critical || d.sev.high ? ` (${d.sev.critical} crit, ${d.sev.high} high)` : ''}${d.kev ? ` · <strong class="text-red-800">⚑ ${d.kev} KEV</strong>` : ''}</div>
                         <div><p class="text-[10px] uppercase text-gray-500 font-semibold">Reboot needed</p>${d.needsReboot ? '↻ yes' : 'no'}</div>
-                        <div><p class="text-[10px] uppercase text-gray-500 font-semibold">Next patch window</p>${d.nextPatch ? esc(new Date(AutomoxService.time(d.nextPatch)).toLocaleString('en-GB')) : '-'}</div>
+                        <div><p class="text-[10px] uppercase text-gray-500 font-semibold">Next patch run</p>${(() => { const nr = AutomoxService.nextRun(d); return nr.t ? esc(new Date(nr.t).toLocaleString('en-GB')) + (nr.policy ? `<div class="text-[10px] text-gray-500">${esc(nr.policy.name)}</div>` : '') : `<span class="text-xs text-gray-600">${esc(nr.why)}</span>`; })()}</div>
                         <div><p class="text-[10px] uppercase text-gray-500 font-semibold">Agent</p>${esc(d.agent || '-')}</div>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">

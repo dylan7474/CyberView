@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.11.0 · 17 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.12.0 · 17 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -778,7 +778,7 @@
                         <h4 class="text-sm font-semibold text-slate-700 mt-5 mb-2">Releases with no date yet <span class="text-xs font-normal text-gray-400">in this scope, most assets first</span></h4>
                         <div id="eol-nodate" class="text-sm"></div>
                     </div>
-                    <p class="text-[11px] text-gray-500"><strong>Where this comes from.</strong> Dates: your table (section 6) first, then <a class="underline" href="https://endoflife.date" target="_blank" rel="noopener noreferrer">endoflife.date</a> (its API v1, fetched by this browser, kept a week). <em>＋ extended support (paid)</em> is the vendor's paid phase after that (RHEL ELS, Windows ESU, SUSE LTSS): shown for information, still counted as end of life unless you add the date to your table. <em>Security fixes end</em> is the vendor's end of security updates (Microsoft extended support, Red Hat maintenance, VMware general support); <em>mainstream</em> is the end of first-level support. Status counts from today: <em>Unsupported</em> = that date has passed <strong>or</strong> Qualys says EOL/EOS (no security fixes) for the release, which catches RHEL minor releases that endoflife.date lists only by major version. The Qualys lifecycle stage (asset export, <em>Operating System Lifecycle Stage</em>) is shown next to each asset. Hardware: <em>EOS</em> = end of sale; <em>OBS</em> = obsolete, no support. End-of-life software is every scan detection whose Qualys title starts “EOL/Obsolete”, so it only covers assets in the imported vulnerability exports.</p>
+                    <p class="text-[11px] text-gray-500"><strong>Where this comes from.</strong> Dates: your table (section 6) first, then <a class="underline" href="https://endoflife.date" target="_blank" rel="noopener noreferrer">endoflife.date</a> (API v1; on a server, fetched by the server every day and kept in the database; otherwise fetched by this browser and kept a week). <em>Security fixes end</em> is the vendor's end of security updates (Microsoft extended support, Red Hat maintenance, VMware general support); <em>mainstream</em> is the end of first-level support. Status counts from today: <em>Unsupported</em> = that date has passed <strong>or</strong> Qualys says EOL/EOS (no security fixes) for the release, which catches RHEL minor releases that endoflife.date lists only by major version. The Qualys lifecycle stage (asset export, <em>Operating System Lifecycle Stage</em>) is shown next to each asset. Hardware: <em>EOS</em> = end of sale; <em>OBS</em> = obsolete, no support. End-of-life software is every scan detection whose Qualys title starts “EOL/Obsolete”, so it only covers assets in the imported vulnerability exports.</p>
                 </div>
             </section>
 
@@ -3007,7 +3007,7 @@
                 return null;
             }
 
-            static needsFetch(products) { const c = this.readCache(), now = Date.now(); return products.some(p => !c[p] || now - c[p].at >= this.TTL); }
+            static needsFetch(products) { if (this.server()) return !this._srv; const c = this.readCache(), now = Date.now(); return products.some(p => !c[p] || now - c[p].at >= this.TTL); }
             static readCache() { try { return JSON.parse(localStorage.getItem(this.CACHE_KEY) || '{}') || {}; } catch (e) { return {}; } }
             static writeCache(c) { try { localStorage.setItem(this.CACHE_KEY, JSON.stringify(c)); } catch (e) {} }
 
@@ -3026,8 +3026,44 @@
                 const old = await WebResearch.getJSON(`https://endoflife.date/api/${encodeURIComponent(p)}.json`);   // the older API, if v1 cannot be reached
                 return Array.isArray(old) ? old : null;
             }
-            // Fetch every product needed (cached a week per browser). Returns { data: {product: cycles[]}, failed: [products] }.
+            // On a server (v4.12) the dates come from the database: the server fetches them from endoflife.date every day.
+            // force = Refresh dates: editors ask the server to fetch now and wait for it (up to a minute).
+            static server() { return StorageService.mode === 'server'; }
+            static async serverData(force = false) {
+                if (force && !(app?.me && app.me.role === 'viewer')) {
+                    try {
+                        const r = await fetch('api/eol/sync', { method: 'POST', headers: { 'X-Requested-With': 'portal' } });
+                        if (r.ok || r.status === 409) for (let i = 0; i < 30; i++) {
+                            await new Promise(z => setTimeout(z, 2000));
+                            const st = await (await fetch('api/eol/status', { cache: 'no-store' })).json();
+                            if (!st.job?.running) break;
+                        }
+                    } catch (e) { console.error('[EOL] refresh', e); }
+                }
+                if (force || !this._srv || Date.now() - this._srv.got > 10 * 60000) {
+                    try { const r = await fetch('api/eol/data', { cache: 'no-store' }); if (r.ok) this._srv = { ...(await r.json()), got: Date.now() }; } catch (e) { /* keep the copy we have */ }
+                }
+                return this._srv || { meta: null, products: {} };
+            }
+            // When the dates in use were fetched (Data Health): the server's last fetch, or this browser's oldest copy.
+            static fetchedAt() {
+                if (this.server() && this._srv?.meta?.at) return StatusEngine.time(this._srv.meta.at);
+                const ats = Object.values(this.readCache()).map(x => x.at).filter(Boolean);
+                return ats.length ? Math.min(...ats) : 0;
+            }
+            // Fetch every product needed. Returns { data: {product: cycles[]}, failed: [products] }.
             static async load(products, force = false) {
+                if (this.server()) {
+                    const S = await this.serverData(force), data = {}, missing = [];
+                    [...new Set(products)].forEach(p => { const x = S.products?.[p]; if (x && Array.isArray(x.list)) data[p] = x.list; else missing.push(p); });
+                    if (!missing.length) return { data, failed: (S.meta?.failed || []).filter(p => data[p]) };
+                    const more = await this.loadBrowser(missing, force);            // not on the server yet (first start, or a new product)
+                    return { data: { ...data, ...more.data }, failed: more.failed };
+                }
+                return this.loadBrowser(products, force);
+            }
+            // Fetch from this browser (cached a week per browser).
+            static async loadBrowser(products, force = false) {
                 const cache = this.readCache(), now = Date.now(), data = {}, failed = [];
                 await Promise.all([...new Set(products)].map(async p => {
                     const hit = cache[p];
@@ -3078,12 +3114,6 @@
                 // Qualys says ended but the published date is later (a minor release of a longer-lived major): this release has ended.
                 if (bucket === 0 && typeof secEnd === 'string' && this.days(secEnd) >= 0) return { secEnd: true, wider: `${m.label}: ${this.fmt(secEnd)}`, mainEnd, extEnd, source: 'Qualys stage + endoflife.date', link: `https://endoflife.date/${m.product}`, note, bucket, behind, product: m.product, label: m.label };
                 return { secEnd, mainEnd, extEnd, source: 'endoflife.date', link: `https://endoflife.date/${m.product}`, note, bucket, behind, product: m.product, label: m.label };
-            }
-            // "Extended support (paid) to 30 Jun 2032" when a release has a paid phase after its normal end; '' otherwise.
-            static extText(life) {
-                const x = life && life.extEnd;
-                if (typeof x !== 'string' || (typeof life.secEnd === 'string' && x <= life.secEnd)) return '';
-                return this.days(x) < 0 ? `extended support (paid) ended ${this.fmt(x)}` : `extended support (paid) to ${this.fmt(x)}`;
             }
         }
 
@@ -4187,8 +4217,7 @@
                 const meta = this.loadVulnMeta(), lastImp = [...(meta.imports || [])].reverse()[0];
                 row('Qualys findings', lastImp ? StatusEngine.time(lastImp.at) : 0, S.staleDays.findings, lastImp ? (lastImp.source === 'api' ? `API sync (${lastImp.scope || 'every host'})` : 'CSV import: ' + lastImp.file) : '');
                 if (Demo.api() && AutomoxService.status?.configured) row('Automox', StatusEngine.time(AutomoxService.status?.last?.at), S.staleDays.automox);
-                const c = EolDates.readCache(), ats = Object.values(c).map(x => x.at).filter(Boolean);
-                row('End-of-life dates', ats.length ? Math.min(...ats) : 0, S.staleDays.eol, (dates?.failed || []).length ? `could not refresh: ${dates.failed.join(', ')}` : 'endoflife.date + your table');
+                row('End-of-life dates', EolDates.fetchedAt(), S.staleDays.eol, (dates?.failed || []).length ? `could not refresh: ${dates.failed.join(', ')}` : (EolDates.server() ? 'endoflife.date daily, by the server + your table' : 'endoflife.date + your table'));
                 out.push({ label: 'Tasks and exceptions', t: now, days: 0, stale: false, note: 'live' });
                 return out;
             }
@@ -6225,7 +6254,7 @@
                 let notice = '';
                 if (!seen.length) notice = box('bg-amber-50 border-amber-300 text-amber-900', `<strong>⚠️ No lifecycle data from Qualys yet.</strong> Re-import the Qualys asset export (Asset Datalist CSV with the <em>Operating System Lifecycle Stage</em> and <em>Hardware Lifecycle Stage</em> columns) on <button class="underline" onclick="app.switchView('import')">Import Data</button>. Assets already in the register are updated in place; nothing is queued for review again. Until then the hardware section is empty and RHEL minor releases are not caught, which does <strong>not</strong> mean nothing is end of life.`);
                 else notice = box(seen.length === known.length ? 'bg-gray-50 border-gray-200 text-gray-700' : 'bg-amber-50 border-amber-300 text-amber-900', `${seen.length === known.length ? '✅' : '⚠️'} Qualys lifecycle stages known for <strong>${fmtNum(seen.length)} of ${fmtNum(known.length)}</strong> ${scope === 'ALL' ? 'registered' : esc(scope)} assets (asset export imported ${esc(new Date(last).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}).${seen.length < known.length ? ' The rest were not in that export: re-import a full asset export to cover them.' : ''}`);
-                if (dates.failed.length) notice += box('bg-amber-50 border-amber-300 text-amber-900 mt-2', `⚠️ Could not reach endoflife.date for: ${esc(dates.failed.join(', '))}. ${Object.keys(dates.data).length ? 'Older saved dates are used where this browser has them; ' : ''}releases without a date fall back to your table and the Qualys stage. Try <strong>↻ Dates</strong> later.`);
+                if (dates.failed.length) notice += box('bg-amber-50 border-amber-300 text-amber-900 mt-2', `⚠️ Could not reach endoflife.date for: ${esc(dates.failed.join(', '))}. ${Object.keys(dates.data).length ? 'The last saved dates are used where there are some; ' : ''}releases without a date fall back to your table and the Qualys stage. Try <strong>↻ Dates</strong> later.`);
                 notice += `<p class="text-xs text-gray-500 mt-2">End-of-life software comes from the vulnerability exports, which cover ${fmtNum(withScan)} of ${fmtNum(known.length)} assets${meta.imports.length ? '' : ' (none imported yet)'}; export with the EOL/Obsolete QIDs included to see all of it.</p>`;
                 $('eol-notice').innerHTML = notice;
 
@@ -6264,7 +6293,7 @@
                 const dateKey = (l) => typeof l.secEnd === 'string' ? l.secEnd : (l.secEnd === true ? '0000' : '9999');
                 const famList = famAll.filter(f => f.life.bucket <= 2).sort((a, b) => a.life.bucket - b.life.bucket || dateKey(a.life).localeCompare(dateKey(b.life)) || b.n - a.n);
                 const srcCell = (l) => l.link ? `<a class="underline text-blue-700" href="${esc(l.link)}" target="_blank" rel="noopener noreferrer">${esc(l.source)}</a>` : esc(l.source || '-');
-                $('eol-os').innerHTML = famList.length ? famList.map(f => `<tr><td class="px-2 py-2 text-gray-700">${esc(f.os)}${f.life.note ? `<div class="text-[11px] text-gray-500 mt-0.5">ℹ ${esc(f.life.note)}</div>` : ''}</td><td class="px-2 py-2 whitespace-nowrap">${esc(EolDates.fmt(f.life.secEnd))}<div class="text-[10px] text-gray-500">${esc(f.life.wider ? 'this release; ' + f.life.wider : daysTxt(f.life.secEnd))}</div>${EolDates.extText(f.life) ? `<div class="text-[10px] text-indigo-800" title="From endoflife.date. Counted as end of life unless you add the date to your table (section 6), e.g. when you pay for it">＋ ${esc(EolDates.extText(f.life))}</div>` : ''}</td><td class="px-2 py-2">${EolDates.badge(f.life.bucket)}${f.stage ? `<div class="text-[10px] text-gray-500 mt-0.5">Qualys: ${esc(f.stage)}</div>` : ''}</td><td class="px-2 py-2 text-xs text-gray-600 whitespace-nowrap">${esc(EolDates.fmt(f.life.mainEnd))}</td><td class="px-2 py-2 text-right font-mono">${fmtNum(f.n)}</td><td class="px-2 py-2 text-xs text-gray-600">${[...f.owners].sort((a, b) => b[1] - a[1]).map(([o, n]) => `${esc(o)} ${n}`).join(', ')}</td><td class="px-2 py-2 text-center font-mono">${f.crit || '-'}</td><td class="px-2 py-2 text-xs">${srcCell(f.life)}</td><td class="px-2 py-2 text-right">${trackBtn('os', famList.indexOf(f), RIX.byKey.get('os|' + f.os), f.assets)}</td></tr>`).join('')
+                $('eol-os').innerHTML = famList.length ? famList.map(f => `<tr><td class="px-2 py-2 text-gray-700">${esc(f.os)}${f.life.note ? `<div class="text-[11px] text-gray-500 mt-0.5">ℹ ${esc(f.life.note)}</div>` : ''}</td><td class="px-2 py-2 whitespace-nowrap">${esc(EolDates.fmt(f.life.secEnd))}<div class="text-[10px] text-gray-500">${esc(f.life.wider ? 'this release; ' + f.life.wider : daysTxt(f.life.secEnd))}</div></td><td class="px-2 py-2">${EolDates.badge(f.life.bucket)}${f.stage ? `<div class="text-[10px] text-gray-500 mt-0.5">Qualys: ${esc(f.stage)}</div>` : ''}</td><td class="px-2 py-2 text-xs text-gray-600 whitespace-nowrap">${esc(EolDates.fmt(f.life.mainEnd))}</td><td class="px-2 py-2 text-right font-mono">${fmtNum(f.n)}</td><td class="px-2 py-2 text-xs text-gray-600">${[...f.owners].sort((a, b) => b[1] - a[1]).map(([o, n]) => `${esc(o)} ${n}`).join(', ')}</td><td class="px-2 py-2 text-center font-mono">${f.crit || '-'}</td><td class="px-2 py-2 text-xs">${srcCell(f.life)}</td><td class="px-2 py-2 text-right">${trackBtn('os', famList.indexOf(f), RIX.byKey.get('os|' + f.os), f.assets)}</td></tr>`).join('')
                     : empty(9, 'No operating system in this scope ends within a year.');
                 const later = famAll.filter(f => f.life.bucket === 3), nod = famAll.filter(f => f.life.bucket === 4);
                 $('eol-os-more').textContent = `Not listed: ${fmtNum(later.reduce((n, f) => n + f.n, 0))} assets on ${fmtNum(later.length)} releases supported for over a year, ${fmtNum(nod.reduce((n, f) => n + f.n, 0))} assets with no date (section 6).`;

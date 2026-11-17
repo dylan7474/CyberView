@@ -34,6 +34,9 @@ services:
       AUTOMOX_SYNC_HOURS: ${AUTOMOX_SYNC_HOURS:-0}
       AUTOMOX_BASE_URL: ${AUTOMOX_BASE_URL:-https://console.automox.com/api}
       AUTOMOX_REQUEST_GAP: ${AUTOMOX_REQUEST_GAP:-2.2}
+      # End-of-life dates from endoflife.date (public, no key): fetched every EOL_SYNC_HOURS (0 = only on request)
+      EOL_SYNC_HOURS: ${EOL_SYNC_HOURS:-24}
+      EOL_PRODUCTS: ${EOL_PRODUCTS:-}
       # Qualys API (optional, read-only): set with  ./deploy.sh qualys url URL | user | pass | tag NAME | hour H
       QUALYS_API_URL: ${QUALYS_API_URL:-}
       QUALYS_GATEWAY_URL: ${QUALYS_GATEWAY_URL:-}

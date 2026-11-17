@@ -21,9 +21,10 @@ from starlette.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
 import automox
+import eol
 import qualys
 
-VERSION = "4.11.0"
+VERSION = "4.12.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -156,7 +157,7 @@ def migrate(wait_seconds=90):
     while True:
         try:
             with conn_ctx() as c, c.cursor() as cur:
-                for stmt in SCHEMA + [automox.SCHEMA, qualys.SCHEMA]:
+                for stmt in SCHEMA + [automox.SCHEMA, qualys.SCHEMA, eol.SCHEMA]:
                     cur.execute(stmt)
             return
         except pymysql.err.OperationalError:
@@ -173,6 +174,7 @@ def _startup():
     migrate()
     automox.init(conn_ctx, audit)
     qualys.init(conn_ctx, audit)
+    eol.init(conn_ctx, audit)
 
 
 # ------------------------------------------------------------------ users, sessions, roles
@@ -823,6 +825,26 @@ def _add_comment(user, task_id, text):
         cur.execute("UPDATE records SET doc=%s WHERE collection=%s AND seq=%s", (json.dumps(t, separators=(",", ":")), TASKS, seq))
         bump_tasks(cur, user)
     return {"task": t}
+
+
+# ------------------------------------------------------------------ End-of-life dates (endoflife.date, fetched by the server, v4.12)
+
+@app.get("/api/eol/status")
+def eol_status():
+    return eol.status()
+
+
+@app.post("/api/eol/sync")
+def eol_sync(request: Request):
+    """Fetch the dates again now (editors)."""
+    if not eol.start(current_user(request)):
+        return JSONResponse({"error": "Already fetching", "job": eol.status()["job"]}, status_code=409)
+    return JSONResponse({"started": True}, status_code=202)
+
+
+@app.get("/api/eol/data")
+def eol_data():
+    return Response(eol.data_json(), media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
 # ------------------------------------------------------------------ Automox (read-only patch data)

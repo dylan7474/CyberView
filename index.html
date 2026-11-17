@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.7.1 · 17 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.7.2 · 17 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -4371,7 +4371,12 @@
                     const q = vd.qmap.get(d.qid) || {}, t = PriorityEngine.tier(d, q), p = StatusEngine.priority(StatusEngine.findingTier({ ...d, tier: t }, S), regMap.get(d.asset), S);
                     if (pmax === 'ALL' || p <= +pmax) B.done.push({ ...d, tier: t, p, _why: 'fixed: Qualys no longer finds it' });
                 });
-                return { B, dets, vd, regMap, days, end };
+                return { B, dets, vd, regMap, days, end, policiesRead: !!(D.polById && D.polById.size) };
+            }
+            // Shown wherever the plan appears, until an Automox sync on v4.5.2 or later has read the patch policies.
+            static planPolicyNote(PB) {
+                if (!PB || PB.policiesRead) return '';
+                return `<div class="bg-amber-50 border-2 border-amber-400 text-amber-900 rounded-lg p-3 text-sm">⚠ <strong>Press Sync from Automox once.</strong> Automox's patch policies have not been read yet, so the portal cannot tell when patches will be installed and nothing can count as "Automox will patch". <a href="#" onclick="app.switchView('automox'); return false;" class="underline font-semibold">Open Patch Coverage</a>, press ⟳ Sync from Automox, then come back.</div>`;
             }
 
             async renderPlan() {
@@ -4391,6 +4396,7 @@
                 if (!PB) { body.innerHTML = '<div class="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-900">⚠ No Automox data yet. Open Patch Coverage and press Sync from Automox.</div>'; $('plan-summary').textContent = ''; return; }
                 const { B, dets, vd, regMap } = PB;
                 this._plan = B;
+                const note = App.planPolicyNote(PB);
                 const n = (a) => fmtNum(a.length), mach = (a) => fmtNum(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
                 const scopeTxt = [f.team === 'ALL' ? 'All teams' : f.team, f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : ''].filter(Boolean).join(' · ');
                 const open = dets.length, covered = B.will.length;
@@ -4401,7 +4407,7 @@
                     ['will', '⟳', `Automox will patch by ${endTxt}`, `A waiting patch names the finding's CVE (or, marked ≈, matches its package name), the agent is healthy, and an active automatic patch policy that installs it runs within ${days} days (its next run, from Automox). Qualys confirms the fix at its next scan.`, 'border-sky-300'],
                     ['done', '✓', `Patched in the last ${days} days`, 'Qualys no longer finds it, or Automox has installed the patch and Qualys has still to rescan.', 'border-emerald-300']
                 ];
-                body.innerHTML = SECS.map(([k, sym, title, help, border]) => {
+                body.innerHTML = note + SECS.map(([k, sym, title, help, border]) => {
                     const a = B[k], isOpen = !!f.open[k];
                     return `<div class="bg-white rounded-lg shadow border-2 ${border}">
                         <button onclick="app.planToggle('${k}')" aria-expanded="${isOpen}" class="w-full text-left px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -5083,7 +5089,14 @@
                 const el = document.getElementById('dash-automox'); if (!el) return;
                 const st = await AutomoxService.loadStatus();
                 if (this.currentView !== 'dashboard') return;
-                if (!st || !st.configured) { el.classList.add('hidden'); return; }
+                if (StorageService.mode !== 'server' && !Demo.ON) { el.classList.add('hidden'); return; }    // no server: Automox does not apply
+                if (!st || !st.configured) {
+                    el.className = 'rounded-lg border p-4 text-sm bg-amber-50 border-amber-300 text-amber-900';
+                    el.innerHTML = `<div class="flex items-start gap-3"><div class="text-xl leading-none">⚠️</div><div class="flex-1 space-y-1.5">${!st
+                        ? '<p><strong>Could not ask the server about Automox.</strong> The server did not answer; reload the page, and if it keeps happening check the server (<code>./deploy.sh logs</code>).</p>'
+                        : '<p><strong>Automox is not set up on this server</strong>, so there is no patch data: Patch Coverage, the Patch Plan and the patching check stay empty.</p><p class="text-xs opacity-80">An administrator runs <code>./deploy.sh automox key</code> on the server (the key stays there), then <code>./deploy.sh automox test</code>.</p>'}</div></div>`;
+                    return;
+                }
                 const L = st.last, E = st.error, j = st.job || {};
                 const limit = (StatusEngine.settings().staleDays || {}).automox || 7;
                 const days = L ? (Date.now() - AutomoxService.time(L.at)) / 864e5 : Infinity;
@@ -5137,7 +5150,7 @@
                 if (PB) {
                     const { B } = PB, endTxt = new Date(PB.end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
                     const v = (a) => `${sev(a.length)} findings · ${mach(a)} machines${p12(a) ? ` · ${sev(p12(a))} P1/P2` : ''}`;
-                    plan = `<p class="text-sm text-gray-600">${esc(f.team === 'ALL' ? 'All teams' : f.team)}, the next ${PB.days} days</p>` + row('✋', '<strong>Manual remediation</strong>', v(B.manual)) + row('⚠', 'Automox patch blocked', v(B.blocked)) + row('⟳', `Automox will patch by ${esc(endTxt)}`, v(B.will)) + row('✓', `Patched in the last ${PB.days} days`, v(B.done));
+                    plan = App.planPolicyNote(PB) + `<p class="text-sm text-gray-600">${esc(f.team === 'ALL' ? 'All teams' : f.team)}, the next ${PB.days} days</p>` + row('✋', '<strong>Manual remediation</strong>', v(B.manual)) + row('⚠', 'Automox patch blocked', v(B.blocked)) + row('⟳', `Automox will patch by ${esc(endTxt)}`, v(B.will)) + row('✓', `Patched in the last ${PB.days} days`, v(B.done));
                 } else plan = '<p class="text-sm text-gray-600">Needs Automox data: the CyberView server, after a Sync from Automox.</p>';
                 document.getElementById('ds-plan').innerHTML = card('🗓️ Patch Plan', plan, Demo.api() ? 'plan' : '', 'Open the Patch Plan');
                 // End of life and data freshness, from the Status engine (every source joined)
@@ -5726,6 +5739,10 @@
                 const file = event.target.files[0];
                 event.target.value = '';
                 if (!file) return;
+                if (Demo.ON) {     // v4.7.2: real data must not be mixed with the made-up company
+                    alert('This is the demo (ACME Cloud Ltd, sample data), so a backup cannot be restored here: its pretend Qualys and Automox would mix made-up data into yours. Restore it on your own CyberView server instead. To use this browser without the demo, press Leave demo first.');
+                    return;
+                }
                 const err = document.getElementById('restore-error'); err.classList.add('hidden');
                 document.getElementById('restore-go').disabled = false;
                 let db;
@@ -7306,7 +7323,7 @@
                     const row = (sym, label, a) => `<div class="flex justify-between gap-3 border rounded p-2 bg-white"><span>${sym} ${label}</span><span class="font-mono text-right">${n(a)} findings · ${mach(a)} machines${p12(a) ? ` · <strong>${sev(p12(a))} P1/P2</strong>` : ''}</span></div>`;
                     const gap = new Map(); B.manual.forEach(d => { const k = d.qid; if (!gap.has(k)) gap.set(k, { qid: k, title: (vd.qmap.get(k) || {}).title || 'QID ' + k, p: 5, a: new Set() }); const g = gap.get(k); g.p = Math.min(g.p, d.p || 5); g.a.add(d.asset); });
                     const topGap = [...gap.values()].sort((x, y) => x.p - y.p || y.a.size - x.a.size).slice(0, 5);
-                    $('rpt-plan').innerHTML = row('✋', '<strong>Manual remediation (the gap)</strong>', B.manual) + row('⚠', 'Automox patch blocked', B.blocked) + row('⟳', `Automox will patch by ${esc(endTxt)}`, B.will) + row('✓', `Patched in the last ${PB.days} days`, B.done)
+                    $('rpt-plan').innerHTML = App.planPolicyNote(PB) + row('✋', '<strong>Manual remediation (the gap)</strong>', B.manual) + row('⚠', 'Automox patch blocked', B.blocked) + row('⟳', `Automox will patch by ${esc(endTxt)}`, B.will) + row('✓', `Patched in the last ${PB.days} days`, B.done)
                         + (topGap.length ? `<p class="text-xs font-semibold text-gray-700 pt-2">Largest manual fixes</p><ul class="text-xs text-gray-700 list-disc pl-5">${topGap.map(g => `<li>${g.p < 5 ? 'P' + g.p + ' · ' : ''}${esc(g.title)}: ${sev(g.a.size)} machine${g.a.size === 1 ? '' : 's'}</li>`).join('')}</ul>` : '')
                         + '<p class="text-[11px] text-gray-500">Full lists and machine lists for Ansible: 🗓️ Patch Plan.</p>';
                 } else {

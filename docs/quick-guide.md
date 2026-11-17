@@ -20,12 +20,13 @@ CyberView turns your scanner output into a short, ranked to-do list, team by tea
 
 ## What you get
 
+- **Simple view** (the default): just the Dashboard, Patch Plan, Team Risk Report and End of Life Report. **Advanced** opens every page and setting.
 - **Patch Plan:** every open finding set against Automox: what's patched, what Automox will patch in the next 7 days, what's blocked, and the gap that needs manual remediation, with machine lists for Ansible.
 - **Vuln Management:** *Machines to fix first* and *Fixes that clear the most*, with one-click machine lists ready for Ansible.
 - **Status:** one headline per team (On track / Slipping / Behind), with trend charts.
-- **Team Risk Report:** a print-ready report per team.
+- **Team Risk Report:** a print-ready report per team: its status, the machines and fixes to do first, its Patch Plan, data gaps and recommended actions.
 - **End of Life · Patch Coverage · Remediation:** what to upgrade, what isn't being patched, and who is fixing what by when.
-- **Dashboard:** today's data, its freshness and every team's status at a glance.
+- **Dashboard:** every team's status, this week's Patch Plan, end-of-life machines and how fresh the data is, at a glance.
 
 ---
 

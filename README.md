@@ -6,6 +6,7 @@ CyberView shows a security or infrastructure team where to focus. It joins your 
 - **Runs on your own server:** three small containers (web app, MariaDB, HTTPS proxy), built from Debian packages, with users and roles. The Qualys and Automox connections are read-only.
 - **Or with no server at all:** open `index.html` in a browser and the data stays in that browser. That is enough to try it with CSV exports.
 - **Never colour alone:** every status has a word or a symbol, so it works for colour-blind readers and in print.
+- **Simple by default:** most people only need four pages (Dashboard, Patch Plan, Team Risk Report, End of Life Report); one click on **Advanced** opens the rest.
 
 **In a hurry?** The one-page [quick guide](docs/quick-guide.md). New here? Read **How it works, in plain words** below. The examples in this README use a team called *Platform*; your own team names come from the setup page.
 
@@ -17,7 +18,7 @@ git clone https://github.com/dylan7474/CyberView.git && cd CyberView
 ./deploy.sh                       # build and start on HTTPS port 443
 ```
 
-Then open the portal, create the administrator (👥 Users), fill in **⚙ Organisation setup**, and either connect the Qualys API (`./deploy.sh qualys ...`) or import a Qualys CSV export from *Vuln Management → Data & imports*.
+Then open the portal, switch to **Advanced** (top of the sidebar), create the administrator (👥 Users), fill in **⚙ Organisation setup**, connect the Qualys API (`./deploy.sh qualys ...`) and Automox (`./deploy.sh automox key`, then `./deploy.sh automox hours 24` for a daily sync). Without the APIs, import a Qualys CSV from *Organisation setup → Manual imports*.
 
 ## Try the demo
 
@@ -26,7 +27,7 @@ Then open the portal, create the administrator (👥 Users), fill in **⚙ Organ
 - About 230 machines across four teams (Platform, Network, Corporate IT, Security), with services, tiers, exposure and some end-of-life operating systems; a few machines the scanner found that nobody has registered yet (in the Review Queue).
 - Qualys-style findings and Automox patching, tasks, an exception that is in date and one that has expired, and 30 days of history for the trend charts.
 - **⟳ Simulate next day's sync** pretends a day has passed: Automox and Qualys sync, some findings are fixed (tasks tick off), a few new ones appear.
-- Everything you change stays in your browser until **↺ Reset demo** (start again) or **Leave demo** (remove it). It is kept apart from any real data in the same browser.
+- Everything you change stays in your browser until **↺ Reset demo** (start again) or **Leave demo** (remove it). It is kept apart from any real data in the same browser. Restoring a real backup is refused in the demo, so real data cannot end up mixed with ACME's.
 
 **Nothing in the demo is real.** Machine names, check numbers (QIDs 9xxxxx), titles, owners and figures are invented. The CVE numbers are real public ones, so *Public fix data* can look them up. Users, roles and the History page need the real server, so they are not in the demo.
 
@@ -518,6 +519,7 @@ Phase D of the status design.
 | ⟳ **Automox will patch by** *date* | A waiting patch names the finding's CVE (or, marked ≈, matches its package name, as for Linux kernels), the agent is healthy, and an active automatic patch policy that installs it runs within the period. A policy that shows *not compliant* is a note, not a block: Automox retries at the next run. |
 | ✓ **Patched in the last** *N* **days** | Qualys no longer finds it, or Automox has installed the patch and Qualys has still to rescan. |
 
+- **After a release that changes the Automox sync**, or on a new server, press **⟳ Sync from Automox** once: until the patch policies have been read, the page says so at the top and nothing can count as "Automox will patch".
 - **The period** is 7 days by default; change it on ⚙ Organisation setup → Status rules (*Patch Plan looks ahead*).
 - Each section lists its fixes in the same order as *Fixes that clear the most*, with the reasons in words and counts, and a **⬇ List** of machine names (one per line, an Ansible inventory) per fix and for the whole section. The gap's list is the manual work.
 - Clicking a fix opens its page with the team and urgency kept.

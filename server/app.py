@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 import automox
 import qualys
 
-VERSION = "4.7.1"
+VERSION = "4.7.2"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)

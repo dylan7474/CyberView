@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.7.0 · 17 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.7.1 · 17 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -4385,8 +4385,9 @@
                 $('plan-urgency').innerHTML = U.map(([v, l]) => { const on = f.p === v; return `<button role="radio" aria-checked="${on}" onclick="app.planSet('p', '${v}')" class="px-3 py-1 rounded-full text-sm whitespace-nowrap ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${l}</button>`; }).join('');
                 if (!Demo.api()) { body.innerHTML = '<div class="bg-white border rounded-lg p-4 text-sm text-gray-700">The Patch Plan needs Automox, which runs on the CyberView server. Here you can still see every finding in Vuln Management.</div>'; $('plan-summary').textContent = ''; return; }
                 body.innerHTML = '<p class="text-gray-500 italic p-4">Working it out…</p>';
+                const pseq = this._planSeq = (this._planSeq || 0) + 1;
                 const PB = await this.planBuckets(f.team, f.p);
-                if (this.currentView !== 'plan') return;
+                if (this.currentView !== 'plan' || pseq !== this._planSeq) return;
                 if (!PB) { body.innerHTML = '<div class="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-900">⚠ No Automox data yet. Open Patch Coverage and press Sync from Automox.</div>'; $('plan-summary').textContent = ''; return; }
                 const { B, dets, vd, regMap } = PB;
                 this._plan = B;
@@ -5128,8 +5129,9 @@
                 el.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div id="ds-plan">${card('🗓️ Patch Plan', '<p class="text-sm text-gray-500 italic">Working it out…</p>')}</div><div id="ds-eol">${card('⏳ End of life', '<p class="text-sm text-gray-500 italic">Working it out…</p>')}</div></div><div id="ds-fresh"></div>`;
                 // Patch Plan: the team chosen on the Patch Plan page (the main team at first)
                 const f = this.planF, sev = (n) => fmtNum(n);
+                const dseq = this._dsSeq = (this._dsSeq || 0) + 1;
                 let PB = null; try { PB = await this.planBuckets(f.team, 'ALL'); } catch (e) { PB = null; }
-                if (this.currentView !== 'dashboard') return;
+                if (this.currentView !== 'dashboard' || dseq !== this._dsSeq) return;
                 const mach = (a) => sev(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
                 let plan;
                 if (PB) {
@@ -5140,7 +5142,7 @@
                 document.getElementById('ds-plan').innerHTML = card('🗓️ Patch Plan', plan, Demo.api() ? 'plan' : '', 'Open the Patch Plan');
                 // End of life and data freshness, from the Status engine (every source joined)
                 let st = null; try { st = await this.statusData(); } catch (e) { st = null; }
-                if (this.currentView !== 'dashboard') return;
+                if (this.currentView !== 'dashboard' || dseq !== this._dsSeq) return;
                 if (st) {
                     const a = (st.assets || []).filter(x => !x.r?.unrecognised), by = (k) => a.filter(x => x.checks?.eol?.s === k);
                     const S = StatusEngine.settings(), t1 = by('x').filter(x => x.tier === 1).length;
@@ -7228,6 +7230,8 @@
 
             async renderReports() {
                 const $ = (id) => document.getElementById(id);
+                // Only the latest render may write: a slower earlier one (another team) must not paint over it.
+                const seq = this._rptSeq = (this._rptSeq || 0) + 1, stale = () => seq !== this._rptSeq || this.currentView !== 'reports';
                 const scope = $('report-scope-selector').value;
                 const riskStatusFilter = $('report-risk-status-selector').value;
 
@@ -7235,7 +7239,7 @@
                 $('report-date-main').textContent = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric', day: 'numeric' });
 
                 const sd = await this.scopedData({ owner: scope, riskStatus: riskStatusFilter });
-                if (this.currentView !== 'reports') return;
+                if (stale()) return;
                 const { dets, assets, vd, inScope } = sd;
                 const groups = PriorityEngine.fixGroups(dets, vd.qmap);
                 this.reportCtx = { scope, riskStatusFilter, groups, assets, dets, inScope };
@@ -7243,13 +7247,14 @@
                 $('rpt-coverage').innerHTML = this.coverageHTML(scope, riskStatusFilter);
                 $('rpt-asof').innerHTML = this.asOfHTML(this.dataAsOf(StorageService.load(StorageService.KEYS.ASSET_REGISTER), null));
                 await RemediationService.refreshQuiet();
+                if (stale()) return;
                 const remSt = RemediationStats.compute(RemediationService.list(), scope);
                 $('rpt-remediation').innerHTML = RemediationStats.html(remSt, { compact: true });
 
                 // 1. Summary: the team's status headline (the Status engine) and the figures behind it
                 const S = StatusEngine.settings(), sev = (n) => fmtNum(n);
                 let st = null; try { st = await this.statusData(); } catch (e) { st = null; }
-                if (this.currentView !== 'reports') return;
+                if (stale()) return;
                 const teams = st ? (scope === 'ALL' ? st.teams : st.teams.filter(t => t.team === scope)) : [];
                 $('rpt-status-line').innerHTML = teams.length ? `<div class="flex flex-wrap gap-x-6 gap-y-2">${teams.map(t => `<div><span class="font-semibold">${esc(t.team)}</span> ${this.teamWordHTML(t)} <span class="text-xs text-gray-600">${esc((t.why || []).join(' · '))}</span></div>`).join('')}</div>` : '';
                 const T = teams.reduce((a, t) => ({ newP12: a.newP12 + (t.newP12 || 0), newIn: a.newIn + (t.newIn || 0), over12: a.over12 + (t.over12 || 0), bl12: a.bl12 + (t.bl12 || 0), blOver: a.blOver + (t.blOver || 0) }), { newP12: 0, newIn: 0, over12: 0, bl12: 0, blOver: 0 });
@@ -7293,7 +7298,7 @@
 
                 // 4. Patch Plan (needs Automox)
                 let PB = null; try { PB = await this.planBuckets(scope, 'ALL'); } catch (e) { PB = null; }
-                if (this.currentView !== 'reports') return;
+                if (stale()) return;
                 if (PB) {
                     const { B } = PB, n = (a) => sev(a.length), mach = (a) => sev(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
                     const endTxt = new Date(PB.end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });

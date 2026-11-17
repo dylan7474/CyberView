@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.9.0 · 17 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.10.0 · 17 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -339,7 +339,7 @@
                             <option value="Resolved">Resolved</option>
                         </select>
                     </div>
-                    <div class="server-only"><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Automox</label><select id="reg-f-ax" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">Any</option><option value="managed">✓ Managed</option><option value="none">✗ No agent</option><option value="stale">⏸ Stale agent</option><option value="noncompliant">⚠ Not compliant</option><option value="reboot">↻ Reboot needed</option><option value="waiting">⧗ Patches waiting</option><option value="ambiguous">? Ambiguous</option></select></div>
+                    <div class="server-only"><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Automox</label><select id="reg-f-ax" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">Any</option><option value="managed">✓ Managed</option><option value="none">✗ No agent</option><option value="nopolicy">⊘ No patch policy</option><option value="stale">⏸ Stale agent</option><option value="noncompliant">⚠ Not compliant</option><option value="reboot">↻ Reboot needed</option><option value="waiting">⧗ Patches waiting</option><option value="ambiguous">? Ambiguous</option></select></div>
                     <button onclick="app.clearRegisterFilters()" class="text-xs text-blue-700 underline pb-2">Clear filters</button>
                     <div id="reg-count" class="text-xs text-gray-500 pb-2 ml-auto"></div>
                 </div>
@@ -679,6 +679,7 @@
                             <button id="ax-sync-btn" onclick="app.axSync()" class="write-only bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow-sm text-sm font-medium" title="Fetch devices and patches from Automox now (read-only; takes a minute or more)">⟳ Sync from Automox</button>
                             <button onclick="app.axApplyTasks()" class="write-only bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm" title="Mark task assets fixed (awaiting scan) where Automox shows the fixing patch installed">Update tasks</button>
                             <button onclick="app.axExportCSV()" class="bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm">⬇ CSV</button>
+                            <button onclick="app.axExportList()" class="bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm" title="The machines listed below (after the tile and search), one name per line: e.g. the ⊘ No patch policy list for the Automox administrators">⬇ Machine list</button>
                         </div>
                     </div>
                     <div id="ax-status" class="mb-4 text-sm"></div>
@@ -1758,7 +1759,8 @@
                         agent: '2.4.33', lastSeen: new Date(now - (stale ? 12 : R()) * dayMs).toISOString(), lastDisconnect: '', connected: !stale, needsReboot: reboot, pending: 0, upToDate: false,
                         needsAttention: fail, lastLoggedIn: '', nextPatch: '', compliant: !fail,
                         policies: [{ id: i % 23 === 0 ? 'px' : (i % 11 === 0 ? 'pm' : 'pw' + (i % 7)), name: '', type: 'patch', compliant: !fail, lastRun: new Date(now - 2 * dayMs).toISOString(), pendingCount: null, willReboot: reboot },
-                            { id: 'p2', name: 'Required agents', type: 'required_software', compliant: true, lastRun: new Date(now - 6 * dayMs).toISOString(), pendingCount: null, willReboot: false }],
+                            { id: 'p2', name: 'Required agents', type: 'required_software', compliant: true, lastRun: new Date(now - 6 * dayMs).toISOString(), pendingCount: null, willReboot: false }]
+                            .filter(p => !(i % 19 === 7 && p.type === 'patch')),          // a few machines in no patch policy at all (⊘ on Patch Coverage)
                         deviceStatus: stale ? 'disconnected' : 'ready', agentStatus: stale ? 'disconnected' : 'connected', group: '1', tags: [], created: '' });
                     (byId.get(m.id).d || []).forEach(r => {
                         const q = cat.get(r[0]); if (!q.patch) return;
@@ -3652,6 +3654,15 @@
             }
 
             // Words as well as colour (colour-blind users): every badge says what it means.
+            // Does an active, automatic patch policy apply to this device? (v4.10) 'ok', 'off' (only inactive or manual ones),
+            // 'none' (no patch policy at all), or null when the policies have not been read yet (sync Automox).
+            static patchPolicy(dev) {
+                const P = this.data?.polById; if (!dev || !P || !P.size) return null;
+                let any = 0, auto = 0;
+                (dev.policies || []).forEach(dp => { const p = P.get(String(dp.id)); if (!p || p.type !== 'patch') return; any++; if (p.active && p.auto !== false) auto++; });
+                return auto ? 'ok' : (any ? 'off' : 'none');
+            }
+            static POLICY_WHY = { none: 'no patch policy', off: 'patch policy inactive or not automatic' };
             static badge(dev, how) {
                 if (!dev) return how === 'ambiguous' || how === 'duplicate'
                     ? `<span class="text-[10px] font-bold rounded border border-amber-400 text-amber-800 bg-amber-50 px-1.5 py-0.5">? ${how === 'duplicate' ? 'Duplicate?' : 'Ambiguous'}</span>`
@@ -5017,6 +5028,7 @@
                     if (d.compliant === false) c.add('noncompliant');
                     if (d.needsReboot) c.add('reboot');
                     if (d.pending > 0) c.add('waiting');
+                    const pp = AutomoxService.patchPolicy(d); if (pp === 'none' || pp === 'off') c.add('nopolicy');
                 }
                 return c;
             }
@@ -5063,6 +5075,7 @@
                     ['ALL', 'Assets', count('ALL'), 'border-slate-400', 'in the register' + (scope === 'ALL' ? '' : ' for ' + scope)],
                     ['managed', '✓ Managed', count('managed'), 'border-teal-500', 'Automox agent found'],
                     ['none', '✗ No agent', count('none'), 'border-red-500', 'no Automox device found'],
+                    ['nopolicy', '⊘ No patch policy', count('nopolicy'), 'border-rose-500', AutomoxService.data?.polById?.size ? 'agent, but nothing patches it automatically' : 'policies not read yet: sync Automox'],
                     ['stale', '⏸ Stale agent', count('stale'), 'border-orange-500', `no check-in for ${AutomoxService.STALE_DAYS}+ days`],
                     ['noncompliant', '⚠ Not compliant', count('noncompliant'), 'border-amber-500', 'a policy is failing'],
                     ['reboot', '↻ Reboot needed', count('reboot'), 'border-purple-500', 'patches wait for a restart'],
@@ -5108,7 +5121,7 @@
                     return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(n)}" onclick="app.openAssetDetail(this.dataset.n)">
                         <td class="px-2 py-2 font-medium text-gray-800 max-w-[220px]"><div class="truncate" title="${esc(n)}">${esc(n)}</div><div class="text-[10px] text-gray-500">${esc(Lifecycle.osFamily(r.os) || r.os || '')}</div></td>
                         <td class="px-2 py-2 text-xs">${esc(r.owner || 'Unknown')}</td>
-                        <td class="px-2 py-2">${AutomoxService.badge(d, x.how)}${d ? `<div class="text-[10px] text-gray-500 mt-0.5" title="${esc(d.name)}">${esc(d.name)}${x.how && x.how !== 'name' ? ` · <span class="${x.how === 'IP only' ? 'text-amber-700 font-semibold' : ''}">by ${esc(x.how)}</span>` : ''}</div>` : (x.how === 'ambiguous' ? `<div class="text-[10px] text-gray-500">${(x.cands || []).length} candidates · see below</div>` : x.how === 'duplicate' ? `<div class="text-[10px] text-gray-500">device belongs to ${esc(x.of)}</div>` : '')}</td>
+                        <td class="px-2 py-2">${AutomoxService.badge(d, x.how)}${(() => { const pp = AutomoxService.patchPolicy(d); return pp === 'none' || pp === 'off' ? `<div class="text-[10px] font-semibold text-rose-800 mt-0.5" title="Automox will not patch this machine by itself">⊘ ${esc(AutomoxService.POLICY_WHY[pp])}</div>` : ''; })()}${d ? `<div class="text-[10px] text-gray-500 mt-0.5" title="${esc(d.name)}">${esc(d.name)}${x.how && x.how !== 'name' ? ` · <span class="${x.how === 'IP only' ? 'text-amber-700 font-semibold' : ''}">by ${esc(x.how)}</span>` : ''}</div>` : (x.how === 'ambiguous' ? `<div class="text-[10px] text-gray-500">${(x.cands || []).length} candidates · see below</div>` : x.how === 'duplicate' ? `<div class="text-[10px] text-gray-500">device belongs to ${esc(x.of)}</div>` : '')}</td>
                         <td class="px-2 py-2 text-xs whitespace-nowrap">${d ? esc(AutomoxService.ago(d.lastSeen)) : '-'}</td>
                         <td class="px-2 py-2 text-xs">${d ? `<strong>${fmtNum(d.pending)}</strong>${sevTxt ? `<div class="text-[10px] text-red-800">${sevTxt}</div>` : ''}${d.kev ? `<div class="text-[10px] font-bold text-red-800">⚑ ${d.kev} known exploited</div>` : ''}` : '-'}</td>
                         <td class="px-2 py-2 text-xs max-w-[220px]">${d ? (fails.length ? `<span class="text-amber-800 font-semibold">⚠ ${fails.length} failing</span><div class="text-[10px] text-gray-500 truncate" title="${esc(fails.map(p => p.name || ('policy ' + p.id)).join('\n'))}">${esc(fails.map(p => p.name || ('policy ' + p.id)).join(', '))}</div>` : (d.compliant === true ? '✓ compliant' : '-')) : '-'}</td>
@@ -5203,13 +5216,20 @@
                 this._axNote = AutomoxEvidence.summaryText(s) + (missing ? ` · ${missing} device${missing === 1 ? '' : 's'} with open tasks not checked yet: press Sync.` : '');
                 this.renderAutomox();
             }
+            axExportList() {
+                const names = App.hostNames(new Set((this._axList || []).map(r => r.normalizedName)));
+                if (!names.length) { StorageService.toast('No machines to export'); return; }
+                App.downloadList(`patch_coverage_${this.axState?.filter && this.axState.filter !== 'ALL' ? this.axState.filter : 'all'}`, names);
+                StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
+            }
             axExportCSV() {
                 const m = AutomoxService.match(); if (!m) { StorageService.toast('No Automox data yet'); return; }
                 const safe = (v) => { const t = String(v ?? ''); return /^[=+\-@\t\r]/.test(t) ? "'" + t : t; };
-                const head = ['Asset', 'Owner', 'OS', 'Automox', 'Device', 'Matched by', 'Last check-in', 'Waiting patches', 'Critical', 'High', 'Known exploited', 'Compliant', 'Failing policies', 'Reboot needed', 'Agent version'];
+                const head = ['Asset', 'Owner', 'OS', 'Automox', 'Device', 'Matched by', 'Last check-in', 'Waiting patches', 'Critical', 'High', 'Known exploited', 'Compliant', 'Failing policies', 'Reboot needed', 'Agent version', 'Patch policy'];
+                const ppTxt = (d) => { const pp = AutomoxService.patchPolicy(d); return pp === 'ok' ? 'automatic' : pp ? AutomoxService.POLICY_WHY[pp] : ''; };
                 const rows = (this._axList || []).map(r => { const x = m.byAsset.get(r.normalizedName) || {}, d = x.dev;
                     const state = !d ? (x.how === 'ambiguous' ? 'Ambiguous' : 'No agent') : AutomoxService.stale(d) ? 'Stale' : d.compliant === false ? 'Not compliant' : 'Managed';
-                    return [r.normalizedName, r.owner, r.os, state, d?.name, d ? x.how : '', d?.lastSeen, d?.pending, d?.sev.critical, d?.sev.high, d?.kev, d ? (d.compliant === false ? 'no' : d.compliant ? 'yes' : '') : '', d ? d.policies.filter(p => p.compliant === false).map(p => p.name || p.id).join('; ') : '', d ? (d.needsReboot ? 'yes' : 'no') : '', d?.agent].map(safe); });
+                    return [r.normalizedName, r.owner, r.os, state, d?.name, d ? x.how : '', d?.lastSeen, d?.pending, d?.sev.critical, d?.sev.high, d?.kev, d ? (d.compliant === false ? 'no' : d.compliant ? 'yes' : '') : '', d ? d.policies.filter(p => p.compliant === false).map(p => p.name || p.id).join('; ') : '', d ? (d.needsReboot ? 'yes' : 'no') : '', d?.agent, ppTxt(d)].map(safe); });
                 const blob = new Blob(['﻿' + Papa.unparse([head, ...rows])], { type: 'text/csv;charset=utf-8' });
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `patch_coverage_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
                 setTimeout(() => URL.revokeObjectURL(a.href), 5000);

@@ -69,7 +69,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.5.2 · 17 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.6.0 · 17 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -593,56 +593,46 @@
                     <div id="rpt-coverage" class="mb-6"></div>
                     <div id="rpt-asof" class="mb-6"></div>
 
-                    <!-- 1. Executive Summary -->
+                    <!-- 1. Summary -->
                     <div class="mb-8">
-                        <h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-4">1. Executive Summary</h3>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="rpt-exec-summary">
-                            <!-- Populated by JS -->
-                        </div>
+                        <h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-4">1. Summary</h3>
+                        <div id="rpt-status-line" class="mb-4 text-sm"></div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="rpt-exec-summary"></div>
                     </div>
 
-                    <!-- 2 & 3: Services & Assets side-by-side -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                        <div>
-                            <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">2. Top Risk Services</h3>
-                            <table class="min-w-full text-sm text-left">
-                                <thead class="text-gray-500 bg-gray-50 border-b">
-                                    <tr><th class="py-2 px-2 font-semibold">Service</th><th class="py-2 px-2 font-semibold text-right">Assets</th><th class="py-2 px-2 font-semibold">Highest TruRisk</th><th class="py-2 px-2 font-semibold text-right">Fix now</th></tr>
-                                </thead>
-                                <tbody id="rpt-svc-risk" class="divide-y"></tbody>
-                            </table>
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">3. Highest Risk Assets <span class="text-xs font-normal text-gray-400">worst priority, then Tier, then TruRisk</span></h3>
-                            <table class="min-w-full text-sm text-left">
-                                <thead class="text-gray-500 bg-gray-50 border-b">
-                                    <tr><th class="py-2 px-2 font-semibold">Asset</th><th class="py-2 px-2 font-semibold text-center">Tier</th><th class="py-2 px-2 font-semibold">TruRisk</th><th class="py-2 px-2 font-semibold text-right">Detections</th><th class="py-2 px-2 font-semibold text-right">P1</th><th class="py-2 px-2 font-semibold text-right">Overdue</th></tr>
-                                </thead>
-                                <tbody id="rpt-top-assets" class="divide-y"></tbody>
-                            </table>
-                        </div>
+                    <!-- 2. Machines to fix first -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">2. Machines to fix first <span class="text-xs font-normal text-gray-400">overdue P1/P2 first, then the most P1, the most P2, Internet facing and Tier 1</span></h3>
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2 font-semibold text-right">#</th><th class="py-2 px-2 font-semibold">Machine</th><th class="py-2 px-2 font-semibold text-center">Tier</th><th class="py-2 px-2 font-semibold text-right">P1</th><th class="py-2 px-2 font-semibold text-right">P2</th><th class="py-2 px-2 font-semibold text-right">Overdue</th><th class="py-2 px-2 font-semibold">Why it is here</th></tr></thead>
+                            <tbody id="rpt-top-assets" class="divide-y"></tbody>
+                        </table>
                     </div>
 
-                    <!-- 4 & 5: Patching & Health -->
+                    <!-- 3. Fixes that clear the most -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">3. Fixes that clear the most <span class="text-xs font-normal text-gray-400">P1 first, then overdue, the most machines, the most Internet-facing or Tier 1</span></h3>
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2 font-semibold text-right">#</th><th class="py-2 px-2 font-semibold">Fix</th><th class="py-2 px-2 font-semibold text-center">P</th><th class="py-2 px-2 font-semibold text-right">Machines</th><th class="py-2 px-2 font-semibold">Due</th><th class="py-2 px-2 font-semibold">Task</th></tr></thead>
+                            <tbody id="rpt-patch-priority" class="divide-y"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- 4 & 5: Patch Plan and data gaps -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                         <div>
-                            <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">4. Fix Priority Queue</h3>
-                            <table class="min-w-full text-sm text-left">
-                                <thead class="text-gray-500 bg-gray-50 border-b">
-                                    <tr><th class="py-2 px-2 font-semibold">Fix</th><th class="py-2 px-2 font-semibold text-right">Assets</th><th class="py-2 px-2 font-semibold text-center">Priority</th><th class="py-2 px-2 font-semibold text-center">Patch</th></tr>
-                                </thead>
-                                <tbody id="rpt-patch-priority" class="divide-y"></tbody>
-                            </table>
+                            <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">4. Patch Plan <span id="rpt-plan-window" class="text-xs font-normal text-gray-400"></span></h3>
+                            <div id="rpt-plan" class="space-y-2 text-sm"></div>
                         </div>
                         <div>
-                            <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">5. Governance Health</h3>
-                            <div id="rpt-gov-health" class="space-y-4"></div>
+                            <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">5. Data gaps</h3>
+                            <div id="rpt-gov-health" class="space-y-2"></div>
                         </div>
                     </div>
 
                     <!-- 6: Actions -->
                     <div class="bg-blue-50 border border-blue-200 p-6 rounded-lg print-break">
-                        <h3 class="text-lg font-bold text-blue-900 border-b border-blue-200 pb-2 mb-4">6. Recommended Actions Next 30 Days</h3>
+                        <h3 class="text-lg font-bold text-blue-900 border-b border-blue-200 pb-2 mb-4">6. Recommended actions</h3>
                         <ul id="rpt-actions" class="list-disc pl-5 space-y-3 text-sm text-blue-800"></ul>
                     </div>
 
@@ -663,7 +653,7 @@
                         </div>
                         <div id="rpt-ai-out" class="text-sm text-gray-800"></div>
                     </div>
-                    <p class="mt-6 text-[11px] text-gray-500"><strong>How this is scored.</strong> Each open finding gets an action priority P1-P4 from its finding tier and its asset's Tier (set by people; not set counts as Tier 2), with Internet-facing assets more urgent, and a due date counted from when it was first found (findings from before go-live are backlog with their own targets). The exact rules, days and tier names in use are in Organisation setup (Status rules and Organisation). Assets rank by worst priority, then Tier, then TruRisk (0-1000; Low &lt;500, Medium 500-699, High 700-849, Critical 850+). TruRisk is one score per asset, so it is never added up across findings. Finding tiers come from Qualys signals: <em>Fix now</em> = CISA KEV, active attacks, ransomware, wormable or zero-day; <em>This sprint</em> = QVS 70+ or remote code execution with a public exploit; <em>Scheduled</em> = severity 5 or QVS 40+; otherwise <em>Routine</em>. Fixes are grouped by QID and ranked by priority, then assets affected × QVS.</p>
+                    <p class="mt-6 text-[11px] text-gray-500"><strong>How this is scored.</strong> The same rules and rankings as Vuln Management, Status and Patch Plan. Each open finding gets an action priority P1-P4 from its finding tier and its asset's Tier (set by people; not set counts as Tier 2), with Internet-facing assets more urgent, and a due date counted from when it was first found (findings from before go-live are backlog with their own targets). The exact rules, days and tier names in use are in Organisation setup (Status rules and Organisation). Assets rank by worst priority, then Tier, then TruRisk (0-1000; Low &lt;500, Medium 500-699, High 700-849, Critical 850+). TruRisk is one score per asset, so it is never added up across findings. Finding tiers come from Qualys signals: <em>Fix now</em> = CISA KEV, active attacks, ransomware, wormable or zero-day; <em>This sprint</em> = QVS 70+ or remote code execution with a public exploit; <em>Scheduled</em> = severity 5 or QVS 40+; otherwise <em>Routine</em>. Fixes are grouped by QID and ranked by priority, then assets affected × QVS.</p>
                 </div>
             </section>
 
@@ -4350,6 +4340,28 @@
                 return { b: 'will', why: (approx ? 'waiting patch matched by package name (≈)' : 'waiting patch names its CVE') + note, when: next, approx };
             }
 
+            // The four Patch Plan sections for a team and urgency (shared by the Patch Plan page and the Team Risk Report). null = no Automox data.
+            async planBuckets(team, pmax) {
+                const S = StatusEngine.settings(), days = +S.patchPlanDays || 7, end = Date.now() + days * 864e5;
+                let D = null; if (Demo.api()) { try { D = await AutomoxService.ensure(); } catch (e) { D = null; } }
+                const { dets, vd, regMap } = await this.scopedData({ owner: team, riskStatus: 'Open', p: pmax });
+                if (!D) return null;
+                const m = AutomoxService.match(), auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
+                const B = { manual: [], blocked: [], will: [], done: [] };
+                dets.forEach(d => {
+                    const r = regMap.get(d.asset) || {}, q = vd.qmap.get(d.qid) || {};
+                    const c = App.planClassify(d, r, m, end, S, q, auto.has(String(r.owner || '').toLowerCase()));
+                    B[c.b].push({ ...d, _why: c.why, _when: c.when, _approx: c.approx });
+                });
+                // fixed according to Qualys in the last N days, in the same scope (the "done" half that Qualys has already confirmed)
+                const since = Date.now() - days * 864e5, scope = new Set([...regMap.values()].filter(r => (team === 'ALL' || r.owner === team)).map(r => r.normalizedName));
+                (vd.all || []).filter(d => !RemediationVerifier.ACTIVE(d.status) && scope.has(d.asset) && AutomoxService.time(d.last) >= since).forEach(d => {
+                    const q = vd.qmap.get(d.qid) || {}, t = PriorityEngine.tier(d, q), p = StatusEngine.priority(StatusEngine.findingTier({ ...d, tier: t }, S), regMap.get(d.asset), S);
+                    if (pmax === 'ALL' || p <= +pmax) B.done.push({ ...d, tier: t, p, _why: 'fixed: Qualys no longer finds it' });
+                });
+                return { B, dets, vd, regMap, days, end };
+            }
+
             async renderPlan() {
                 const $ = (id) => document.getElementById(id), body = $('plan-body'); if (!body) return;
                 const f = this.planF, S = StatusEngine.settings(), days = +S.patchPlanDays || 7;
@@ -4361,22 +4373,10 @@
                 $('plan-urgency').innerHTML = U.map(([v, l]) => { const on = f.p === v; return `<button role="radio" aria-checked="${on}" onclick="app.planSet('p', '${v}')" class="px-3 py-1 rounded-full text-sm whitespace-nowrap ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${l}</button>`; }).join('');
                 if (!Demo.api()) { body.innerHTML = '<div class="bg-white border rounded-lg p-4 text-sm text-gray-700">The Patch Plan needs Automox, which runs on the CyberView server. Here you can still see every finding in Vuln Management.</div>'; $('plan-summary').textContent = ''; return; }
                 body.innerHTML = '<p class="text-gray-500 italic p-4">Working it out…</p>';
-                let D = null; try { D = await AutomoxService.ensure(); } catch (e) { D = null; }
-                const { dets, vd, regMap } = await this.scopedData({ owner: f.team, riskStatus: 'Open', p: f.p });
+                const PB = await this.planBuckets(f.team, f.p);
                 if (this.currentView !== 'plan') return;
-                if (!D) { body.innerHTML = '<div class="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-900">⚠ No Automox data yet. Open Patch Coverage and press Sync from Automox.</div>'; $('plan-summary').textContent = ''; return; }
-                const m = AutomoxService.match(), auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
-                const B = { manual: [], blocked: [], will: [], done: [] };
-                dets.forEach(d => {
-                    const r = regMap.get(d.asset) || {}, q = vd.qmap.get(d.qid) || {};
-                    const c = App.planClassify(d, r, m, end, S, q, auto.has(String(r.owner || '').toLowerCase()));
-                    B[c.b].push({ ...d, _why: c.why, _when: c.when, _approx: c.approx });
-                });
-                // fixed according to Qualys in the last N days, in the same scope (the "done" half that Qualys has already confirmed)
-                const since = Date.now() - days * 864e5, scope = new Set([...regMap.values()].filter(r => (f.team === 'ALL' || r.owner === f.team)).map(r => r.normalizedName));
-                const fixed = (vd.all || []).filter(d => !RemediationVerifier.ACTIVE(d.status) && scope.has(d.asset) && AutomoxService.time(d.last) >= since);
-                fixed.forEach(d => { const q = vd.qmap.get(d.qid) || {}; const t = PriorityEngine.tier(d, q); const p = StatusEngine.priority(StatusEngine.findingTier({ ...d, tier: t }, S), regMap.get(d.asset), S);
-                    if (f.p === 'ALL' || p <= +f.p) B.done.push({ ...d, tier: t, p, _why: 'fixed: Qualys no longer finds it' }); });
+                if (!PB) { body.innerHTML = '<div class="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-900">⚠ No Automox data yet. Open Patch Coverage and press Sync from Automox.</div>'; $('plan-summary').textContent = ''; return; }
+                const { B, dets, vd, regMap } = PB;
                 this._plan = B;
                 const n = (a) => fmtNum(a.length), mach = (a) => fmtNum(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
                 const scopeTxt = [f.team === 'ALL' ? 'All teams' : f.team, f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : ''].filter(Boolean).join(' · ');
@@ -7181,82 +7181,99 @@
                 const remSt = RemediationStats.compute(RemediationService.list(), scope);
                 $('rpt-remediation').innerHTML = RemediationStats.html(remSt, { compact: true });
 
-                // 1. Executive summary
-                const accepted = dets.filter(d => (sd.regMap.get(d.asset)?.riskStatus) === 'Risk Accepted').length;
-                const t1 = dets.filter(d => d.tier === 1), t2 = dets.filter(d => d.tier === 2);
-                const patchPct = dets.length ? Math.round(dets.filter(d => d.patchable).length / dets.length * 100) : 0;
-                const tile = (label, value, sub, cls = 'bg-slate-50 border') => `<div class="p-4 rounded ${cls}"><p class="text-[10px] text-gray-500 uppercase font-semibold">${label}</p><p class="text-xl font-bold text-gray-900">${value}</p>${sub ? `<p class="text-[11px] text-gray-500 mt-0.5">${sub}</p>` : ''}</div>`;
+                // 1. Summary: the team's status headline (the Status engine) and the figures behind it
+                const S = StatusEngine.settings(), sev = (n) => fmtNum(n);
+                let st = null; try { st = await this.statusData(); } catch (e) { st = null; }
+                if (this.currentView !== 'reports') return;
+                const teams = st ? (scope === 'ALL' ? st.teams : st.teams.filter(t => t.team === scope)) : [];
+                $('rpt-status-line').innerHTML = teams.length ? `<div class="flex flex-wrap gap-x-6 gap-y-2">${teams.map(t => `<div><span class="font-semibold">${esc(t.team)}</span> ${this.teamWordHTML(t)} <span class="text-xs text-gray-600">${esc((t.why || []).join(' · '))}</span></div>`).join('')}</div>` : '';
+                const T = teams.reduce((a, t) => ({ newP12: a.newP12 + (t.newP12 || 0), newIn: a.newIn + (t.newIn || 0), over12: a.over12 + (t.over12 || 0), bl12: a.bl12 + (t.bl12 || 0), blOver: a.blOver + (t.blOver || 0) }), { newP12: 0, newIn: 0, over12: 0, bl12: 0, blOver: 0 });
+                const p1 = dets.filter(d => d.p === 1), accepted = dets.filter(d => (sd.regMap.get(d.asset)?.riskStatus) === 'Risk Accepted').length;
+                const tile = (label, value, sub) => `<div class="p-4 rounded bg-slate-50 border"><p class="text-[10px] text-gray-500 uppercase font-semibold">${label}</p><p class="text-xl font-bold text-gray-900">${value}</p>${sub ? `<p class="text-[11px] text-gray-500 mt-1">${sub}</p>` : ''}</div>`;
                 $('rpt-exec-summary').innerHTML =
-                    tile('Assets with findings', `${fmtNum(assets.length)} <span class="text-sm font-medium text-gray-500">of ${fmtNum(inScope.length)}</span>`, 'in scope') +
-                    tile('Open detections', fmtNum(dets.length), accepted ? `${fmtNum(accepted)} on risk-accepted assets` : `${fmtNum(groups.length)} distinct fixes`) +
-                    tile('Fix now', fmtNum(t1.length), `known exploited, ${fmtNum(new Set(t1.map(d => d.asset)).size)} assets · +${fmtNum(t2.length)} this sprint`, 'bg-red-50 border border-red-200') +
-                    tile('Fixable by patching', patchPct + '%', `${fmtNum(dets.filter(d => d.patchable).length)} of ${fmtNum(dets.length)} detections`, 'bg-blue-50 border border-blue-200');
+                    tile('New P1/P2 within due date', T.newP12 ? Math.round(T.newIn * 100 / T.newP12) + '%' : '-', T.newP12 ? `${sev(T.newIn)} of ${sev(T.newP12)} since go-live` : 'none since go-live') +
+                    tile('P1/P2 overdue', T.over12 ? '✖ ' + sev(T.over12) : '0', 'new and backlog') +
+                    tile('Open P1 findings', sev(p1.length), `on ${sev(new Set(p1.map(d => d.asset)).size)} of ${sev(assets.length)} machines with findings${accepted ? ` · ${sev(accepted)} on risk-accepted machines` : ''}`) +
+                    tile('Backlog P1/P2', sev(T.bl12), T.blOver ? `✖ ${sev(T.blOver)} past target` : 'within target');
 
                 const empty = (c, m) => `<tr><td colspan="${c}" class="px-2 py-4 text-center text-gray-500 italic">${m}</td></tr>`;
-                const t1cell = (n) => `<td class="px-2 py-2 text-right font-mono ${n ? 'text-red-700 font-bold' : 'text-gray-400'}">${fmtNum(n)}</td>`;
 
-                // 2. Services: assets, worst TruRisk, fix-now count
-                const svc = new Map();
-                assets.forEach(a => {
-                    if (!svc.has(a.service)) svc.set(a.service, { service: a.service, count: 0, maxTru: 0, t1: 0 });
-                    const e = svc.get(a.service);
-                    e.count++; e.maxTru = Math.max(e.maxTru, a.truRisk); e.t1 += a.t1;
-                });
-                const topSvcs = [...svc.values()].sort((x, y) => y.t1 - x.t1 || y.maxTru - x.maxTru).slice(0, 6);
-                $('rpt-svc-risk').innerHTML = topSvcs.length ? topSvcs.map(t => `<tr><td class="px-2 py-2 font-medium text-gray-700">${esc(t.service)}</td><td class="px-2 py-2 text-right font-mono">${fmtNum(t.count)}</td><td class="px-2 py-2">${PriorityEngine.truRiskBadge(t.maxTru)}</td>${t1cell(t.t1)}</tr>`).join('') : empty(4, 'No service data.');
+                // 2. Machines to fix first (same ranking as Vuln Management)
+                const ranked = [...assets].sort(App.vulnAssetCmp);
+                const topAssets = ranked.slice(0, 10);
+                $('rpt-top-assets').innerHTML = topAssets.length ? topAssets.map((t, i) => `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(t.name)}" onclick="app.openAssetDetail(this.dataset.n)">
+                    <td class="px-2 py-2 text-right text-gray-500">${i + 1}</td><td class="px-2 py-2 font-medium text-gray-800">${esc(t.name)}</td>
+                    <td class="px-2 py-2 text-center">${StatusEngine.tierOf(t.r) ? 'T' + StatusEngine.tierOf(t.r) : '<span class="text-xs text-gray-500">? not set</span>'}</td>
+                    <td class="px-2 py-2 text-right font-mono ${t.p1 ? 'font-bold' : 'text-gray-400'}">${sev(t.p1)}</td><td class="px-2 py-2 text-right font-mono ${t.p2 ? 'font-semibold' : 'text-gray-400'}">${sev(t.p2)}</td>
+                    <td class="px-2 py-2 text-right font-mono">${t.overdue ? '<strong>✖ ' + sev(t.overdue) + '</strong>' : '<span class="text-gray-400">0</span>'}</td>
+                    <td class="px-2 py-2 text-xs text-gray-700">${esc(App.vulnWhy(t))}</td></tr>`).join('') : empty(7, 'No machines with findings in this scope.');
 
-                // 3. Highest-risk assets: criticality, then TruRisk
-                const topAssets = assets.slice(0, 10);
-                $('rpt-top-assets').innerHTML = topAssets.length ? topAssets.map(t => `<tr class="cursor-pointer hover:bg-blue-50" data-n="${esc(t.name)}" onclick="app.openAssetDetail(this.dataset.n)"><td class="px-2 py-2 font-medium text-gray-700 truncate max-w-[180px]" title="${esc(t.name)}">${esc(t.name)}</td><td class="px-2 py-2 text-center text-xs">${StatusEngine.tierCell(t.r, t)}</td><td class="px-2 py-2">${PriorityEngine.truRiskBadge(t.truRisk)}</td><td class="px-2 py-2 text-right font-mono">${fmtNum(t.detections)}</td>${t1cell(t.p1)}<td class="px-2 py-2 text-right font-mono">${t.overdue ? '✖ ' + fmtNum(t.overdue) : '0'}</td></tr>`).join('') : empty(6, 'No asset data.');
+                // 3. Fixes that clear the most (same ranking as Vuln Management)
+                const key1 = (g) => { let n = 0; g.assets.forEach(a => { const r = sd.regMap.get(a); if (r && (r.exposure === 'Internet Facing' || StatusEngine.tierOf(r) === 1)) n++; }); return n; };
+                groups.forEach(g => { g.key1 = key1(g); });
+                const fam = PriorityEngine.familyGroups([...groups].sort(App.vulnFixCmp), vd.qmap, App.vulnFixCmp);
+                fam.forEach(g => { if (g.family) g.key1 = key1(g); });
+                fam.sort(App.vulnFixCmp);
+                const RIX = RemediationVerifier.index();
+                const topFix = fam.slice(0, 10);
+                $('rpt-patch-priority').innerHTML = topFix.length ? topFix.map((g, i) => {
+                    const tasks = g.family ? g.members.flatMap(m => RIX.byQid.get(String(m.qid)) || []) : (RIX.byQid.get(String(g.qid)) || []);
+                    const tk = [...new Map(tasks.map(t => [t.id, t])).values()];
+                    return `<tr class="cursor-pointer hover:bg-blue-50 align-top" ${g.family ? `data-k="${esc(g.key)}" onclick="app.vulnOpenFamily(this.dataset.k)"` : `data-q="${esc(g.qid)}" onclick="app.inspectQid(this.dataset.q, 'report')"`}>
+                    <td class="px-2 py-2 text-right text-gray-500">${i + 1}</td>
+                    <td class="px-2 py-2 text-gray-800">${esc(g.title)}${g.family ? ` <span class="px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold whitespace-nowrap">${g.members.length} updates</span>` : ''}</td>
+                    <td class="px-2 py-2 text-center">${g.p && g.p < 5 ? StatusEngine.pBadge(g.p) : '-'}</td><td class="px-2 py-2 text-right font-mono font-semibold">${sev(g.assets.size)}</td>
+                    <td class="px-2 py-2 text-xs whitespace-nowrap ${g.overdue ? 'font-bold' : ''}">${g.due ? esc(StatusEngine.dueText(g)) : '-'}</td>
+                    <td class="px-2 py-2 text-xs">${tk.length ? tk.map(t => `${esc(t.id)} · ${esc(t.status)}`).join('<br>') : '<span class="text-gray-500">no task</span>'}</td></tr>`; }).join('') : empty(6, 'No open findings in this scope.');
 
-                // 4. Patching priority queue: fixes, not assets
-                const topFix = PriorityEngine.familyGroups(groups, vd.qmap).slice(0, 10);
-                $('rpt-patch-priority').innerHTML = topFix.length ? topFix.map(g => `<tr class="cursor-pointer hover:bg-blue-50" ${g.family ? `data-k="${esc(g.key)}" onclick="app.vulnOpenFamily(this.dataset.k)"` : `data-q="${esc(g.qid)}" onclick="app.inspectQid(this.dataset.q, 'report')"`}><td class="px-2 py-2 text-gray-700 truncate max-w-[220px]" title="${esc(g.title)}">${esc(g.title)}${g.family ? ` <span class="px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold whitespace-nowrap">${g.members.length} updates</span>` : ''}</td><td class="px-2 py-2 text-right font-mono">${fmtNum(g.assets.size)}</td><td class="px-2 py-2 text-center">${PriorityEngine.tierBadge(g.tier)}</td><td class="px-2 py-2 text-center">${g.patchable ? '✅' : '—'}</td></tr>`).join('')
-                     : empty(4, 'No fix data.');
+                // 4. Patch Plan (needs Automox)
+                let PB = null; try { PB = await this.planBuckets(scope, 'ALL'); } catch (e) { PB = null; }
+                if (this.currentView !== 'reports') return;
+                if (PB) {
+                    const { B } = PB, n = (a) => sev(a.length), mach = (a) => sev(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
+                    const endTxt = new Date(PB.end).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                    $('rpt-plan-window').textContent = `next ${PB.days} days, to ${endTxt}`;
+                    const row = (sym, label, a) => `<div class="flex justify-between gap-3 border rounded p-2 bg-white"><span>${sym} ${label}</span><span class="font-mono text-right">${n(a)} findings · ${mach(a)} machines${p12(a) ? ` · <strong>${sev(p12(a))} P1/P2</strong>` : ''}</span></div>`;
+                    const gap = new Map(); B.manual.forEach(d => { const k = d.qid; if (!gap.has(k)) gap.set(k, { qid: k, title: (vd.qmap.get(k) || {}).title || 'QID ' + k, p: 5, a: new Set() }); const g = gap.get(k); g.p = Math.min(g.p, d.p || 5); g.a.add(d.asset); });
+                    const topGap = [...gap.values()].sort((x, y) => x.p - y.p || y.a.size - x.a.size).slice(0, 5);
+                    $('rpt-plan').innerHTML = row('✋', '<strong>Manual remediation (the gap)</strong>', B.manual) + row('⚠', 'Automox patch blocked', B.blocked) + row('⟳', `Automox will patch by ${esc(endTxt)}`, B.will) + row('✓', `Patched in the last ${PB.days} days`, B.done)
+                        + (topGap.length ? `<p class="text-xs font-semibold text-gray-700 pt-2">Largest manual fixes</p><ul class="text-xs text-gray-700 list-disc pl-5">${topGap.map(g => `<li>${g.p < 5 ? 'P' + g.p + ' · ' : ''}${esc(g.title)}: ${sev(g.a.size)} machine${g.a.size === 1 ? '' : 's'}</li>`).join('')}</ul>` : '')
+                        + '<p class="text-[11px] text-gray-500">Full lists and machine lists for Ansible: 🗓️ Patch Plan.</p>';
+                } else {
+                    $('rpt-plan-window').textContent = '';
+                    $('rpt-plan').innerHTML = '<p class="text-sm text-gray-600">Needs Automox data (the CyberView server, after a Sync from Automox).</p>';
+                }
 
-                // 5. Governance health
+                // 5. Data gaps
                 const reg = inScope.filter(r => !r.unrecognised);
-                const missingOwnerCount = reg.filter(r => !r.owner || r.owner === 'Unknown').length;
+                const scans = StorageService.load(StorageService.KEYS.SCAN_DATES), scanOk = Date.now() - (S.scanOkDays || 14) * 864e5;
+                const gaps = [
+                    ['No owner', scope === 'ALL' ? reg.filter(r => !r.owner || r.owner === 'Unknown').length : null, 'assign in the Review Queue or Asset Register'],
+                    ['No service', reg.filter(r => !r.service || r.service === 'Unclassified').length, 'set in the Asset Register'],
+                    ['No tier', reg.filter(r => !StatusEngine.tierOf(r)).length, 'counts as Tier 2 until set'],
+                    ['Exposure unknown', reg.filter(r => !r.exposure || r.exposure === 'Unknown').length, 'counts as internal'],
+                    [`Not scanned in ${S.scanOkDays || 14} days`, (scans && !Array.isArray(scans)) ? reg.filter(r => !(StatusEngine.time(scans[r.normalizedName]) >= scanOk)).length : null, 'findings may be out of date'],
+                ].filter(g => g[1] !== null);
+                $('rpt-gov-health').innerHTML = gaps.map(([label, n, help]) => `<div class="flex justify-between items-center bg-white p-2 rounded border"><span class="text-gray-700">${n ? '?' : '✓'} ${label} <span class="text-[11px] text-gray-500">${help}</span></span><span class="font-mono font-bold">${sev(n)} of ${sev(reg.length)}</span></div>`).join('');
+                const missingOwnerCount = scope === 'ALL' ? reg.filter(r => !r.owner || r.owner === 'Unknown').length : 0;
                 const unclassifiedCount = reg.filter(r => !r.service || r.service === 'Unclassified').length;
-                const healthScore = reg.length === 0 ? 100 : Math.round(((reg.length - (scope === 'ALL' ? missingOwnerCount : 0) - unclassifiedCount) / reg.length) * 100);
-                $('rpt-gov-health').innerHTML = `
-                    <div class="flex justify-between items-center bg-white p-3 rounded shadow-sm border"><span class="font-medium text-gray-700">Scope Data Health</span><span class="font-bold ${healthScore > 90 ? 'text-green-600' : 'text-amber-600'}">${healthScore}%</span></div>
-                    ${scope === 'ALL' ? `<div class="flex justify-between items-center bg-white p-3 rounded shadow-sm border"><span class="font-medium text-gray-700">Missing Ownership</span><span class="font-bold text-red-600">${missingOwnerCount} Assets</span></div>` : ''}
-                    <div class="flex justify-between items-center bg-white p-3 rounded shadow-sm border"><span class="font-medium text-gray-700">Unclassified Services</span><span class="font-bold text-amber-600">${unclassifiedCount} Assets</span></div>
-                `;
 
-                // 6. Recommended actions: concrete, from the data
+                // 6. Recommended actions, in the same terms as the rest of the portal
                 const actions = [];
-                if (remSt.overdue) actions.push(`<strong>Chase overdue remediation:</strong> ${fmtNum(remSt.overdue)} of ${fmtNum(remSt.open)} open tasks are past their due date${remSt.topOverdue[0] ? `, the oldest ${esc(remSt.topOverdue[0].id)} (${esc(remSt.topOverdue[0].title)}) by ${fmtNum(-EolDates.days(remSt.topOverdue[0].due))} days` : ''}.`);
-                if (remSt.reopened) actions.push(`<strong>Look at reopened tasks:</strong> ${fmtNum(remSt.reopened)} task${remSt.reopened === 1 ? '' : 's'} had a finding come back after it was verified.`);
-                const RIXr = RemediationVerifier.index();
-                const untracked = groups.filter(g => g.tier === 1 && !(RIXr.byQid.get(String(g.qid)) || []).length);
-                if (untracked.length) actions.push(`<strong>Track the Fix-now work:</strong> ${fmtNum(untracked.length)} Fix-now fix${untracked.length === 1 ? ' has' : 'es have'} no remediation task yet (use ＋ Track in Vuln Management), e.g. <em>${esc(plain(untracked[0].title))}</em>.`);
-                const have = new Set(assets.map(a => a.name));
-                const noData = inScope.filter(r => !have.has(r.normalizedName)).length;
-                const meta = this.loadVulnMeta();
-                if (meta.imports.length && noData > 0) {
-                    actions.push(`<strong>Close the data gap:</strong> ${fmtNum(noData)} of ${fmtNum(inScope.length)} assets in scope have no vulnerability data. ${meta.truncated ? 'The Qualys export was truncated, so import further batches (by tag or asset group) before relying on these figures.' : 'Check they are being scanned.'}`);
-                }
-                const exploitedGroups = groups.filter(g => g.tier === 1);
-                if (exploitedGroups.length) {
-                    const top = exploitedGroups[0];
-                    actions.push(`<strong>Fix known-exploited vulnerabilities first:</strong> ${fmtNum(t1.length)} detections across ${fmtNum(exploitedGroups.length)} fixes are flagged CISA KEV, actively attacked, ransomware, wormable or zero-day. Start with <em>${esc(top.title)}</em> (${fmtNum(top.assets.size)} assets).`);
-                }
-                const patchGroups = groups.filter(g => g.patchable);
-                if (patchGroups.length) {
-                    const cleared = patchGroups.reduce((n, g) => n + g.detections, 0);
-                    actions.push(`<strong>Work the fix queue in order:</strong> ${fmtNum(patchGroups.length)} of the ${fmtNum(groups.length)} fixes are patches, and applying them all would clear ${fmtNum(cleared)} of ${fmtNum(dets.length)} open detections (${dets.length ? Math.round(cleared / dets.length * 100) : 0}%). The rest need an upgrade or a compensating control.`);
-                }
-                if (topAssets.length) {
-                    const a = topAssets[0];
-                    actions.push(`<strong>Review <em>${esc(a.name)}</em> first:</strong> criticality ${a.criticality || 'n/a'}, TruRisk ${fmtNum(a.truRisk)} (${PriorityEngine.band(a.truRisk).label}), ${fmtNum(a.t1)} fix-now detections.`);
-                }
-                const unpatchable = dets.filter(d => !d.patchable).length;
-                if (unpatchable > 0) actions.push(`<strong>Plan for the unpatchable:</strong> ${fmtNum(unpatchable)} detections have no patch (end-of-life software, configuration issues). They need an upgrade, a compensating control or a risk acceptance.`);
-                if (scope === 'ALL' && missingOwnerCount > 0) actions.push(`<strong>Assign Orphaned Systems:</strong> ${missingOwnerCount} assets have no accountable team. Triage the Review Queue.`);
-                if (unclassifiedCount > 0) actions.push(`<strong>Map Application Services:</strong> ${unclassifiedCount} assets in this scope are missing service context.`);
-                if (actions.length === 0) actions.push('<strong>No critical governance actions required for this scope.</strong>');
+                const overdueFix = fam.filter(g => g.overdue && g.p <= 2);
+                if (T.over12) actions.push(`<strong>Clear the overdue P1/P2 findings:</strong> ${sev(T.over12)} are past their due date${overdueFix[0] ? `; start with <em>${esc(overdueFix[0].title)}</em> (${sev(overdueFix[0].assets.size)} machines)` : ''}.`);
+                if (remSt.overdue) actions.push(`<strong>Chase overdue tasks:</strong> ${sev(remSt.overdue)} of ${sev(remSt.open)} open tasks are past their due date${remSt.topOverdue[0] ? `, the oldest ${esc(remSt.topOverdue[0].id)}` : ''}.`);
+                if (remSt.reopened) actions.push(`<strong>Look at reopened tasks:</strong> ${sev(remSt.reopened)} task${remSt.reopened === 1 ? '' : 's'} had a finding come back after it was verified.`);
+                const untracked = fam.filter(g => g.p === 1 && !(g.family ? g.members.some(m => (RIX.byQid.get(String(m.qid)) || []).length) : (RIX.byQid.get(String(g.qid)) || []).length));
+                if (untracked.length) actions.push(`<strong>Track the P1 fixes:</strong> ${sev(untracked.length)} P1 fix${untracked.length === 1 ? ' has' : 'es have'} no task yet (＋ Track in Vuln Management), e.g. <em>${esc(untracked[0].title)}</em>.`);
+                if (topAssets[0]) actions.push(`<strong>Start with <em>${esc(topAssets[0].name)}</em>:</strong> ${esc(App.vulnWhy(topAssets[0]))}.`);
+                if (PB && PB.B.manual.length) actions.push(`<strong>Plan the manual work:</strong> ${sev(PB.B.manual.length)} findings on ${sev(new Set(PB.B.manual.map(d => d.asset)).size)} machines will not be fixed by Automox (no agent, no patch, configuration or end of life). Machine lists are on the Patch Plan.`);
+                if (PB) { const noPol = PB.B.blocked.filter(d => /no patch policy|not automatic/.test(d._why)); if (noPol.length) actions.push(`<strong>Give machines an automatic patch policy:</strong> ${sev(new Set(noPol.map(d => d.asset)).size)} machines have a waiting Automox patch but no active automatic patch policy.`); }
+                if (st) { const exp = (st.assets || []).filter(a => (scope === 'ALL' || a.team === scope) && a.checks?.exc?.s === 'x').length; if (exp) actions.push(`<strong>Renew or close expired exceptions:</strong> ${sev(exp)} machine${exp === 1 ? ' has' : 's have'} an accepted risk past its expiry, so those findings count again.`); }
+                const noTier = reg.filter(r => !StatusEngine.tierOf(r)).length;
+                if (noTier) actions.push(`<strong>Set the tiers:</strong> ${sev(noTier)} of ${sev(reg.length)} machines have no tier, so their priorities assume Tier 2.`);
+                if (scope === 'ALL' && missingOwnerCount > 0) actions.push(`<strong>Give every machine an owner:</strong> ${sev(missingOwnerCount)} have none. Triage the Review Queue.`);
+                if (!actions.length) actions.push('<strong>Nothing urgent for this scope.</strong> Keep the daily syncs running and work the fix list in order.');
                 $('rpt-actions').innerHTML = actions.map(a => `<li>${a}</li>`).join('');
 
                 // 7. AI plan: show a cached answer if one exists

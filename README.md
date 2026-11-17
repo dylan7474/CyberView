@@ -376,7 +376,7 @@ flowchart LR
 |---|---|
 | **Dashboard** | Register counts, Review Queue, per-asset finding summaries, coverage, remediation figures. |
 | **Vulnerability Management** | Register filtered by team, exposure and risk status, joined to the **open** findings with their priorities: two ranked lists, machines and fixes (v3.19). Coverage and Qualys sync in *Data & imports*. |
-| **Team Risk Report** | The same join for one team. Sections: summary, top risk services, highest risk assets, fix priority queue, governance health, actions for the next 30 days, remediation progress, AI plan. It does **not** include end of life or Automox data. |
+| **Team Risk Report** | The same join for one team, in the same terms as the rest of the portal (v4.6): the team's status headline and figures, *Machines to fix first*, *Fixes that clear the most*, the Patch Plan split (from Automox), data gaps, recommended actions, remediation progress and the AI plan. Unsupported operating systems count in the status headline; the full end-of-life detail stays on the End of Life Report. |
 | **End of Life Report** | Register OS, hardware and Qualys lifecycle stages, EOL dates, EOL software QIDs from findings, remediation tasks. |
 | **Patch Coverage** | Register joined to Automox devices, and to open findings by CVE. |
 | **Remediation** | Tasks, verified by findings imports or syncs (complete sync: absence on a scanned host = fixed) and by Automox (patch seen waiting, then installed). |
@@ -523,6 +523,17 @@ Phase D of the status design.
 - Clicking a fix opens its page with the team and urgency kept.
 - **When Automox will patch (v4.5.2):** Automox does not report a next patch time for devices (checked on a live account: empty for all 275). Each Automox sync therefore also reads the **patch policies** (read-only): their next run (`next_remediation`), whether they are active and automatic, and which patches they install (all, or a severity filter). A device's next patch run is the earliest of its policies that would install the waiting patch. Patch Coverage shows it on each device as *Next patch run*, with the policy's name.
 - **Limits:** the match between a finding and an Automox patch is by CVE, else by package name (≈). Automox names CVEs mostly for Windows updates, so a Linux "patch everything" policy may fix more than the plan shows. Policy contents beyond "all" or a severity filter (named patches, advanced rules) are not read.
+
+### Team Risk Report (v4.6)
+
+The printable report for one team (or the whole estate), rebuilt to match the pages people work from. Choose the team and risk status at the top, then **🖨️ Print PDF**.
+
+1. **Summary:** the team's status headline from 🚦 Status (✓ On track / ◐ Slipping / ✖ Behind / ? Not measurable, with the reason), new P1/P2 within their due date, P1/P2 overdue, open P1 findings, and the backlog against its target.
+2. **Machines to fix first** and 3. **Fixes that clear the most:** the top 10 of each, ranked exactly as on Vuln Management, with tiers, P1/P2 counts, *why it is here*, due dates and any task covering each fix.
+4. **Patch Plan:** how the team's open findings split between manual remediation, Automox patch blocked, Automox will patch within the period, and patched recently, with the largest manual fixes. The same numbers as the 🗓️ Patch Plan page (needs Automox).
+5. **Data gaps:** machines with no owner, no service, no tier, unknown exposure, or not scanned recently.
+6. **Recommended actions**, in P1–P4 terms: overdue P1/P2, overdue or reopened tasks, P1 fixes with no task, the first machine to fix, the manual work, machines without an automatic patch policy, expired exceptions, tiers to set.
+7. **Remediation progress** and 8. the **AI plan**, as before.
 
 ### Remembered filters (v4.3)
 

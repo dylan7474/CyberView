@@ -8,7 +8,7 @@ CyberView turns your scanner output into a short, ranked to-do list, team by tea
 
 - **Qualys:** every finding, pulled read-only from the API each morning, or a CSV export.
 - **Automox:** agents, failing policies and waiting patches, read-only.
-- **End-of-life dates:** from endoflife.date, plus your own extended-support dates.
+- **End-of-life dates:** from the endoflife.date API, including paid extended-support dates, plus your own dates where you know better.
 - **Your people:** who owns each machine, how critical it is (Tier 1–3) and whether it faces the Internet, set once in the Asset Register. New machines arrive in a Review Queue with an owner already suggested.
 
 ## It joins the dots

@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.14.0 · 18 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.14.1 · 18 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -4640,6 +4640,29 @@
                 done: { w: '✓ Installed, awaiting rescan', order: 3, cls: 'bg-green-50 text-green-900 border-green-300' },
                 unknown: { w: '? No Automox data', order: 4, cls: 'bg-gray-50 text-gray-700 border-gray-300' }
             };
+            // "🩹 Automox patch: ✓ yes on 25 of 42 machines (openssh 9.8p1) · ✓ installed on 2 · ✗ not listed on 10 · no agent on 7"
+            static cveAxText(c, C) {
+                const A = c.axA;
+                if (!A) return C.ax ? '' : 'Automox: no Automox data here, so it cannot say whether Automox has the patch';
+                const n = (v, w) => `${fmtNum(v)} ${w}${v === 1 ? '' : 's'}`;
+                if (!c.machines && !A.extra && !A.unm) return c.hid ? `Automox: nothing to show here: the only machine${c.hid === 1 ? '' : 's'} with it ${c.hid === 1 ? 'is' : 'are'} risk-accepted (hidden)` : 'Automox: no waiting patch for it on any of our machines';
+                const bits = [];
+                if (c.machines) {
+                    bits.push(A.yes ? `✓ yes on ${fmtNum(A.yes)} of ${n(c.machines, 'machine')}${A.pkgs.length ? ` (${A.pkgs.slice(0, 2).join(', ')}${A.pkgs.length > 2 ? `, +${A.pkgs.length - 2} more` : ''})` : ''}${A.approx ? `, ${fmtNum(A.approx)} matched by package name ≈` : ''}` : `✗ not on any of the ${n(c.machines, 'machine')}`);
+                    if (A.inst) bits.push(`✓ installed on ${fmtNum(A.inst)}, awaiting rescan`);
+                    if (A.yes && A.notListed) bits.push(`✗ not listed on ${fmtNum(A.notListed)}`);
+                    if (!A.yes && A.notListed && A.noAgent) bits.push(`${fmtNum(A.notListed)} have an agent`);
+                    if (A.noAgent) bits.push(`no agent on ${fmtNum(A.noAgent)}`);
+                }
+                if (A.extra) bits.push(`also waiting on ${n(A.extra, 'machine')} Qualys has not flagged`);
+                if (A.unm) bits.push(`and ${n(A.unm, 'Automox device')} not in the register`);
+                return 'Automox patch: ' + bits.join(' · ');
+            }
+            static cveAxLine(c, C) {
+                const t = App.cveAxText(c, C); if (!t) return '';
+                const at = C.axAt ? ` <span class="text-gray-400 font-normal">(Automox data ${esc(new Date(C.axAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))})</span>` : '';
+                return `<p class="text-sm font-semibold text-slate-800 mt-1">🩹 ${esc(t)}${at}</p>`;
+            }
             cveGo() {
                 const $ = (id) => document.getElementById(id);
                 const ids = App.cveIds($('cve-input').value);
@@ -4692,6 +4715,8 @@
                 const pk = (p) => `${p.n}${p.v ? ' ' + p.v : ''}`;
                 rows.forEach(x => {
                     const dev = m && m.byAsset.get(x.name)?.dev;
+                    x.dev = !!dev;
+                    if (dev) { x.pkgBy = new Map(ids.map(c => [c, AutomoxService.pendingFor(dev, [c]).map(pk)])); x.instBy = new Map(ids.map(c => [c, AutomoxService.installedFor(dev, [c]).map(pk)])); }
                     if (dev) { x.pkgs = AutomoxService.pendingFor(dev, ids).map(pk); x.inst = AutomoxService.installedFor(dev, ids).map(pk); x.kev = AutomoxService.pendingFor(dev, ids).some(p => p.kev?.length); }
                     x.when = x.state.when || 0;
                     // A team Automox does not patch: still say when Automox has the patch, so it can be applied by hand there
@@ -4702,13 +4727,13 @@
                 if (D && m) D.devices.forEach(dev => {
                     const p = AutomoxService.pendingFor(dev, ids); if (!p.length) return;
                     const a = m.byDev.get(dev.id);
-                    if (!a) { if (team === 'ALL') axUnmatched.push({ name: dev.name || dev.display || String(dev.id), pkgs: p.map(pk) }); return; }
+                    if (!a) { if (team === 'ALL') axUnmatched.push({ cves: ids.filter(c => p.some(x => (x.cves || []).includes(c))), name: dev.name || dev.display || String(dev.id), pkgs: p.map(pk) }); return; }
                     if (rows.has(a)) return;
                     const r = regMap.get(a); if (!inScope(r)) return;
                     const am = RiskView.machine(r, vd.ex);
                     if (am && !show) { hide(ids.filter(c => p.some(x => (x.cves || []).includes(c))), a); if (!hm.has(a)) { hm.add(a); hidden.machines++; } return; }
                     const nr = AutomoxService.nextRun(dev, p);
-                    axOnly.push({ name: a, team: StatusEngine.teamOf(r), tier: StatusEngine.tierOf(r), pkgs: p.map(pk), when: nr.t || 0, why: nr.t ? '' : nr.why, acc: am });
+                    axOnly.push({ cves: ids.filter(c => p.some(x => (x.cves || []).includes(c))), name: a, team: StatusEngine.teamOf(r), tier: StatusEngine.tierOf(r), pkgs: p.map(pk), when: nr.t || 0, why: nr.t ? '' : nr.why, acc: am });
                 });
                 // Already fixed: Qualys saw it fixed on machines that no longer have it open
                 const fixed = new Set();
@@ -4724,12 +4749,28 @@
                 // Per CVE: its checks and how many machines
                 const per = ids.map(id => {
                     const qs = [...qidHits].filter(([, s]) => s.has(id)).map(([q]) => q);
-                    return { id, qids: qs, machines: [...rows.values()].filter(x => x.cves.has(id)).length, hid: (hidBy.get(id) || new Set()).size, ax: axOnly.filter(a => a.pkgs.length).length };
+                    const rc = [...rows.values()].filter(x => x.cves.has(id));
+                    // v4.14.1 one-line Automox answer: does Automox have the patch for this CVE, machine by machine?
+                    let axA = null;
+                    if (m) {
+                        axA = { yes: 0, approx: 0, inst: 0, notListed: 0, noAgent: 0, pkgs: new Map(), extra: axOnly.filter(a => a.cves.includes(id)).length, unm: axUnmatched.filter(a => a.cves.includes(id)).length };
+                        rc.forEach(x => {
+                            const own = x.pkgBy?.get(id) || [];
+                            own.forEach(k => axA.pkgs.set(k, (axA.pkgs.get(k) || 0) + 1));
+                            if (own.length) axA.yes++;
+                            else if (x.state.b === 'will' || x.state.b === 'blocked') { axA.yes++; axA.approx++; }      // matched by package name
+                            else if ((x.instBy?.get(id) || []).length || x.state.b === 'done') axA.inst++;
+                            else if (x.dev) axA.notListed++;
+                            else axA.noAgent++;
+                        });
+                        axA.pkgs = [...axA.pkgs].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+                    }
+                    return { id, qids: qs, machines: rc.length, hid: (hidBy.get(id) || new Set()).size, axA };
                 });
                 const qinfo = [...qidHits.keys()].map(q => { const k = vd.qmap.get(q) || {}; return { qid: q, title: k.title || 'QID ' + q, patchable: !!k.patchable, open: [...rows.values()].filter(x => x.qids.has(q)).length, exploited: PriorityEngine.isExploited(k) }; })
                     .sort((a, b) => b.open - a.open);
                 const list = [...rows.values()].sort((a, b) => App.CVE_STATE[a.state.b].order - App.CVE_STATE[b.state.b].order || a.p - b.p || (a.tier || 2) - (b.tier || 2) || a.name.localeCompare(b.name));
-                return { ids, team, list, per, qinfo, axOnly, axUnmatched, fixed: fixed.size, stale, never, hidden, show, ax: !!m, S, days: +S.patchPlanDays || 7, qids: [...qidHits.keys()], asOf: this.loadVulnMeta() };
+                return { ids, team, list, per, qinfo, axOnly, axUnmatched, fixed: fixed.size, stale, never, hidden, show, ax: !!m, S, days: +S.patchPlanDays || 7, qids: [...qidHits.keys()], asOf: this.loadVulnMeta(), axAt: D?.meta?.at || '' };
             }
 
             async renderCve(keep = false) {
@@ -4761,6 +4802,7 @@
                     <div class="flex flex-wrap items-baseline gap-2"><a class="font-mono font-bold text-blue-800 underline" target="_blank" rel="noopener noreferrer" href="https://nvd.nist.gov/vuln/detail/${esc(c.id)}">${esc(c.id)}</a>
                     <span class="text-sm">${c.machines ? `<strong>${fmtNum(c.machines)}</strong> machine${c.machines === 1 ? '' : 's'} with it open` : (c.qids.length ? 'no machine has it open now' : '<strong>not in our Qualys data</strong>')}${c.hid ? ` · <strong class="text-amber-800">⚑ plus ${fmtNum(c.hid)} risk-accepted machine${c.hid === 1 ? '' : 's'} (hidden)</strong> <button class="underline print-hide" onclick="app.setShowAccepted(true)">Show</button>` : ''}</span></div>
                     ${!c.qids.length ? `<p class="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded p-2 mt-2">⚠ <strong>This does not mean you are not affected.</strong> No Qualys finding in our data names ${esc(c.id)}: either no scanned machine has it, or Qualys has no check for it yet (new CVEs can take a few days). Search the Qualys KnowledgeBase for ${esc(c.id)} to be sure.${C.axOnly.length ? ' Automox does list a waiting patch for it: see below.' : ''}</p>` : ''}
+                    ${App.cveAxLine(c, C)}
                     <div class="text-xs text-gray-600 mt-1" id="cve-intel-${esc(c.id)}"></div></div>`).join('');
                 const qHTML = C.qinfo.length ? `<div><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">Qualys checks for ${C.ids.length === 1 ? 'it' : 'them'}</p><div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.qinfo.map(q => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(q.qid)}" onclick="app.inspectQid(this.dataset.q, 'cve')"><td class="px-2 py-1.5 font-mono text-xs text-gray-500">${esc(q.qid)}</td><td class="px-2 py-1.5">${esc(q.title)}${q.exploited ? ' <strong class="text-red-800 text-xs">⚑ exploited</strong>' : ''}</td><td class="px-2 py-1.5 text-xs text-gray-600">${q.patchable ? 'patch exists' : 'no patch (configuration or end of life)'}</td><td class="px-2 py-1.5 text-right font-mono text-xs">${fmtNum(q.open)} open</td></tr>`).join('')}</tbody></table></div></div>` : '';
                 const rowHTML = (x) => { const s = ST[x.state.b];
@@ -4844,8 +4886,8 @@
                 const ST = App.CVE_STATE, n = (k) => C.list.filter(x => x.state.b === k).length, L = [];
                 const when = C.list.filter(x => x.state.b === 'will' && x.when).map(x => x.when);
                 L.push(`${C.ids.join(', ')}: CyberView lookup ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${C.team !== 'ALL' ? ' (' + C.team + ' team)' : ''}`);
-                C.per.forEach(c => { const x = this._cveIntel?.get(c.id);
-                    L.push(`${c.id}: ${c.machines ? c.machines + ' machine' + (c.machines === 1 ? '' : 's') + ' affected' : (c.qids.length ? 'no machine has it open' : 'not in our Qualys data yet (not proof we are unaffected)')}${c.hid ? `, plus ${c.hid} risk-accepted machine${c.hid === 1 ? '' : 's'}` : ''}${x?.kev ? '; on the CISA KEV list' : ''}${x?.nvd?.cvss ? '; CVSS ' + x.nvd.cvss : ''}`); });
+                C.per.forEach(c => { const x = this._cveIntel?.get(c.id), ax = App.cveAxText(c, C);
+                    L.push(`${c.id}: ${c.machines ? c.machines + ' machine' + (c.machines === 1 ? '' : 's') + ' affected' : (c.qids.length ? 'no machine has it open' : 'not in our Qualys data yet (not proof we are unaffected)')}${c.hid ? `, plus ${c.hid} risk-accepted machine${c.hid === 1 ? '' : 's'}` : ''}${x?.kev ? '; on the CISA KEV list' : ''}${x?.nvd?.cvss ? '; CVSS ' + x.nvd.cvss : ''}`); if (ax) L.push('  ' + ax); });
                 if (C.qinfo.length) L.push(`Qualys checks: ${C.qinfo.map(q => 'QID ' + q.qid + ' ' + q.title).join('; ')}`);
                 if (C.list.length) {
                     const teams = [...C.list.reduce((m, x) => m.set(x.team, (m.get(x.team) || 0) + 1), new Map())].map(([t, v]) => `${t} ${v}`).join(', ');

@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.15.0 · 18 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.16.0 · 18 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -652,7 +652,7 @@
                             <p class="text-gray-500 text-sm mt-1">Which assets Automox patches, whether its agents are healthy, and which Qualys findings it already has a patch for.</p>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 print-hide">
-                            <select id="ax-scope" onchange="app.axState.shown = 200; app.renderAutomox()" class="border-gray-300 rounded text-sm font-medium shadow-sm py-2" title="The main team (Organisation setup) is shown first"></select>
+                            <select id="ax-scope" onchange="app.axState.shown = 25; app.renderAutomox()" class="border-gray-300 rounded text-sm font-medium shadow-sm py-2" title="The main team (Organisation setup) is shown first"></select>
                             <button id="ax-sync-btn" onclick="app.axSync()" class="write-only bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow-sm text-sm font-medium" title="Fetch devices and patches from Automox now (read-only; takes a minute or more)">⟳ Sync from Automox</button>
                             <button onclick="app.axApplyTasks()" class="write-only bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm" title="Mark task assets fixed (awaiting scan) where Automox shows the fixing patch installed">Update tasks</button>
                             <button onclick="app.axExportCSV()" class="bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm">⬇ CSV</button>
@@ -4181,6 +4181,9 @@
                 Prefs.listen();
                 this.applyViewMode();
                 this.applyAccepted();
+                window.addEventListener('beforeprint', () => { if (this.currentView === 'eol' && this.eolCtx && !this._eolAll) { this.renderEOLAssets(true); this._eolPrintShort = true; } });
+                window.addEventListener('afterprint', () => { if (this._eolPrintShort) { this._eolPrintShort = false; this.renderEOLAssets(false); } });
+                document.addEventListener('change', (e) => { if (App.TEAM_PICKERS[e.target?.id]) App.rememberTeam(e.target.value); });     // v4.16: one team choice
                 OrgSettings.ensureSaved();          // v3.20: copy the built-in organisation values into the database once (administrators)
                 this.fillTeamSelects();
                 this.reviewState.filters = { state: document.getElementById('review-filter-state').value, owner: document.getElementById('review-filter-owner').value, service: document.getElementById('review-filter-service').value, search: '' };
@@ -4207,6 +4210,7 @@
                 this.currentView = viewId;
                 this.accNote(null);
                 OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
+                this.applyTeam(viewId);
                 const TITLES = { import: Demo.api() ? 'Manual import' : 'Import Data', plan: 'Patch Plan', cve: 'CVE Lookup', dashboard: 'Dashboard', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Organisation setup · Status rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
                 const pt = document.getElementById('page-title'); if (pt) pt.textContent = TITLES[viewId] || 'CyberView';
                 const navView = viewId === 'inspect' ? (this.inspectReturn || '') : ((viewId === 'import' && Demo.api()) || viewId === 'status-rules' ? 'org' : viewId);
@@ -4231,6 +4235,21 @@
                 if (viewId === 'users') this.renderUsers();
                 if (viewId === 'backup') this.renderBackupPage();
                 if (viewId === 'history') this.renderHistory();
+            }
+
+            // ---------- One team choice (v4.16): the team picked on any of these pages is remembered, and each of them opens on it.
+            // The register, Review Queue and Remediation filters stay separate: they filter lists, they do not set the view.
+            static TEAM_PICKERS = { 'vuln-filter-owner': 'vuln', 'plan-team': 'plan', 'cve-scope': 'cve', 'report-scope-selector': 'reports', 'eol-scope-selector': 'eol', 'ax-scope': 'automox', 'st-scope': 'status' };
+            static rememberTeam(v) { if (v && v !== 'Unknown' && v !== 'Unrecognised') Prefs.set('team', v); }
+            applyTeam(viewId) {
+                const t = Prefs.get('team', null); if (!t) return;
+                const id = Object.keys(App.TEAM_PICKERS).find(k => App.TEAM_PICKERS[k] === viewId); if (!id) return;
+                const sel = document.getElementById(id), has = (el) => el && [...el.options].some(o => o.value === t);
+                if (viewId === 'vuln' && this.vulnState) { if (has(sel)) { sel.value = t; this.vulnState.filters = { ...this.vulnState.filters, owner: t }; } }
+                else if (viewId === 'plan') { this.planF; if (t === 'ALL' || OrgSettings.teams().includes(t)) { this._planF.team = t; const f = this._planF; Prefs.set('plan', { team: f.team, p: f.p, open: f.open }); } }
+                else if (viewId === 'cve') { const c = Prefs.get('cve', {}); if (c.team !== t) { Prefs.set('cve', { ...c, team: t }); this._cve = null; } }
+                else if (viewId === 'status') { this.stScope = t; Prefs.set('statusScope', t); }
+                else if (has(sel)) sel.value = t;
             }
 
             // ---------- Status (phase B): every source joined into one status per asset and per team.
@@ -4621,6 +4640,7 @@
             }
             cveGo() {
                 const $ = (id) => document.getElementById(id);
+                this.cveSel = new Set();
                 const ids = App.cveIds($('cve-input').value);
                 if (!ids.length && $('cve-input').value.trim()) { StorageService.toast('Enter a CVE number such as CVE-2024-6387'); return; }
                 Prefs.set('cve', { q: ids.join(' '), team: $('cve-scope').value || 'ALL' });
@@ -4628,6 +4648,16 @@
                 this.renderCve();
             }
             cveFilt(k) { this.cveFilter = k; this.renderCve(true); }
+            cveTick(n, on) { const S = this.cveSel = this.cveSel || new Set(); if (on) S.add(n); else S.delete(n); this.cveSelPaint(); }
+            cveTickAll(on) { document.querySelectorAll('#cve-out .cve-tick').forEach(b => { b.checked = on; this.cveTick(b.dataset.n, on); }); }
+            cveSelPaint() { const b = document.getElementById('cve-accept-btn'), n = (this.cveSel || new Set()).size; if (!b) return; b.textContent = `⚖️ Accept risk: ${fmtNum(n)} selected`; b.classList.toggle('hidden', !n); }
+            // The ticked machines, with only the QIDs of this CVE that each one has (a per-finding acceptance, the default)
+            cveAccept() {
+                const C = this._cve, S = this.cveSel; if (!C || !S || !S.size) return;
+                const rows = C.list.filter(x => S.has(x.name)), qids = [...new Set(rows.flatMap(x => [...x.qids]))];
+                this.openRiskModal(rows.map(x => x.name), 'cve', [], qids);
+                const r = document.getElementById('ra-reason'); if (r && !r.value) r.value = `${C.ids.join(', ')}: `;
+            }
 
             async cveData(ids, team) {
                 const vd = await this.getVulnData();
@@ -4761,8 +4791,10 @@
                     ${App.cveAxLine(c, C)}
                     <div class="text-xs text-gray-600 mt-1" id="cve-intel-${esc(c.id)}"></div></div>`).join('');
                 const qHTML = C.qinfo.length ? `<div><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">Qualys checks for ${C.ids.length === 1 ? 'it' : 'them'}</p><div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.qinfo.map(q => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(q.qid)}" onclick="app.inspectQid(this.dataset.q, 'cve')"><td class="px-2 py-1.5 font-mono text-xs text-gray-500">${esc(q.qid)}</td><td class="px-2 py-1.5">${esc(q.title)}${q.exploited ? ' <strong class="text-red-800 text-xs">⚑ exploited</strong>' : ''}</td><td class="px-2 py-1.5 text-xs text-gray-600">${q.patchable ? 'patch exists' : 'no patch (configuration or end of life)'}</td><td class="px-2 py-1.5 text-right font-mono text-xs">${fmtNum(q.open)} open</td></tr>`).join('')}</tbody></table></div></div>` : '';
+                const sel = this.cveSel = this.cveSel || new Set();
                 const rowHTML = (x) => { const s = ST[x.state.b];
                     return `<tr class="align-top cursor-pointer hover:bg-blue-50" data-n="${esc(x.name)}" onclick="app.openAssetDetail(this.dataset.n)">
+                        <td class="px-2 py-1.5 print-hide" onclick="event.stopPropagation()"><input type="checkbox" class="cve-tick rounded border-gray-300" data-n="${esc(x.name)}" ${sel.has(x.name) ? 'checked' : ''} onchange="app.cveTick(this.dataset.n, this.checked)" aria-label="Select ${esc(x.name)}"></td>
                         <td class="px-2 py-1.5 font-mono text-xs">${esc(x.r.originalName || x.name)}${x.acc ? '<div class="font-sans">' + RiskView.flag(x.acc, true) + '</div>' : (x.accF.length ? '<div class="font-sans">' + RiskView.flag(x.accF[0], true) + '</div>' : '')}</td>
                         <td class="px-2 py-1.5 text-xs">${esc(x.team)}</td><td class="px-2 py-1.5 text-center text-xs">${StatusEngine.tierCell(x.r)}</td><td class="px-2 py-1.5 text-xs">${esc(x.exposure)}</td>
                         <td class="px-2 py-1.5">${x.p <= 4 ? StatusEngine.pBadge(x.p) : ''}</td>
@@ -4783,12 +4815,13 @@
                         <button onclick="app.cveList('all')" class="disabled:opacity-40 disabled:cursor-not-allowed bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded shadow-sm text-sm" ${C.list.length ? '' : 'disabled'} title="Every machine with it open, one name per line (risk-accepted machines are never in a list)">⬇ Machine list</button>
                         <button onclick="app.cveList('manual')" class="disabled:opacity-40 disabled:cursor-not-allowed bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded shadow-sm text-sm" ${n('manual') + n('blocked') ? '' : 'disabled'} title="The machines Automox will not fix soon: manual fix plus Automox blocked">⬇ Not by Automox</button>
                         <button onclick="app.cveTrack()" class="disabled:opacity-40 disabled:cursor-not-allowed write-only bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded shadow-sm text-sm" ${C.list.length ? '' : 'disabled'}>＋ Track as a task</button>
+                        <button id="cve-accept-btn" onclick="app.cveAccept()" class="write-only ${sel.size ? '' : 'hidden'} bg-amber-50 border border-amber-300 text-amber-900 hover:bg-amber-100 px-3 py-1.5 rounded shadow-sm text-sm" title="Accept the risk of this CVE on the ticked machines only (its Qualys checks are filled in)">⚖️ Accept risk: ${fmtNum(sel.size)} selected</button>
                         <button onclick="app.cveCopy()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded shadow-sm text-sm">📋 Copy summary for the cyber team</button>
                     </div>
                     ${qHTML}
                     ${C.list.length ? `<div class="flex flex-wrap gap-2 items-center print-hide"><span class="text-sm font-semibold">Machines:</span>${chip('all', 'All', C.list.length)}${chip('manual', ST.manual.w, n('manual'))}${chip('blocked', ST.blocked.w, n('blocked'))}${chip('will', ST.will.w, n('will'))}${n('done') ? chip('done', ST.done.w, n('done')) : ''}${n('unknown') ? chip('unknown', ST.unknown.w, n('unknown')) : ''}</div>
-                    <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-2 py-2 text-left">Machine</th><th class="px-2 py-2 text-left">Team</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Exposure</th><th class="px-2 py-2 text-left">Priority</th><th class="px-2 py-2 text-left">Fix</th><th class="px-2 py-2 text-left">First found</th></tr></thead>
-                        <tbody class="divide-y">${shown.slice(0, 500).map(rowHTML).join('') || '<tr><td colspan="7" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
+                    <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-2 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.cveTickAll(this.checked)" title="Select every machine shown" aria-label="Select every machine shown"></th><th class="px-2 py-2 text-left">Machine</th><th class="px-2 py-2 text-left">Team</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Exposure</th><th class="px-2 py-2 text-left">Priority</th><th class="px-2 py-2 text-left">Fix</th><th class="px-2 py-2 text-left">First found</th></tr></thead>
+                        <tbody class="divide-y">${shown.slice(0, 500).map(rowHTML).join('') || '<tr><td colspan="8" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
                     ${shown.length > 500 ? `<p class="text-xs text-gray-500">Showing 500 of ${fmtNum(shown.length)}: the machine list has them all.</p>` : ''}` : ''}
                     ${C.axOnly.length ? `<div><p class="text-sm font-semibold">Automox has a waiting patch for it, but Qualys has not flagged it (${fmtNum(C.axOnly.length)})</p><p class="text-xs text-gray-500 mb-1">Not scanned since, or Qualys checks it differently. Worth including.</p>
                         <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.axOnly.slice(0, 200).map(a => `<tr><td class="px-2 py-1.5 font-mono text-xs">${esc(a.name)}${a.acc ? ' ' + RiskView.flag(a.acc, true) : ''}</td><td class="px-2 py-1.5 text-xs">${esc(a.team)}</td><td class="px-2 py-1.5 text-xs">${a.when ? '⟳ next patch run ' + esc(day(a.when)) : '⚠ ' + esc(a.why)}</td><td class="px-2 py-1.5 text-[10px] font-mono text-gray-500">${esc(a.pkgs.slice(0, 3).join(', '))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
@@ -5437,7 +5470,7 @@
             }
 
             async renderAutomox(force = false) {
-                if (!this.axState) this.axState = { filter: 'ALL', q: '', tier: Prefs.get('axTier', '2'), shown: 200 };
+                if (!this.axState) this.axState = { filter: 'ALL', q: '', tier: Prefs.get('axTier', '2'), shown: 25 };     // v4.16: 25 rows first
                 const S = this.axState, statusEl = document.getElementById('ax-status'), body = document.getElementById('ax-body');
                 if (!AutomoxService.on()) { body.innerHTML = '<p class="text-gray-600">Automox data needs the portal server; it is not available in the browser-only version.</p>'; return; }
                 if (!AutomoxService.data && !force) body.innerHTML = '<p class="text-gray-500 italic">Loading…</p>';
@@ -5542,7 +5575,7 @@
                         <div class="flex flex-wrap items-center gap-3 mb-3 print-hide"><input type="search" id="ax-q" value="${esc(S.q)}" placeholder="Search asset, device, owner, OS" oninput="app.axState.q = this.value; app.axState.shown = 200; clearTimeout(app._axT); app._axT = setTimeout(() => app.renderAutomox(), 250)" class="border border-gray-300 rounded px-2 py-1 text-sm w-72">${S.filter !== 'ALL' ? '<button onclick="app.axFilter(\'ALL\')" class="text-xs text-blue-700 underline">Show all</button>' : ''}</div>
                         <div class="overflow-x-auto"><table class="min-w-full text-sm text-left"><thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2">Asset</th><th class="py-2 px-2">Owner</th><th class="py-2 px-2">Automox</th><th class="py-2 px-2">Check-in</th><th class="py-2 px-2">Waiting patches</th><th class="py-2 px-2">Policies</th><th class="py-2 px-2 text-center">Reboot</th><th class="py-2 px-2 text-right" title="Qualys detections with an Automox patch waiting">Fixable</th><th class="py-2 px-2 print-hide">Tasks</th></tr></thead>
                         <tbody class="divide-y">${shown.map(row).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">No assets.</td></tr>'}
-                        ${list.length > shown.length ? `<tr><td colspan="9" class="px-2 py-3 text-center bg-gray-50"><button onclick="app.axState.shown += 200; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show 200 more</button> <span class="text-xs text-gray-500">(${fmtNum(list.length - shown.length)} more)</span></td></tr>` : ''}</tbody></table></div></div>
+                        ${list.length > shown.length ? `<tr><td colspan="9" class="px-2 py-3 text-center bg-gray-50"><button onclick="app.axState.shown += 100; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show 100 more</button> · <button onclick="app.axState.shown = 1e9; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show all ${fmtNum(list.length)}</button> <span class="text-xs text-gray-500">(${fmtNum(list.length - shown.length)} more; show them all before printing)</span></td></tr>` : ''}</tbody></table></div></div>
 
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">4. Matches to check</h3>
                         <h4 class="font-semibold text-gray-700 mb-1">? To check: ${fmtNum(amb.length)}</h4>
@@ -5556,7 +5589,7 @@
                 // The search box is drawn again with the page: keep typing in it.
                 if (hadFocus) { const q2 = document.getElementById('ax-q'); if (q2) { q2.focus(); q2.setSelectionRange(caret, caret); } }
             }
-            axFilter(k) { this.axState.filter = k; this.axState.shown = 200; this.renderAutomox(); }
+            axFilter(k) { this.axState.filter = k; this.axState.shown = 25; this.renderAutomox(); }
             axLink(asset, devId) {
                 if (!devId) return;
                 AutomoxService.setLink(asset, devId);
@@ -6829,7 +6862,8 @@
                 $('eol-f-err').textContent = sc.ok ? '' : sc.error;
                 const list = this.eolFiltered();
                 const RIX = RemediationVerifier.index();
-                const shown = showAll ? list : list.slice(0, 200);
+                this._eolAll = showAll;
+                const shown = showAll ? list : list.slice(0, 25);      // v4.16: summary first; Show all for the rest (and always when printing)
                 $('eol-f-summary').innerHTML = `<strong>${fmtNum(list.length)} assets</strong> · ${esc(this.eolFilterText())}`;
                 const empty = `<tr><td colspan="8" class="px-2 py-4 text-center text-gray-500 italic">No assets match these filters.</td></tr>`;
                 $('eol-assets').innerHTML = shown.length ? shown.map(x => {
@@ -6839,7 +6873,7 @@
                         + (x.ra ? `<div class="mt-0.5">${RiskView.flag(x.ra, true)}</div>` : '');
                     return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)"><td class="px-2 py-2 font-medium text-gray-700 max-w-[200px]"><div class="truncate" title="${esc(r.originalName || r.normalizedName)}">${esc(r.originalName || r.normalizedName)}</div><div class="text-[10px] text-gray-500">${esc(r.service || 'Unclassified')}${x.found.length ? ` · <span class="text-gray-400">matched: ${esc(x.found.join(', ').toLowerCase())}</span>` : ''}</div></td><td class="px-2 py-2 text-xs">${esc(r.owner || 'Unknown')}</td><td class="px-2 py-2 text-center text-xs">${StatusEngine.tierCell(r)}</td><td class="px-2 py-2">${x.tru ? PriorityEngine.truRiskBadge(x.tru) : '<span class="text-gray-400">-</span>'}</td><td class="px-2 py-2">${EolDates.badge(x.worst)}</td><td class="px-2 py-2 text-xs text-gray-600 max-w-[200px]">${esc(Lifecycle.osFamily(r.os))} ${Lifecycle.editedBadge(r)}<div class="text-[10px] text-gray-500">${l.bucket === 4 ? 'no date' : 'security fixes ' + esc(EolDates.fmt(l.secEnd))}${Lifecycle.stageOf(r) ? ' · Qualys ' + esc(Lifecycle.stageOf(r)) : ''}</div></td><td class="px-2 py-2 text-xs max-w-[320px]">${actHtml || '<span class="text-gray-400">-</span>'}</td><td class="px-2 py-2 text-right print-hide whitespace-nowrap">${RemediationVerifier.chip((RIX.byAsset.get(r.normalizedName) || []).filter(t => t.type === 'eol'))} <button class="write-only text-[11px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50" data-n="${esc(r.normalizedName)}" onclick="event.stopPropagation(); app.trackEolAsset(this.dataset.n)" title="Create a remediation task for this asset">＋</button></td></tr>`;
                 }).join('') : empty;
-                $('eol-more').innerHTML = list.length > shown.length ? `<button onclick="app.renderEOLAssets(true)" class="text-sm text-blue-700 underline">Show all ${fmtNum(list.length)} assets (${fmtNum(list.length - shown.length)} more)</button> <span class="text-xs text-gray-500">Show them all before printing.</span>` : '';
+                $('eol-more').innerHTML = list.length > shown.length ? `<button onclick="app.renderEOLAssets(true)" class="text-sm text-blue-700 underline">Show all ${fmtNum(list.length)} assets (${fmtNum(list.length - shown.length)} more)</button> <span class="text-xs text-gray-500">Printing always includes them all.</span>` : '';
             }
 
             eolExportCSV() {
@@ -7837,6 +7871,13 @@
             }
 
             // The fix page's "Affected assets" table as a list of names: the machines it shows (its team filter, or every team after "Show all teams").
+            inspTick(n, on) {
+                const S = this.inspSel = this.inspSel || new Set(); if (on) S.add(n); else S.delete(n);
+                document.querySelectorAll('#view-inspect .insp-tick').forEach(b => { if (b.dataset.n === n) b.checked = on; });     // one machine, several ports
+                const b = document.getElementById('insp-accept-btn'); if (b) { b.textContent = `⚖️ Accept risk: ${fmtNum(S.size)} selected`; b.classList.toggle('hidden', !S.size); }
+            }
+            inspTickAll(on) { [...new Set([...document.querySelectorAll('#view-inspect .insp-tick')].map(b => b.dataset.n))].forEach(n => this.inspTick(n, on)); }
+            inspAccept() { const c = this.inspectCtx, S = this.inspSel; if (!c?.qid || !S?.size) return; this.openRiskModal([...S], 'inspect', [], [String(c.qid)]); }
             async inspectQidCsv() {
                 const c = this.inspectCtx; if (!c || !c.qid) return;
                 const vd = c.vd || await this.getVulnData(), q = vd.qmap.get(c.qid) || {}, list = c.list || [];
@@ -8452,6 +8493,7 @@
                 const oldest = Math.max(0, ...list.map(d => d.age));
                 const assets = [...new Set(list.map(d => d.asset))];
                 this.inspectCtx = { qid, vd, list, scope };
+                this.inspSel = new Set();
                 const scopeBar = scope
                     ? `<div class="flex flex-wrap items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-900"><span>🔎 <strong>Showing: ${esc(App.inspectScopeLabel(scope))}</strong> · ${fmtNum(assets.length)} of ${fmtNum(allN)} affected assets</span><button class="print-hide underline text-blue-700 hover:text-blue-900" onclick="app.inspectScopeAll()">Show all teams</button></div>`
                     : (entry.saved ? `<div class="flex flex-wrap items-center gap-2 bg-gray-50 border rounded-lg px-4 py-2 text-sm text-gray-700"><span>🌐 <strong>Showing: every asset</strong> · ${fmtNum(assets.length)} affected</span><button class="print-hide underline text-blue-700 hover:text-blue-900" onclick="app.inspectScopeBack()">Back to ${esc(App.inspectScopeLabel(entry.saved))}</button></div>` : '');
@@ -8502,15 +8544,16 @@
                     </div>
 
                     <div class="bg-white rounded-lg shadow border overflow-hidden">
-                        <div class="bg-gray-50 px-4 py-3 border-b font-semibold text-sm text-gray-700 flex items-center justify-between gap-3"><span>Affected assets (${fmtNum(assets.length)})</span><button onclick="app.inspectQidCsv()" class="print-hide font-normal text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Download these machines' names, one per line (an Ansible inventory)">⬇ Machine list</button></div>
+                        <div class="bg-gray-50 px-4 py-3 border-b font-semibold text-sm text-gray-700 flex items-center justify-between gap-3"><span>Affected machines (${fmtNum(assets.length)})</span><span class="flex gap-2"><button id="insp-accept-btn" onclick="app.inspAccept()" class="write-only hidden print-hide font-normal text-xs border border-amber-300 bg-amber-50 text-amber-900 px-3 py-1 rounded hover:bg-amber-100" title="Accept the risk of this finding on the ticked machines only">⚖️ Accept risk: 0 selected</button><button onclick="app.inspectQidCsv()" class="print-hide font-normal text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Download these machines' names, one per line (an Ansible inventory)">⬇ Machine list</button></span></div>
                         <div class="overflow-auto max-h-[28rem]">
                             <table class="min-w-full text-left text-sm whitespace-nowrap">
-                                <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2">Asset</th><th class="px-3 py-2">Owner</th><th class="px-3 py-2">Service</th><th class="px-3 py-2 text-center">Crit</th><th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>
-                                <tbody class="divide-y">${list.slice().sort((a, b) => ((sums.get(b.asset)?.criticality || 0) - (sums.get(a.asset)?.criticality || 0)) || ((sums.get(b.asset)?.truRisk || 0) - (sums.get(a.asset)?.truRisk || 0))).map(d => {
+                                <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.inspTickAll(this.checked)" aria-label="Select every machine"></th><th class="px-3 py-2">Machine</th><th class="px-3 py-2">Team</th><th class="px-3 py-2">Service</th><th class="px-3 py-2 text-center">Tier</th><th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>
+                                <tbody class="divide-y">${list.slice().sort((a, b) => ((StatusEngine.tierOf(reg.get(a.asset)) || 2) - (StatusEngine.tierOf(reg.get(b.asset)) || 2)) || ((sums.get(b.asset)?.truRisk || 0) - (sums.get(a.asset)?.truRisk || 0))).map(d => {
                                     const r = reg.get(d.asset) || {}, s = sums.get(d.asset) || {};
                                     return `<tr class="cursor-pointer hover:bg-blue-50" data-n="${esc(d.asset)}" onclick="app.inspectAsset(this.dataset.n)">
-                                        <td class="px-3 py-2 font-medium text-gray-800">${esc(d.asset)}</td><td class="px-3 py-2">${esc(r.owner || 'Unknown')}</td><td class="px-3 py-2">${esc(r.service || 'Unclassified')}</td>
-                                        <td class="px-3 py-2 text-center font-mono">${s.criticality || '-'}</td><td class="px-3 py-2">${PriorityEngine.truRiskBadge(s.truRisk || 0)}</td>
+                                        <td class="px-3 py-2 print-hide" onclick="event.stopPropagation()"><input type="checkbox" class="insp-tick rounded border-gray-300" data-n="${esc(d.asset)}" onchange="app.inspTick(this.dataset.n, this.checked)" aria-label="Select ${esc(d.asset)}"></td>
+                                        <td class="px-3 py-2 font-medium text-gray-800">${esc(d.asset)}${d.accF ? ' ' + RiskView.flag(d.accF, true) : ''}</td><td class="px-3 py-2">${esc(r.owner || 'Unknown')}</td><td class="px-3 py-2">${esc(r.service || 'Unclassified')}</td>
+                                        <td class="px-3 py-2 text-center text-xs">${StatusEngine.tierCell(r)}</td><td class="px-3 py-2">${PriorityEngine.truRiskBadge(s.truRisk || 0)}</td>
                                         <td class="px-3 py-2 text-xs">${esc(d.port || '-')}</td><td class="px-3 py-2 text-xs">${esc(d.status)}</td><td class="px-3 py-2 text-xs">${esc(d.first)}</td><td class="px-3 py-2 text-right text-xs font-mono">${d.age}d</td></tr>`;
                                 }).join('')}</tbody>
                             </table>
@@ -8972,6 +9015,8 @@ Finish with a "Verify" section saying how to confirm in Qualys (agent check-in o
                 this.renderVulnDashboard();
                 this.renderRiskAcceptances();
                 if (this.currentView === 'inspect') this.renderInspect();
+                this.cveSel = new Set(); this.inspSel = new Set();
+                if (this.currentView === 'cve') { this._cve = null; this.renderCve(); }
             }
 
             deleteRiskAcceptance(id, assetName) {

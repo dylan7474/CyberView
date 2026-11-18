@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.12.0 · 17 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.13.0 · 18 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -83,6 +83,7 @@
             <div id="setup-banner" class="hidden mt-3 text-[11px] bg-red-50 border border-red-300 text-red-800 rounded-lg p-2">No users yet, so anyone who can reach this page can use and change everything. <button onclick="app.switchView('users')" class="underline font-bold">Create the administrator</button></div>
         </div>
         <div class="px-3 pt-3 print-hide" id="view-mode"></div>
+        <div class="px-3 pt-2 print-hide simple-ok" id="acc-switch"></div>
         <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
             <button onclick="app.switchView('dashboard')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📊 Dashboard</button>
             <button onclick="app.switchView('import')" class="local-only write-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📥 Import Data</button>
@@ -130,6 +131,8 @@
         <!-- Dynamic Views Container -->
         <div class="flex-1 overflow-y-auto p-8" id="view-container">
             <div id="demo-banner" class="hidden"></div>
+            <div id="acc-strip" class="hidden mb-4 rounded-lg border-2 border-amber-400 bg-amber-50 text-amber-900 px-4 py-2 text-sm flex flex-wrap items-center gap-x-3 gap-y-1"></div>
+            <div id="acc-note"></div>
             <div id="org-banner" class="hidden mb-4 bg-amber-50 border-2 border-amber-400 text-amber-900 rounded-xl p-4 text-sm print-hide">⚠ <strong>Set up your organisation first.</strong> This portal has assets but no organisation setup (teams, domain suffixes, rules), so imports and Qualys syncs are paused to avoid duplicate assets. <button onclick="app.switchView('org')" class="underline font-semibold">Open ⚙ Organisation setup</button>, check it and press <em>Save setup</em>, or import your setup, or restore a backup that includes it.</div>
             
             <!-- VIEW: DASHBOARD -->
@@ -424,7 +427,7 @@
                         <span class="text-sm font-semibold text-gray-800 w-20">Showing</span>
                         <label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Team</span><select id="vuln-filter-owner" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"></select></label>
                         <label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Exposure</span><select id="vuln-filter-exposure" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Exposures</option><option value="Internet Facing">Internet Facing</option><option value="DMZ">DMZ</option><option value="Internal">Internal</option></select></label>
-                        <label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Risk</span><select id="vuln-filter-riskstatus" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Statuses</option><option value="Open" selected>Open (Actionable)</option><option value="Risk Accepted">Risk Accepted</option><option value="Awaiting Patch">Awaiting Patch</option></select></label>
+                        
                     </div>
                     <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
                         <span class="text-sm font-semibold text-gray-800 w-20">Urgency</span>
@@ -586,13 +589,10 @@
                         <div>
                             <h2 class="text-3xl font-bold text-slate-800" id="report-title">Team Risk Report</h2>
                             <p class="text-gray-500 text-sm mt-1" id="report-date-main"></p>
+                            <div id="rpt-acc-stamp"></div>
                         </div>
                         <div class="flex items-center space-x-4 print-hide">
-                            <select id="report-risk-status-selector" onchange="app.renderReports()" class="border-gray-300 rounded text-sm font-medium shadow-sm py-2">
-                                <option value="ALL">All Risk Statuses</option>
-                                <option value="Open">Actionable Only</option>
-                                <option value="Risk Accepted">Accepted Only</option>
-                            </select>
+                            
                             <select id="report-scope-selector" onchange="app.renderReports()" class="border-gray-300 rounded text-sm font-medium shadow-sm py-2"></select>
                             <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded shadow-sm text-sm font-medium">🖨️ Print PDF</button>
                         </div>
@@ -1830,6 +1830,14 @@
                     approver: 'Head of Platform', status: 'Risk Accepted', accDate: new Date(now - 60 * day).toISOString().slice(0, 10), revDate: rev, expDate: exp, scope: 'finding', qids: [q], proposer: 'demo' });
                 if (tlsHost) ra.push(one(tlsHost, tls.qid, new Date(now + 120 * day).toISOString().slice(0, 10), new Date(now + 60 * day).toISOString().slice(0, 10), 'Legacy client needs TLS 1.0 until it is replaced in Q1.'));
                 if (logHost) ra.push(one(logHost, log4.qid, new Date(now - 5 * day).toISOString().slice(0, 10), new Date(now - 20 * day).toISOString().slice(0, 10), 'Old file server needs unsigned SMB until it is retired; temporary acceptance.'));
+                // whole machines accepted (v4.13): the 2012 R2 servers waiting for their upgrade (one expires within 30 days) and one ESXi host
+                const regA = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
+                const whole = (r, exp, reason) => { r.riskStatus = 'Risk Accepted'; ra.push({ id: 'RA-demo-' + ra.length, asset: r.normalizedName, owner: r.owner, service: r.service || '', reason, control: 'Isolated VLAN, no Internet access, extra monitoring',
+                    approver: 'Head of Platform', status: 'Risk Accepted', accDate: new Date(now - 30 * day).toISOString().slice(0, 10), revDate: new Date(now + 20 * day).toISOString().slice(0, 10), expDate: exp, scope: 'asset', qids: [], proposer: 'demo' }); };
+                regA.filter(r => /2012 R2/.test(r.os)).slice(0, 2).forEach((r, i) => whole(r, new Date(now + (i ? 90 : 21) * day).toISOString().slice(0, 10), 'Line-of-business app only runs on 2012 R2; upgrade booked (CHG-4021).'));
+                const esx = regA.find(r => /ESXi 7/.test(r.os || ''));
+                if (esx) whole(esx, new Date(now + 150 * day).toISOString().slice(0, 10), 'Vendor-certified appliance host; replacement hardware on order.');
+                StorageService.save(StorageService.KEYS.ASSET_REGISTER, regA);
                 StorageService.save(StorageService.KEYS.RISK_ACCEPTANCES, ra);
                 app.invalidateVulnData();
                 // 30 days of history leading up to today (made from today's figures, improving towards now)
@@ -1867,7 +1875,7 @@
             static weekOf(t) { const d = new Date(t); d.setUTCHours(0, 0, 0, 0); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); }
             static async update(app) {
                 if (app.me && app.me.role === 'viewer') return null;
-                const PB = await app.planBuckets('ALL', 'ALL');
+                const PB = await app.planBuckets('ALL', 'ALL', true);      // official: never risk-accepted
                 if (!PB || !PB.policiesRead) return null;            // no promises without Automox's schedules
                 const F = this.load(), now = this.now(), day = 864e5, vd = PB.vd;
                 const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
@@ -1878,9 +1886,9 @@
                 let kept = 0, missed = 0, dropped = 0;
                 for (const [key, pr] of Object.entries(F.promises)) {
                     const [a, q] = key.split('|'), due = pr.r + this.GRACE * day;
-                    if (now < due) continue;
                     const r = reg.get(a);
-                    if (!r || r.riskStatus === 'Risk Accepted' || excepted.has(key)) { delete F.promises[key]; dropped++; continue; }
+                    if (!r || RiskView.machine(r, vd.ex) || excepted.has(key)) { delete F.promises[key]; dropped++; continue; }   // accepted since: not counted (at once)
+                    if (now < due) continue;
                     if (!open.has(key)) { tally(this.weekOf(pr.r), pr.t, true); delete F.promises[key]; kept++; continue; }
                     const rescanned = StatusEngine.time(scans[a]) >= pr.r;
                     if (!rescanned && now < due + this.WAIT * day) continue;                   // wait for Qualys to look again
@@ -1972,14 +1980,70 @@
                 if (!Demo.api()) return null;
                 let D = null; try { D = await AutomoxService.ensure(); } catch (e) { D = null; }
                 if (!D || !(D.devices || []).length) return null;                // no Automox data: nothing to compare
-                const m = AutomoxService.match(), out = [];
+                const m = AutomoxService.match(), out = [], exO = StatusEngine.exIndex(), show = RiskView.on();
+                this._osHidden = { machines: 0, findings: 0, expiring: 0 };
                 StorageService.load(StorageService.KEYS.ASSET_REGISTER).forEach(r => {
                     if (r.unrecognised) return;
+                    const acc = RiskView.machine(r, exO);
                     const x = m.byAsset.get(r.normalizedName); if (!x || !x.dev) return;
-                    const c = this.compare(r, x.dev); if (c) out.push({ name: r.normalizedName, team: r.owner || 'Unknown', ...c });
+                    const c = this.compare(r, x.dev); if (!c) return;
+                    if (acc && !show) { this._osHidden.machines++; if (RiskView.expiring(acc)) this._osHidden.expiring++; return; }   // v4.13 Risk-accepted switch
+                    out.push({ name: r.normalizedName, team: r.owner || 'Unknown', acc, ...c });
                 });
                 const order = { differ: 0, release: 1, vague: 2 };
                 return out.sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name));
+            }
+        }
+
+        // =====================================================================================================
+        // Risk-accepted: one switch for the whole platform (v4.13). Remembered per person (Prefs 'showAccepted').
+        // Hidden (the default): risk-accepted machines and accepted findings are left out of every list and count,
+        // and each page says how many it is hiding. Shown: they are listed with a ⚑ flag and a strip across the top.
+        // Whatever the switch: team status, targets, status history and the forecast check never count them, and
+        // machine lists for Ansible never contain them. Expired acceptances count again by themselves; requests not
+        // yet approved count as open. The Asset Register and Risk Acceptances pages always show everything.
+        // =====================================================================================================
+        class RiskView {
+            static SOON = 30;                         // days: an acceptance expiring within this is flagged
+            static on() { return !!Prefs.get('showAccepted', false); }
+            static today() { return new Date().toISOString().slice(0, 10); }
+            // The in-date acceptance behind a risk-accepted machine (a placeholder when the record is missing), or null.
+            static machine(r, ex) {
+                if (!r || StatusEngine.effRisk(r, ex) !== 'Risk Accepted') return null;
+                const e = ex && ex.get(r.normalizedName);
+                return (e && e.whole) || { asset: r.normalizedName, status: 'Risk Accepted' };
+            }
+            // Machines accepted as a whole, by name.
+            static machineSet(ex) {
+                ex = ex || StatusEngine.exIndex();
+                return new Set(StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => this.machine(r, ex)).map(r => r.normalizedName));
+            }
+            static expiring(a) { if (!a || !a.expDate) return false; const d = Math.floor((Date.parse(a.expDate) - Date.parse(this.today())) / 864e5); return d >= 0 && d <= this.SOON; }
+            static flag(a, small = false) {
+                if (!a) return '';
+                const exp = a.expDate ? new Date(a.expDate + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '';
+                const soon = this.expiring(a), review = a.revDate && a.revDate < this.today();
+                const tip = ['Risk accepted', a.approver ? 'by ' + a.approver : '', a.expDate ? 'until ' + a.expDate : '', a.reason ? '· ' + a.reason : '', review ? '· review overdue' : ''].filter(Boolean).join(' ');
+                return `<span class="inline-flex items-center gap-1 whitespace-nowrap rounded border ${soon || review ? 'border-red-400 bg-red-50 text-red-900' : 'border-amber-400 bg-amber-50 text-amber-900'} px-1.5 py-0.5 ${small ? 'text-[10px]' : 'text-xs'} font-semibold" title="${esc(tip)}">⚑ Accepted${exp ? ' until ' + esc(exp) : ''}${soon ? ' · expires soon' : ''}${review ? ' · review due' : ''}</span>`;
+            }
+            // The page's line: what is hidden (switch off) or shown (switch on), and acceptances about to lapse.
+            static note(h) {
+                if (!h) return '';
+                const n = (x, one, many) => `${fmtNum(x)} ${x === 1 ? one : many}`;
+                const parts = [h.machines ? n(h.machines, 'risk-accepted machine', 'risk-accepted machines') : '', h.findings ? n(h.findings, 'accepted finding', 'accepted findings') : ''].filter(Boolean);
+                const soon = h.expiring ? `<span class="font-semibold text-red-800">⚠ ${n(h.expiring, 'acceptance expires', 'acceptances expire')} within ${this.SOON} days</span>` : '';
+                if (!parts.length && !soon) return '';
+                return this.on()
+                    ? `<div class="mb-3 text-xs text-amber-900 flex flex-wrap items-center gap-x-3 print-hide"><span>⚑ Showing ${parts.join(' · ') || 'risk-accepted items'} on this page, flagged</span>${soon}</div>`
+                    : `<div class="mb-3 text-xs text-gray-600 flex flex-wrap items-center gap-x-3 print-hide"><span>⚑ Hiding ${parts.join(' · ') || 'nothing'} on this page</span>${soon}<button onclick="app.setShowAccepted(true)" class="underline text-blue-700">Show them</button></div>`;
+            }
+            // Count what a machine-level page leaves out, for names in scope.
+            static machineHidden(names, ex) {
+                ex = ex || StatusEngine.exIndex();
+                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                let machines = 0, expiring = 0;
+                names.forEach(nm => { const a = this.machine(reg.get(nm), ex); if (a) { machines++; if (this.expiring(a)) expiring++; } });
+                return { machines, findings: 0, expiring };
             }
         }
 
@@ -2293,6 +2357,8 @@
                     if (d.p) { g.p = Math.min(g.p || 5, d.p); if (d.due && (!g.due || d.due < g.due)) { g.due = d.due; g.dueBacklog = d.backlog; } if (d.overdue) g.overdue = (g.overdue || 0) + 1; }
                     g.qvs = Math.max(g.qvs, d.qvs);
                     g.assets.add(d.asset);
+                    if (!g.need) { g.need = new Set(); g.accN = 0; }
+                    if (d.accF || d.accM) g.accN++; else g.need.add(d.asset);     // v4.13: machine lists use need
                     g.detections++;
                     g.maxAge = Math.max(g.maxAge, d.age);
                 }
@@ -2315,11 +2381,11 @@
                 const out = [];
                 by.forEach((m, k) => {
                     if (m.length === 1) { out.push(m[0]); return; }
-                    const assets = new Set();
-                    m.forEach(x => x.assets.forEach(a => assets.add(a)));
+                    const assets = new Set(), need = new Set();
+                    m.forEach(x => { x.assets.forEach(a => assets.add(a)); (x.need || []).forEach(a => need.add(a)); });
                     const dated = m.map(x => ({ x, t: Date.parse((qmap.get(x.qid) || {}).patchReleased) })).filter(d => !isNaN(d.t)).sort((a, b) => b.t - a.t);
                     out.push({
-                        family: true, key: k, title: k, members: m.slice().sort(cmp), qid: m[0].qid, cve: m[0].cve,
+                        family: true, key: k, title: k, members: m.slice().sort(cmp), qid: m[0].qid, cve: m[0].cve, need, accN: m.reduce((n, x) => n + (x.accN || 0), 0),
                         tier: Math.min(...m.map(x => x.tier)), p: Math.min(...m.map(x => x.p || 5)), overdue: m.reduce((n, x) => n + (x.overdue || 0), 0),
                         due: (v => isFinite(v) ? v : 0)(Math.min(...m.map(x => x.due || Infinity))), dueBacklog: m.some(x => x.dueBacklog), qvs: Math.max(...m.map(x => x.qvs)), assets,
                         detections: m.reduce((n, x) => n + x.detections, 0), patchable: m.every(x => x.patchable), patchCount: m.filter(x => x.patchable).length, exploited: m.some(x => x.exploited),
@@ -2421,7 +2487,7 @@
             static annotate(vd) {
                 const S = this.settings(), sla = this.sla(), now = Date.now();
                 const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
-                for (const d of vd.dets) {
+                for (const d of [...vd.dets, ...(vd.excepted || [])]) {
                     const r = reg.get(d.asset);
                     d.p = this.priority(this.findingTier(d, S), r, S);
                     const x = this.due(d, d.p, S, sla, r);
@@ -4133,6 +4199,7 @@
             init() {
                 Prefs.listen();
                 this.applyViewMode();
+                this.applyAccepted();
                 OrgSettings.ensureSaved();          // v3.20: copy the built-in organisation values into the database once (administrators)
                 this.fillTeamSelects();
                 this.reviewState.filters = { state: document.getElementById('review-filter-state').value, owner: document.getElementById('review-filter-owner').value, service: document.getElementById('review-filter-service').value, search: '' };
@@ -4157,6 +4224,7 @@
                 
                 target.classList.add('active');
                 this.currentView = viewId;
+                this.accNote(null);
                 OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
                 const TITLES = { import: Demo.api() ? 'Manual import' : 'Import Data', plan: 'Patch Plan', dashboard: 'Dashboard', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Organisation setup · Status rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
                 const pt = document.getElementById('page-title'); if (pt) pt.textContent = TITLES[viewId] || 'CyberView';
@@ -4567,10 +4635,10 @@
             }
 
             // The four Patch Plan sections for a team and urgency (shared by the Patch Plan page and the Team Risk Report). null = no Automox data.
-            async planBuckets(team, pmax) {
+            async planBuckets(team, pmax, official = false) {
                 const S = StatusEngine.settings(), days = +S.patchPlanDays || 7, end = Demo.now() + days * 864e5;     // Demo.now() = the real clock outside the demo
                 let D = null; if (Demo.api()) { try { D = await AutomoxService.ensure(); } catch (e) { D = null; } }
-                const { dets, vd, regMap } = await this.scopedData({ owner: team, riskStatus: 'Open', p: pmax });
+                const { dets, vd, regMap, hidden } = await this.scopedData({ owner: team, p: pmax, official });
                 if (!D) return null;
                 const m = AutomoxService.match(), auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
                 const B = { manual: [], blocked: [], will: [], done: [] };
@@ -4585,7 +4653,7 @@
                     const q = vd.qmap.get(d.qid) || {}, t = PriorityEngine.tier(d, q), p = StatusEngine.priority(StatusEngine.findingTier({ ...d, tier: t }, S), regMap.get(d.asset), S);
                     if (pmax === 'ALL' || p <= +pmax) B.done.push({ ...d, tier: t, p, _why: 'fixed: Qualys no longer finds it' });
                 });
-                return { B, dets, vd, regMap, days, end, policiesRead: !!(D.polById && D.polById.size) };
+                return { B, dets, vd, regMap, days, end, hidden, policiesRead: !!(D.polById && D.polById.size) };
             }
             // Shown wherever the plan appears, until an Automox sync on v4.5.2 or later has read the patch policies.
             static planPolicyNote(PB) {
@@ -4610,6 +4678,7 @@
                 if (!PB) { body.innerHTML = '<div class="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-900">⚠ No Automox data yet. Open Patch Coverage and press Sync from Automox.</div>'; $('plan-summary').textContent = ''; return; }
                 const { B, dets, vd, regMap } = PB;
                 this._plan = B;
+                this.accNote(PB.hidden);
                 const note = App.planPolicyNote(PB);
                 const n = (a) => fmtNum(a.length), mach = (a) => fmtNum(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
                 const scopeTxt = [f.team === 'ALL' ? 'All teams' : f.team, f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : ''].filter(Boolean).join(' · ');
@@ -4639,7 +4708,8 @@
                 const by = new Map();
                 a.forEach(d => {
                     let g = by.get(d.qid);
-                    if (!g) by.set(d.qid, g = { qid: d.qid, title: (vd.qmap.get(d.qid) || {}).title || 'QID ' + d.qid, p: 5, assets: new Set(), why: new Map(), when: [], overdue: 0, qvs: 0, key1: 0 });
+                    if (!g) by.set(d.qid, g = { qid: d.qid, title: (vd.qmap.get(d.qid) || {}).title || 'QID ' + d.qid, p: 5, assets: new Set(), why: new Map(), when: [], overdue: 0, qvs: 0, key1: 0, acc: 0 });
+                    if (d.accF || d.accM) g.acc++;
                     g.p = Math.min(g.p, d.p || 5); g.assets.add(d.asset); g.why.set(d._why, (g.why.get(d._why) || 0) + 1); if (d._when) g.when.push(d._when); if (d.overdue) g.overdue++; g.qvs = Math.max(g.qvs, d.qvs || 0);
                 });
                 by.forEach(g => { g.assets.forEach(x => { const r = regMap.get(x); if (r && (r.exposure === 'Internet Facing' || StatusEngine.tierOf(r) === 1)) g.key1++; }); });
@@ -4653,7 +4723,7 @@
                         <td class="px-3 py-2 text-right text-gray-500">${i + 1}</td>
                         <td class="px-3 py-2 text-gray-800"><span class="block truncate max-w-md" title="${esc(g.title)}">${esc(g.title)}</span></td>
                         <td class="px-3 py-2 text-center">${g.p < 5 ? StatusEngine.pBadge(g.p) : '-'}</td>
-                        <td class="px-3 py-2 text-right font-semibold">${fmtNum(g.assets.size)}</td>
+                        <td class="px-3 py-2 text-right font-semibold">${fmtNum(g.assets.size)}${g.acc ? `<div class="text-[10px] text-amber-900 whitespace-nowrap" title="Risk-accepted: shown, never in the machine list">⚑ ${fmtNum(g.acc)} accepted</div>` : ''}</td>
                         <td class="px-3 py-2 text-xs text-gray-700">${why}</td>
                         <td class="px-3 py-2 text-xs whitespace-nowrap">${when}${g.overdue && k !== 'done' ? ` <strong>✖ ${fmtNum(g.overdue)} overdue</strong>` : ''}</td>
                         <td class="px-3 py-2 text-right"><button class="text-[10px] text-gray-700 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap" title="Download the names of these machines, one per line (an Ansible inventory)" data-k="${k}" data-q="${esc(g.qid)}" onclick="event.stopPropagation(); app.planList(this.dataset.k, this.dataset.q)">⬇ List</button></td></tr>`;
@@ -4689,7 +4759,7 @@
                 StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
             }
             planList(k, qid) {
-                const a = (this._plan?.[k] || []).filter(d => !qid || String(d.qid) === String(qid));
+                const a = (this._plan?.[k] || []).filter(d => (!qid || String(d.qid) === String(qid)) && !d.accF);
                 const names = App.hostNames(new Set(a.map(d => d.asset)));
                 if (!names.length) { StorageService.toast('No machines to export'); return; }
                 const f = this.planF, label = { manual: 'manual', blocked: 'blocked', will: 'automox-will-patch', done: 'patched' }[k];
@@ -5116,7 +5186,9 @@
 
                 const qEl = document.getElementById('ax-q'), hadFocus = !!qEl && document.activeElement === qEl, caret = qEl ? qEl.selectionStart : 0;
                 const m = AutomoxService.match(), scope = document.getElementById('ax-scope').value;
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => scope === 'ALL' || (r.owner || 'Unknown') === scope);
+                let reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => scope === 'ALL' || (r.owner || 'Unknown') === scope);
+                { const exA = StatusEngine.exIndex(); this.accNote(RiskView.machineHidden(reg.map(r => r.normalizedName), exA));      // v4.13 Risk-accepted switch
+                  if (!RiskView.on()) { const acc = RiskView.machineSet(exA); reg = reg.filter(r => !acc.has(r.normalizedName)); } }
                 S.scope = scope;   // a fix opened from here shows this team's assets (v3.18.3)
                 const RIX = RemediationVerifier.index();
                 const cats = new Map(reg.map(r => [r.normalizedName, this.axCats(r.normalizedName, m)]));
@@ -5169,7 +5241,7 @@
                     const fails = d ? d.policies.filter(p => p.compliant === false) : [];
                     const sevTxt = d ? [['critical', 'crit'], ['high', 'high']].filter(([k]) => d.sev[k]).map(([k, l]) => `${d.sev[k]} ${l}`).join(' · ') : '';
                     return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(n)}" onclick="app.openAssetDetail(this.dataset.n)">
-                        <td class="px-2 py-2 font-medium text-gray-800 max-w-[220px]"><div class="truncate" title="${esc(n)}">${esc(n)}</div><div class="text-[10px] text-gray-500">${esc(Lifecycle.osFamily(r.os) || r.os || '')}</div></td>
+                        <td class="px-2 py-2 font-medium text-gray-800 max-w-[220px]"><div class="truncate" title="${esc(n)}">${esc(n)}</div>${(() => { const a = RiskView.machine(r, StatusEngine.exIndex()); return a ? RiskView.flag(a, true) : ''; })()}<div class="text-[10px] text-gray-500">${esc(Lifecycle.osFamily(r.os) || r.os || '')}</div></td>
                         <td class="px-2 py-2 text-xs">${esc(r.owner || 'Unknown')}</td>
                         <td class="px-2 py-2">${AutomoxService.badge(d, x.how)}${(() => { const pp = AutomoxService.patchPolicy(d); return pp === 'none' || pp === 'off' ? `<div class="text-[10px] font-semibold text-rose-800 mt-0.5" title="Automox will not patch this machine by itself">⊘ ${esc(AutomoxService.POLICY_WHY[pp])}</div>` : ''; })()}${d ? `<div class="text-[10px] text-gray-500 mt-0.5" title="${esc(d.name)}">${esc(d.name)}${x.how && x.how !== 'name' ? ` · <span class="${x.how === 'IP only' ? 'text-amber-700 font-semibold' : ''}">by ${esc(x.how)}</span>` : ''}</div>` : (x.how === 'ambiguous' ? `<div class="text-[10px] text-gray-500">${(x.cands || []).length} candidates · see below</div>` : x.how === 'duplicate' ? `<div class="text-[10px] text-gray-500">device belongs to ${esc(x.of)}</div>` : '')}</td>
                         <td class="px-2 py-2 text-xs whitespace-nowrap">${d ? esc(AutomoxService.ago(d.lastSeen)) : '-'}</td>
@@ -5377,6 +5449,22 @@
                 const b = (v, label, help) => { const on = v === m; return `<button role="radio" aria-checked="${on}" onclick="app.setViewMode('${v}')" title="${esc(help)}" class="flex-1 px-2 py-1.5 rounded-lg text-xs ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}">${on ? '●' : '○'} ${label}</button>`; };
                 el.innerHTML = `<div role="radiogroup" aria-label="View" class="flex gap-1.5">${b('simple', 'Simple', 'Dashboard, Patch Plan, Team Risk Reports and End of Life')}${b('advanced', 'Advanced', 'Every page and setting')}</div>`;
             }
+            // ⚑ Risk-accepted switch (v4.13)
+            applyAccepted() {
+                const on = RiskView.on(), el = document.getElementById('acc-switch'), strip = document.getElementById('acc-strip');
+                if (el) el.innerHTML = `<button role="switch" aria-checked="${on}" onclick="app.setShowAccepted(${!on})" title="Risk-accepted machines and accepted findings: ${on ? 'shown, flagged ⚑' : 'hidden'} on every page. Team status, targets and the forecast never count them; machine lists never contain them." class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs border ${on ? 'border-amber-500 bg-amber-50 text-amber-900 font-semibold' : 'border-gray-300 bg-white text-gray-700'}"><span>⚑ Risk-accepted</span><span>${on ? '● Shown' : '○ Hidden'}</span></button>`;
+                if (strip) { strip.classList.toggle('hidden', !on);
+                    strip.innerHTML = on ? `<span>⚑ <strong>Showing risk-accepted machines and findings</strong> (flagged ⚑). Team status, targets and the forecast still leave them out; machine lists never include them.</span><button onclick="app.setShowAccepted(false)" class="ml-auto underline print-hide">Hide them</button>` : ''; }
+            }
+            setShowAccepted(v) {
+                Prefs.set('showAccepted', !!v);
+                this.applyAccepted();
+                this._vd = null; this.vulnData = null;
+                this.switchView(this.currentView || 'dashboard');
+            }
+            // Each page puts its hidden/shown counts here (cleared on every page change).
+            accNote(h) { const el = document.getElementById('acc-note'); if (el) el.innerHTML = RiskView.note(h); }
+
             setViewMode(m) {
                 Prefs.set('view', m === 'advanced' ? 'advanced' : 'simple');
                 this.applyViewMode();
@@ -5396,6 +5484,7 @@
                 const f = this.planF, sev = (n) => fmtNum(n);
                 const dseq = this._dsSeq = (this._dsSeq || 0) + 1;
                 let PB = null; try { PB = await this.planBuckets(f.team, 'ALL'); } catch (e) { PB = null; }
+                if (this.currentView === 'dashboard') { const hm = RiskView.machineHidden(reg.filter(r => !r.unrecognised).map(r => r.normalizedName)); this.accNote({ machines: hm.machines, findings: PB?.hidden?.findings || 0, expiring: hm.expiring }); }
                 if (this.currentView !== 'dashboard' || dseq !== this._dsSeq) return;
                 const mach = (a) => sev(new Set(a.map(x => x.asset)).size), p12 = (a) => a.filter(x => x.p && x.p <= 2).length;
                 let plan;
@@ -5409,7 +5498,7 @@
                 let st = null; try { st = await this.statusData(); } catch (e) { st = null; }
                 if (this.currentView !== 'dashboard' || dseq !== this._dsSeq) return;
                 if (st) {
-                    const a = (st.assets || []).filter(x => !x.r?.unrecognised), by = (k) => a.filter(x => x.checks?.eol?.s === k);
+                    const exD = StatusEngine.exIndex(), a = (st.assets || []).filter(x => !x.r?.unrecognised && (RiskView.on() || !RiskView.machine(x.r, exD))), by = (k) => a.filter(x => x.checks?.eol?.s === k);   // v4.13 switch
                     const S = StatusEngine.settings(), t1 = by('x').filter(x => x.tier === 1).length;
                     const eol = row('⛔', '<strong>No security fixes any more</strong>', `${sev(by('x').length)} machines`, t1 ? `${sev(t1)} of them Tier 1` : '')
                         + row('🔶', `Fixes end within ${S.eolActionMonths || 6} months`, `${sev(by('a').length)} machines`)
@@ -5538,11 +5627,12 @@
                 this.updateGlobalBadges();
                 if (this.currentView !== 'review') return;
                 if (!list) { el.innerHTML = ''; return; }
+                this.accNote(OsCheck._osHidden);
                 if (!list.length) { el.innerHTML = '<div class="bg-white border rounded-lg px-4 py-2 text-sm text-gray-700">✓ <strong>Operating systems:</strong> Qualys and Automox agree on every machine Automox manages (or the differences have been checked).</div>'; return; }
                 const open = this._osOpen !== false, sev = (n) => fmtNum(n);
                 const count = (k) => list.filter(x => x.kind === k).length;
                 const rows = list.slice(0, this._osAll ? list.length : 25).map(x => { const [sym, word, help] = OsCheck.KIND[x.kind];
-                    return `<tr class="align-top"><td class="px-3 py-2 font-medium whitespace-nowrap"><a href="#" class="text-blue-700 hover:underline" data-n="${esc(x.name)}" onclick="app.openAssetDetail(this.dataset.n); return false;">${esc(x.name)}</a><div class="text-[11px] text-gray-500">${esc(x.team)}</div></td>
+                    return `<tr class="align-top"><td class="px-3 py-2 font-medium whitespace-nowrap"><a href="#" class="text-blue-700 hover:underline" data-n="${esc(x.name)}" onclick="app.openAssetDetail(this.dataset.n); return false;">${esc(x.name)}</a><div class="text-[11px] text-gray-500">${esc(x.team)}</div>${x.acc ? RiskView.flag(x.acc, true) : ''}</td>
                         <td class="px-3 py-2 whitespace-nowrap" title="${esc(help)}">${sym} ${word}</td>
                         <td class="px-3 py-2 text-xs">${esc(x.qualys || '-')}</td><td class="px-3 py-2 text-xs">${esc(x.automox)}</td>
                         <td class="px-3 py-2 text-xs">${esc(x.used || '-')}${x.edited ? ' <span class="text-[10px] text-gray-500">✎ edited</span>' : ''}</td>
@@ -6081,7 +6171,7 @@
 
             updateVulnFilters() {
                 const v = (id) => document.getElementById(id).value;
-                this.vulnState.filters = { ...this.vulnState.filters, patchable: v('vuln-filter-patchable'), severity: v('vuln-filter-severity'), owner: v('vuln-filter-owner'), exposure: v('vuln-filter-exposure'), riskStatus: v('vuln-filter-riskstatus') };
+                this.vulnState.filters = { ...this.vulnState.filters, patchable: v('vuln-filter-patchable'), severity: v('vuln-filter-severity'), owner: v('vuln-filter-owner'), exposure: v('vuln-filter-exposure') };
                 this.vulnResetPages();
                 this.renderVulnDashboard();
             }
@@ -6136,6 +6226,8 @@
                 dets = all.filter(d => RemediationVerifier.ACTIVE(d.status));
                 const excepted = dets.filter(isEx);                 // in-date per-finding exceptions: shown apart, never counted
                 dets = dets.filter(d => !isEx(d));
+                const exBy = new Map();                             // v4.13: listed (flagged ⚑) when the Risk-accepted switch is on
+                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
                 dets.forEach(d => {
                     const q = qmap.get(d.qid) || {};
                     d.tier = PriorityEngine.tier(d, q);
@@ -6145,7 +6237,7 @@
                     if (!byQid.has(d.qid)) byQid.set(d.qid, []);
                     byQid.get(d.qid).push(d);
                 });
-                this._vd = StatusEngine.annotate({ dets, all, excepted, ex, qmap, byAsset, byQid });
+                this._vd = StatusEngine.annotate({ dets, all, excepted, exBy, ex, qmap, byAsset, byQid });
                 return this._vd;
             }
 
@@ -6155,25 +6247,36 @@
             }
 
             // Registered assets in scope joined to their detections, with the filters applied at detection level.
-            async scopedData({ owner = 'ALL', exposure = 'ALL', riskStatus = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL' } = {}) {
+            // v4.13: risk-accepted machines and accepted findings follow the Risk-accepted switch (official: true = never included).
+            // The old riskStatus filter is gone; hidden = what the switch leaves out within the other filters.
+            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false } = {}) {
                 const vd = await this.getVulnData();
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 const regMap = new Map(reg.map(r => [r.normalizedName, r]));
                 const sums = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => [s.name, s]));
-                const inScope = reg.filter(r => (owner === 'ALL' || r.owner === owner)
-                    && (exposure === 'ALL' || (r.exposure || 'Unknown') === exposure)
-                    && (riskStatus === 'ALL' || StatusEngine.effRisk(r, vd.ex) === riskStatus));
+                const show = !official && RiskView.on();
+                const teamScope = reg.filter(r => (owner === 'ALL' || r.owner === owner) && (exposure === 'ALL' || (r.exposure || 'Unknown') === exposure));
+                const accM = new Map(teamScope.map(r => [r.normalizedName, RiskView.machine(r, vd.ex)]).filter(x => x[1]));
+                const inScope = show ? teamScope : teamScope.filter(r => !accM.has(r.normalizedName));
                 const names = new Set(inScope.map(r => r.normalizedName));
+                const keep = (d) => !(patchable === 'YES' && !d.patchable) && !(severity === '5' && d.sev < 5) && !(severity === '4+' && d.sev < 4) && !(tier !== 'ALL' && d.tier > +tier) && !(p !== 'ALL' && (d.p || 5) > +p);
+                const hidden = { machines: 0, findings: 0, expiring: 0 };
+                const hm = new Set();
+                for (const r of teamScope) {
+                    const name = r.normalizedName, a = accM.get(name);
+                    if (a) { const n = (vd.byAsset.get(name) || []).filter(keep).length + (vd.exBy?.get(name) || []).filter(keep).length; if (n) { hm.add(name); if (RiskView.expiring(a)) hidden.expiring++; } }
+                    const f = (vd.exBy?.get(name) || []).filter(keep);
+                    if (!a) { hidden.findings += f.length; f.forEach(d => { if (RiskView.expiring(d.accF)) hidden.expiring++; }); }
+                }
+                hidden.machines = hm.size;
                 const dets = [];
                 const stats = new Map();
-                for (const [name, list] of vd.byAsset) {
-                    if (!names.has(name)) continue;
+                for (const name of names) {
+                    const list = show ? [...(vd.byAsset.get(name) || []), ...(vd.exBy?.get(name) || [])] : (vd.byAsset.get(name) || []);
+                    const am = accM.get(name) || null;
                     for (const d of list) {
-                        if (patchable === 'YES' && !d.patchable) continue;
-                        if (severity === '5' && d.sev < 5) continue;
-                        if (severity === '4+' && d.sev < 4) continue;
-                        if (tier !== 'ALL' && d.tier > +tier) continue;
-                        if (p !== 'ALL' && (d.p || 5) > +p) continue;
+                        d.accM = am;
+                        if (!keep(d)) continue;
                         dets.push(d);
                         if (!stats.has(name)) stats.set(name, PriorityEngine.blank());
                         PriorityEngine.accumulate(stats.get(name), d);
@@ -6182,9 +6285,9 @@
                 const assets = [...stats].map(([name, s]) => {
                     const r = regMap.get(name) || {}, sum = sums.get(name) || {};
                     return { name, ...s, owner: r.owner || 'Unknown', service: r.service || 'Unclassified', exposure: r.exposure || 'Unknown', riskStatus: r.riskStatus || 'Open', criticality: sum.criticality || 0, truRisk: sum.truRisk || 0,
-                        tier: StatusEngine.tierOf(r), tierE: StatusEngine.effTier(r), r };
+                        tier: StatusEngine.tierOf(r), tierE: StatusEngine.effTier(r), r, acc: accM.get(name) || null };
                 }).sort(PriorityEngine.sortAssets);
-                return { vd, inScope, dets, assets, regMap };
+                return { vd, inScope, dets, assets, regMap, hidden, show };
             }
 
             // Per-asset rollup kept in localStorage so the dashboard and risk register can read it synchronously.
@@ -6224,6 +6327,9 @@
                 const [vd, dates] = await Promise.all([this.getVulnData(), EolDates.load(products, refetch), RemediationService.refreshQuiet()]);
                 this._eolLoaded = true;
                 if (this.currentView !== 'eol' || seq !== this._eolSeq) return;
+                // v4.13 Risk-accepted switch: hidden = risk-accepted machines left out of the whole report (counted in the note)
+                { const hid = RiskView.machineHidden(reg.map(r => r.normalizedName), vd.ex); this.accNote(hid);
+                  if (!RiskView.on()) { const acc = RiskView.machineSet(vd.ex); for (let i = reg.length - 1; i >= 0; i--) if (acc.has(reg[i].normalizedName)) reg.splice(i, 1); } }
 
                 const known = reg.filter(r => !r.unrecognised);
                 const sums = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
@@ -6235,7 +6341,9 @@
 
                 // EOL software: QIDs titled "EOL/Obsolete ...", distinct assets in scope.
                 const swByAsset = new Map(), sw = [];
-                for (const [qid, list] of vd.byQid) {
+                const swAcc = RiskView.on() ? (vd.excepted || []) : [];          // accepted findings too, when the switch shows them
+                const swQids = new Map(vd.byQid); swAcc.forEach(d => { swQids.set(d.qid, [...(swQids.get(d.qid) || []), d]); });
+                for (const [qid, list] of swQids) {
                     const q = vd.qmap.get(qid);
                     if (!Lifecycle.isEolQid(q)) continue;
                     const assets = new Set(list.map(d => d.asset).filter(n => names.has(n)));
@@ -6409,7 +6517,7 @@
                     const r = x.r, l = x.life;
                     const acts = x.issues.filter(i => i.action).sort((a, b) => a.status - b.status);
                     const actHtml = acts.map(i => `<div class="${x.hit.includes(i) ? 'text-gray-800' : 'text-gray-400'}">${i.status === 0 ? '⛔ ' : i.status <= 2 ? '▸ ' : '· '}${esc(i.action)}</div>`).join('')
-                        + (x.ra ? `<div class="text-[11px] text-purple-800 mt-0.5">✔ Risk accepted${x.ra.expDate ? ' until ' + esc(EolDates.fmt(x.ra.expDate)) : ''}${x.ra.approver ? ' (' + esc(x.ra.approver) + ')' : ''}</div>` : '');
+                        + (x.ra ? `<div class="mt-0.5">${RiskView.flag(x.ra, true)}</div>` : '');
                     return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)"><td class="px-2 py-2 font-medium text-gray-700 max-w-[200px]"><div class="truncate" title="${esc(r.originalName || r.normalizedName)}">${esc(r.originalName || r.normalizedName)}</div><div class="text-[10px] text-gray-500">${esc(r.service || 'Unclassified')}${x.found.length ? ` · <span class="text-gray-400">matched: ${esc(x.found.join(', ').toLowerCase())}</span>` : ''}</div></td><td class="px-2 py-2 text-xs">${esc(r.owner || 'Unknown')}</td><td class="px-2 py-2 text-center font-mono">${x.crit || '-'}</td><td class="px-2 py-2">${x.tru ? PriorityEngine.truRiskBadge(x.tru) : '<span class="text-gray-400">-</span>'}</td><td class="px-2 py-2">${EolDates.badge(x.worst)}</td><td class="px-2 py-2 text-xs text-gray-600 max-w-[200px]">${esc(Lifecycle.osFamily(r.os))} ${Lifecycle.editedBadge(r)}<div class="text-[10px] text-gray-500">${l.bucket === 4 ? 'no date' : 'security fixes ' + esc(EolDates.fmt(l.secEnd))}${Lifecycle.stageOf(r) ? ' · Qualys ' + esc(Lifecycle.stageOf(r)) : ''}</div></td><td class="px-2 py-2 text-xs max-w-[320px]">${actHtml || '<span class="text-gray-400">-</span>'}</td><td class="px-2 py-2 text-right print-hide whitespace-nowrap">${RemediationVerifier.chip((RIX.byAsset.get(r.normalizedName) || []).filter(t => t.type === 'eol'))} <button class="write-only text-[11px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50" data-n="${esc(r.normalizedName)}" onclick="event.stopPropagation(); app.trackEolAsset(this.dataset.n)" title="Create a remediation task for this asset">＋</button></td></tr>`;
                 }).join('') : empty;
                 $('eol-more').innerHTML = list.length > shown.length ? `<button onclick="app.renderEOLAssets(true)" class="text-sm text-blue-700 underline">Show all ${fmtNum(list.length)} assets (${fmtNum(list.length - shown.length)} more)</button> <span class="text-xs text-gray-500">Show them all before printing.</span>` : '';
@@ -6915,9 +7023,10 @@
                 this.renderEOL();
             }
 
-            coverageHTML(scope = 'ALL', riskStatus = 'ALL') {
+            coverageHTML(scope = 'ALL') {
+                const exC = StatusEngine.exIndex();
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER)
-                    .filter(r => !r.unrecognised && (scope === 'ALL' || r.owner === scope) && (riskStatus === 'ALL' || (r.riskStatus || 'Open') === riskStatus));
+                    .filter(r => !r.unrecognised && (scope === 'ALL' || r.owner === scope) && (RiskView.on() || !RiskView.machine(r, exC)));
                 const unrecCount = StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => r.unrecognised).length;
                 const sums = StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || [];
                 const have = new Set(sums.map(s => s.name));
@@ -7188,7 +7297,7 @@
 
             syncVulnFilterControls() {
                 const f = this.vulnState.filters;
-                const map = { patchable: 'vuln-filter-patchable', severity: 'vuln-filter-severity', owner: 'vuln-filter-owner', exposure: 'vuln-filter-exposure', riskStatus: 'vuln-filter-riskstatus' };
+                const map = { patchable: 'vuln-filter-patchable', severity: 'vuln-filter-severity', owner: 'vuln-filter-owner', exposure: 'vuln-filter-exposure' };
                 Object.entries(map).forEach(([k, id]) => { const el = document.getElementById(id); if (el) el.value = f[k]; });
             }
 
@@ -7234,15 +7343,16 @@
             toggleVulnCoverage() {
                 this.vulnState.coverageOpen = !this.vulnState.coverageOpen;
                 const f = this.vulnState.filters;
-                document.getElementById('vuln-coverage').innerHTML = this.coverageChipHTML(f.owner, f.riskStatus);
+                document.getElementById('vuln-coverage').innerHTML = this.coverageChipHTML(f.owner);
             }
 
             // One line while collapsed; the full explanation (truncation, unmatched assets, asset list) on click.
-            coverageChipHTML(scope = 'ALL', riskStatus = 'ALL') {
+            coverageChipHTML(scope = 'ALL') {
+                const exC = StatusEngine.exIndex();
                 const meta = this.loadVulnMeta();
-                if (!meta.imports.length) return this.coverageHTML(scope, riskStatus);
+                if (!meta.imports.length) return this.coverageHTML(scope);
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER)
-                    .filter(r => (scope === 'ALL' || r.owner === scope) && (riskStatus === 'ALL' || (r.riskStatus || 'Open') === riskStatus));
+                    .filter(r => (scope === 'ALL' || r.owner === scope) && (RiskView.on() || !RiskView.machine(r, exC)));
                 const have = new Set((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => s.name));
                 const n = reg.filter(r => have.has(r.normalizedName)).length;
                 const pct = reg.length ? Math.round(n / reg.length * 100) : 0;
@@ -7251,7 +7361,7 @@
                 const open = this.vulnState.coverageOpen;
                 return `<button onclick="app.toggleVulnCoverage()" aria-expanded="${open}" class="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg border text-sm ${ok ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-amber-50 border-amber-300 text-amber-900'}">
                         <span>${ok ? '✅' : '⚠️'}</span><span class="font-semibold">Data covers ${fmtNum(n)} of ${fmtNum(reg.length)} assets (${pct}%)</span>${truncated ? '<span class="text-xs">· Qualys export truncated</span>' : ''}
-                        <span class="ml-auto text-xs underline">${open ? 'Hide details' : 'Details'}</span></button>${open ? `<div class="mt-2">${this.coverageHTML(scope, riskStatus)}</div>` : ''}`;
+                        <span class="ml-auto text-xs underline">${open ? 'Hide details' : 'Details'}</span></button>${open ? `<div class="mt-2">${this.coverageHTML(scope)}</div>` : ''}`;
             }
 
             // How fresh the findings are, in words and a symbol (never colour alone).
@@ -7293,11 +7403,12 @@
                 this.qxRender();
                 const f = this.vulnState.filters;
                 await RemediationService.refreshQuiet();
-                const { dets, assets, vd, regMap } = await this.scopedData(f);
+                const { dets, assets, vd, regMap, hidden } = await this.scopedData(f);
                 if (this.currentView !== 'vuln') return;
                 const $ = (id) => document.getElementById(id);
+                this.accNote(hidden);
 
-                $('vuln-coverage').innerHTML = this.coverageChipHTML(f.owner, f.riskStatus);
+                $('vuln-coverage').innerHTML = this.coverageChipHTML(f.owner);
                 $('vuln-clear-filters').classList.toggle('hidden', Object.keys(App.VULN_DEFAULT_FILTERS).every(k => f[k] === App.VULN_DEFAULT_FILTERS[k]));
                 $('vuln-fresh').innerHTML = this.vulnFreshHTML();
                 if (this.qx?.job?.running || !this.loadVulnMeta().imports.length) this.vulnToggleData(true); else this.vulnToggleData(!!this.vulnState.dataOpen);
@@ -7323,7 +7434,7 @@
                 // one plain summary line (not buttons)
                 const p1 = dets.filter(d => d.p === 1), over = dets.filter(d => d.overdue && d.p <= 2);
                 const patchPct = dets.length ? Math.round(dets.filter(d => d.patchable).length / dets.length * 100) : 0;
-                const scope = [f.owner === 'ALL' ? 'All teams' : f.owner, f.exposure !== 'ALL' ? f.exposure : '', f.riskStatus !== 'ALL' ? 'risk ' + f.riskStatus : 'any risk status', f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : '', f.patchable === 'YES' ? 'patchable' : '', f.severity !== 'ALL' ? 'severity ' + f.severity : ''].filter(Boolean).join(' · ');
+                const scope = [f.owner === 'ALL' ? 'All teams' : f.owner, f.exposure !== 'ALL' ? f.exposure : '', f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : '', f.patchable === 'YES' ? 'patchable' : '', f.severity !== 'ALL' ? 'severity ' + f.severity : ''].filter(Boolean).join(' · ');
                 $('vuln-summary').innerHTML = `<strong>${esc(scope)}:</strong> ${fmtNum(ranked.length)} machines with findings · ${fmtNum(groups.length)} fixes · <strong>${fmtNum(p1.length)} P1</strong> findings on ${fmtNum(new Set(p1.map(d => d.asset)).size)} machines · ${over.length ? `<strong>✖ ${fmtNum(over.length)} P1/P2 overdue</strong>` : '0 P1/P2 overdue'} · ${patchPct}% fixable by patching`;
                 this.renderVulnSection('assets');
                 this.renderVulnSection('fixes');
@@ -7367,11 +7478,15 @@
             // token = one row ('q:QID' or 'f:family'); none = every fix in the list (after search), in the ranked order.
             // Machine names for automation (v4.3.3): the name as Qualys reports it (usually the full hostname, which Ansible can reach),
             // else the register name; one per line, no header, sorted, no duplicates.
+            // Machine lists for Ansible never contain risk-accepted machines (v4.13): they are often accepted because patching breaks them.
             static hostNames(assets) {
                 const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
-                return [...new Set([...assets].map(a => { const r = reg.get(a) || {}; return String(r.originalName || a).trim(); }).filter(Boolean))].sort((x, y) => x.localeCompare(y));
+                const acc = RiskView.machineSet(), all = [...new Set(assets)], keep = all.filter(a => !acc.has(a));
+                App._leftOut = all.length - keep.length;
+                return [...new Set(keep.map(a => { const r = reg.get(a) || {}; return String(r.originalName || a).trim(); }).filter(Boolean))].sort((x, y) => x.localeCompare(y));
             }
             static downloadList(name, lines) {
+                if (App._leftOut) { const n = App._leftOut; App._leftOut = 0; setTimeout(() => StorageService.toast(`${fmtNum(n)} risk-accepted machine${n === 1 ? '' : 's'} left out of the list`), 2500); }
                 const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob); link.download = `${name}_${new Date().toISOString().slice(0, 10)}.txt`; link.click();
@@ -7394,7 +7509,7 @@
                     rows = q ? rows0.filter(r => cfg.search(r).toLowerCase().includes(q)) : rows0;
                 }
                 if (!rows.length) { StorageService.toast('No fixes to export'); return; }
-                const assets = new Set(); rows.forEach(r => r.assets.forEach(a => assets.add(a)));     // the rows' machines are already within the page's filters
+                const assets = new Set(); rows.forEach(r => (r.need || r.assets).forEach(a => assets.add(a)));     // the rows' machines (not accepted findings), within the page's filters
                 const names = App.hostNames(assets);
                 if (!names.length) { StorageService.toast('No machines to export'); return; }
                 const scope = [st.filters.owner === 'ALL' ? 'all-teams' : st.filters.owner, st.filters.p !== 'ALL' ? 'P1-P' + st.filters.p : ''].filter(Boolean).join('_').replace(/[^A-Za-z0-9_-]+/g, '');
@@ -7407,7 +7522,7 @@
                 const c = this.inspectCtx; if (!c || !c.qid) return;
                 const vd = c.vd || await this.getVulnData(), q = vd.qmap.get(c.qid) || {}, list = c.list || [];
                 if (!list.length) { StorageService.toast('No machines to export'); return; }
-                const names = App.hostNames(new Set(list.map(x => x.asset)));
+                const names = App.hostNames(new Set(list.filter(x => !x.accF).map(x => x.asset)));
                 const scope = (c.scope && c.scope.owner) ? c.scope.owner : 'all-teams';
                 App.downloadList(`fix_${c.qid}_${scope.replace(/[^A-Za-z0-9_-]+/g, '')}`, names);
                 StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
@@ -7435,7 +7550,7 @@
                         cols: [
                             { key: 'sel', w: 4, head: '<input type="checkbox" title="Select the rows shown" onclick="event.stopPropagation()" onchange="app.toggleAllVuln(this.checked)" class="rounded border-gray-300">', cell: (r) => `<input type="checkbox" ${this.vulnState.selectedAssets.has(r.name) ? 'checked' : ''} data-n="${esc(r.name)}" onclick="event.stopPropagation()" onchange="app.toggleVulnAsset(this.dataset.n, this.checked)" class="rounded border-gray-300">` },
                             { key: 'rank', w: 4, label: '#', num: true, dir: 1, align: 'right', sort: (r) => r.rank, cell: (r) => `<span class="text-gray-500">${r.rank}</span>` },
-                            { key: 'name', w: 19, label: 'Machine', dir: 1, sort: (r) => r.name.toLowerCase(), cell: (r) => `<span class="font-medium text-gray-800">${trunc(r.name)}</span>` },
+                            { key: 'name', w: 19, label: 'Machine', dir: 1, sort: (r) => r.name.toLowerCase(), cell: (r) => `<span class="font-medium text-gray-800">${trunc(r.name)}</span>${r.acc ? ' ' + RiskView.flag(r.acc, true) : ''}` },
                             { key: 'owner', w: 8, label: 'Team', dir: 1, sort: (r) => r.owner, cell: (r) => esc(r.owner) },
                             { key: 'tierE', w: 8, label: 'Tier', num: true, dir: 1, align: 'center', sort: (r) => r.tierE, cell: (r) => StatusEngine.tierOf(r.r) ? StatusEngine.tierCell(r.r, r) : `<span class="text-xs text-gray-500 whitespace-nowrap" title="Tier not set: counts as Tier 2. Qualys criticality ${StatusEngine.acsHint(r.r, r) || 'none'} is only a hint.">? not set</span>` },
                             { key: 'p1', w: 5, label: 'P1', num: true, dir: -1, align: 'right', sort: (r) => r.p1, cell: (r) => `<span class="${r.p1 ? 'font-bold' : 'text-gray-400'}">${fmtNum(r.p1)}</span>` },
@@ -7460,7 +7575,7 @@
                         ? `<span class="flex items-center gap-2 text-gray-900"><span class="text-gray-400 w-3">${this.vulnState.expanded.has(r.key) ? '▾' : '▸'}</span><span class="truncate" title="${esc(r.title)}">${esc(r.title)}</span><span class="shrink-0 px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">${r.members.length} updates</span></span>`
                         : `<span class="text-gray-800">${trunc(r.title)}</span>` },
                     { key: 'p', w: 6, label: 'P', dir: 1, align: 'center', sort: (r) => r.p || 5, cell: (r) => r.p && r.p < 5 ? `<span title="${esc(PriorityEngine.LABELS[r.tier])} on the most important machine">${StatusEngine.pBadge(r.p)}</span>` : '-' },
-                    { key: 'assets', w: 9, label: 'Machines', num: true, dir: -1, align: 'right', sort: (r) => r.assets.size, cell: (r) => `<span class="font-semibold">${fmtNum(r.assets.size)}</span>` },
+                    { key: 'assets', w: 9, label: 'Machines', num: true, dir: -1, align: 'right', sort: (r) => r.assets.size, cell: (r) => `<span class="font-semibold">${fmtNum(r.assets.size)}</span>${r.accN ? `<div class="text-[10px] font-semibold text-amber-900 whitespace-nowrap" title="Findings on risk-accepted machines or accepted findings: shown, never in the machine list">⚑ ${fmtNum(r.accN)} accepted</div>` : ''}` },
                     { key: 'key1', w: 9, label: '🌐 / T1', num: true, dir: -1, align: 'right', sort: (r) => r.key1 || 0, cell: (r) => r.key1 ? `<span title="${fmtNum(r.key1)} of these machines are Internet facing or Tier 1">${fmtNum(r.key1)}</span>` : '<span class="text-gray-400">0</span>' },
                     { key: 'due', w: 13, label: 'Due', dir: 1, sort: (r) => r.due || 9e15, cell: (r) => r.due ? `<span class="text-xs whitespace-nowrap ${r.overdue ? 'font-bold' : ''}">${esc(StatusEngine.dueText(r))}</span>` : '-' },
                     { key: 'patchable', w: 7, label: 'Patch', dir: -1, align: 'center', sort: (r) => r.patchable ? 1 : 0, cell: (r) => r.family && !r.patchable && r.patchCount ? `<span class="text-xs text-gray-600" title="${r.patchCount} of ${r.members.length} updates have a patch">${r.patchCount}/${r.members.length}</span>` : (r.patchable ? '✅' : '—') },
@@ -7547,18 +7662,18 @@
                 // Only the latest render may write: a slower earlier one (another team) must not paint over it.
                 const seq = this._rptSeq = (this._rptSeq || 0) + 1, stale = () => seq !== this._rptSeq || this.currentView !== 'reports';
                 const scope = $('report-scope-selector').value;
-                const riskStatusFilter = $('report-risk-status-selector').value;
+                const riskStatusFilter = RiskView.on() ? 'shown' : 'hidden';      // v4.13: the Risk-accepted switch
 
                 $('report-title').textContent = scope === 'ALL' ? 'Estate Risk Report' : `${scope} Team Risk Report`;
                 $('report-date-main').textContent = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric', day: 'numeric' });
 
-                const sd = await this.scopedData({ owner: scope, riskStatus: riskStatusFilter });
+                const sd = await this.scopedData({ owner: scope });
                 if (stale()) return;
                 const { dets, assets, vd, inScope } = sd;
                 const groups = PriorityEngine.fixGroups(dets, vd.qmap);
                 this.reportCtx = { scope, riskStatusFilter, groups, assets, dets, inScope };
 
-                $('rpt-coverage').innerHTML = this.coverageHTML(scope, riskStatusFilter);
+                $('rpt-coverage').innerHTML = this.coverageHTML(scope);
                 $('rpt-asof').innerHTML = this.asOfHTML(this.dataAsOf(StorageService.load(StorageService.KEYS.ASSET_REGISTER), null));
                 await RemediationService.refreshQuiet();
                 if (stale()) return;
@@ -7572,12 +7687,14 @@
                 const teams = st ? (scope === 'ALL' ? st.teams : st.teams.filter(t => t.team === scope)) : [];
                 $('rpt-status-line').innerHTML = teams.length ? `<div class="flex flex-wrap gap-x-6 gap-y-2">${teams.map(t => `<div><span class="font-semibold">${esc(t.team)}</span> ${this.teamWordHTML(t)} <span class="text-xs text-gray-600">${esc((t.why || []).join(' · '))}</span></div>`).join('')}</div>` : '';
                 const T = teams.reduce((a, t) => ({ newP12: a.newP12 + (t.newP12 || 0), newIn: a.newIn + (t.newIn || 0), over12: a.over12 + (t.over12 || 0), bl12: a.bl12 + (t.bl12 || 0), blOver: a.blOver + (t.blOver || 0) }), { newP12: 0, newIn: 0, over12: 0, bl12: 0, blOver: 0 });
-                const p1 = dets.filter(d => d.p === 1), accepted = dets.filter(d => (sd.regMap.get(d.asset)?.riskStatus) === 'Risk Accepted').length;
+                const p1 = dets.filter(d => d.p === 1), accepted = p1.filter(d => d.accM || d.accF).length;
+                this.accNote(sd.hidden);
+                { const st = document.getElementById('rpt-acc-stamp'); if (st) st.innerHTML = sd.show ? '<span class="inline-block mt-1 rounded border-2 border-amber-500 bg-amber-50 text-amber-900 px-2 py-0.5 text-xs font-semibold">⚑ Includes risk-accepted machines and findings (flagged). Status and targets leave them out.</span>' : (sd.hidden.machines || sd.hidden.findings ? `<span class="inline-block mt-1 text-xs text-gray-600">Excludes ${[sd.hidden.machines ? fmtNum(sd.hidden.machines) + ' risk-accepted machine' + (sd.hidden.machines === 1 ? '' : 's') : '', sd.hidden.findings ? fmtNum(sd.hidden.findings) + ' accepted finding' + (sd.hidden.findings === 1 ? '' : 's') : ''].filter(Boolean).join(' and ')}.</span>` : ''); }
                 const tile = (label, value, sub) => `<div class="p-4 rounded bg-slate-50 border"><p class="text-[10px] text-gray-500 uppercase font-semibold">${label}</p><p class="text-xl font-bold text-gray-900">${value}</p>${sub ? `<p class="text-[11px] text-gray-500 mt-1">${sub}</p>` : ''}</div>`;
                 $('rpt-exec-summary').innerHTML =
                     tile('New P1/P2 within due date', T.newP12 ? Math.round(T.newIn * 100 / T.newP12) + '%' : '-', T.newP12 ? `${sev(T.newIn)} of ${sev(T.newP12)} since go-live` : 'none since go-live') +
                     tile('P1/P2 overdue', T.over12 ? '✖ ' + sev(T.over12) : '0', 'new and backlog') +
-                    tile('Open P1 findings', sev(p1.length), `on ${sev(new Set(p1.map(d => d.asset)).size)} of ${sev(assets.length)} machines with findings${accepted ? ` · ${sev(accepted)} on risk-accepted machines` : ''}`) +
+                    tile('Open P1 findings', sev(p1.length), `on ${sev(new Set(p1.map(d => d.asset)).size)} of ${sev(assets.length)} machines with findings${accepted ? ` · ⚑ ${sev(accepted)} risk-accepted` : ''}`) +
                     tile('Backlog P1/P2', sev(T.bl12), T.blOver ? `✖ ${sev(T.blOver)} past target` : 'within target');
 
                 const empty = (c, m) => `<tr><td colspan="${c}" class="px-2 py-4 text-center text-gray-500 italic">${m}</td></tr>`;
@@ -7586,7 +7703,7 @@
                 const ranked = [...assets].sort(App.vulnAssetCmp);
                 const topAssets = ranked.slice(0, 10);
                 $('rpt-top-assets').innerHTML = topAssets.length ? topAssets.map((t, i) => `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(t.name)}" onclick="app.openAssetDetail(this.dataset.n)">
-                    <td class="px-2 py-2 text-right text-gray-500">${i + 1}</td><td class="px-2 py-2 font-medium text-gray-800">${esc(t.name)}</td>
+                    <td class="px-2 py-2 text-right text-gray-500">${i + 1}</td><td class="px-2 py-2 font-medium text-gray-800">${esc(t.name)}${t.acc ? ' ' + RiskView.flag(t.acc, true) : ''}</td>
                     <td class="px-2 py-2 text-center">${StatusEngine.tierOf(t.r) ? 'T' + StatusEngine.tierOf(t.r) : '<span class="text-xs text-gray-500">? not set</span>'}</td>
                     <td class="px-2 py-2 text-right font-mono ${t.p1 ? 'font-bold' : 'text-gray-400'}">${sev(t.p1)}</td><td class="px-2 py-2 text-right font-mono ${t.p2 ? 'font-semibold' : 'text-gray-400'}">${sev(t.p2)}</td>
                     <td class="px-2 py-2 text-right font-mono">${t.overdue ? '<strong>✖ ' + sev(t.overdue) + '</strong>' : '<span class="text-gray-400">0</span>'}</td>
@@ -7606,7 +7723,7 @@
                     return `<tr class="cursor-pointer hover:bg-blue-50 align-top" ${g.family ? `data-k="${esc(g.key)}" onclick="app.vulnOpenFamily(this.dataset.k)"` : `data-q="${esc(g.qid)}" onclick="app.inspectQid(this.dataset.q, 'report')"`}>
                     <td class="px-2 py-2 text-right text-gray-500">${i + 1}</td>
                     <td class="px-2 py-2 text-gray-800">${esc(g.title)}${g.family ? ` <span class="px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold whitespace-nowrap">${g.members.length} updates</span>` : ''}</td>
-                    <td class="px-2 py-2 text-center">${g.p && g.p < 5 ? StatusEngine.pBadge(g.p) : '-'}</td><td class="px-2 py-2 text-right font-mono font-semibold">${sev(g.assets.size)}</td>
+                    <td class="px-2 py-2 text-center">${g.p && g.p < 5 ? StatusEngine.pBadge(g.p) : '-'}</td><td class="px-2 py-2 text-right font-mono font-semibold">${sev(g.assets.size)}${g.accN ? `<div class="text-[10px] font-sans text-amber-900">⚑ ${sev(g.accN)} accepted</div>` : ''}</td>
                     <td class="px-2 py-2 text-xs whitespace-nowrap ${g.overdue ? 'font-bold' : ''}">${g.due ? esc(StatusEngine.dueText(g)) : '-'}</td>
                     <td class="px-2 py-2 text-xs">${tk.length ? tk.map(t => `${esc(t.id)} · ${esc(t.status)}`).join('<br>') : '<span class="text-gray-500">no task</span>'}</td></tr>`; }).join('') : empty(6, 'No open findings in this scope.');
 
@@ -7769,9 +7886,9 @@
             inspectQid(qid, from) {
                 let scope = null;
                 if (from === 'vuln') scope = { ...this.vulnState.filters };
-                else if (from === 'report' && this.reportCtx) scope = { owner: this.reportCtx.scope, riskStatus: this.reportCtx.riskStatusFilter };
+                else if (from === 'report' && this.reportCtx) scope = { owner: this.reportCtx.scope };
                 else if (from === 'ax' && this.axState) scope = { owner: this.axState.scope || 'ALL' };
-                else if (from === 'plan') { const f = this.planF; scope = { owner: f.team, riskStatus: 'Open', p: f.p }; }
+                else if (from === 'plan') { const f = this.planF; scope = { owner: f.team, p: f.p }; }
                 else if (from === 'eol') scope = { owner: (document.getElementById('eol-scope-selector') || {}).value || 'ALL' };
                 else if (!from && this.currentView === 'inspect') scope = [...this.inspectState.stack].reverse().find(x => x.type === 'qid')?.scope || null;
                 this.inspectNav({ type: 'qid', id: String(qid), scope: App.inspectScope(scope) });
@@ -8073,7 +8190,7 @@
             // AI remediation
             // ------------------------------------------
 
-            static VULN_DEFAULT_FILTERS = { patchable: 'ALL', severity: 'ALL', owner: 'ALL', exposure: 'ALL', riskStatus: 'Open', tier: 'ALL', p: 'ALL' };
+            static VULN_DEFAULT_FILTERS = { patchable: 'ALL', severity: 'ALL', owner: 'ALL', exposure: 'ALL', tier: 'ALL', p: 'ALL' };
 
             static aiSystem() { return App.AI_SYSTEM_T.replace('{TEAM}', OrgSettings.get().aiTeam || 'an infrastructure operations team'); }
             static AI_SYSTEM_T = `You are a senior infrastructure security engineer advising {TEAM} on remediating vulnerabilities reported by Qualys.

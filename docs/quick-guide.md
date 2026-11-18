@@ -16,7 +16,7 @@ CyberView turns your scanner output into a short, ranked to-do list, team by tea
 - One machine, one record: Qualys, Automox and the register are matched by asset ID, name or IP. Where Qualys and Automox disagree about a machine's operating system, it lands in the Review Queue to settle.
 - Every finding gets a **priority (P1–P4)** from how dangerous it is and how critical the machine is, with Internet-facing machines one step more urgent. Then a **due date**.
 - One settings page, **Organisation setup**: teams, tiers, name matching and the status rules. Choose a built-in rule set: **Standard**, or **UK** (NCSC and Cyber Essentials deadlines, 5 days for Internet-facing).
-- Tasks and accepted risks are tracked against the same data, and each morning's sync ticks fixes off automatically.
+- Tasks and accepted risks are tracked against the same data, and each morning's sync ticks fixes off automatically. One **⚑ Risk-accepted** switch hides or shows accepted risk on every page; status and targets never count it, and machine lists never include it.
 
 ## What you get
 

@@ -24,7 +24,7 @@ import automox
 import eol
 import qualys
 
-VERSION = "4.17.0"
+VERSION = "4.18.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -890,6 +890,25 @@ def qualys_sync(request: Request):
     if not started:
         return JSONResponse({"error": "A sync is already running", "job": qualys.status()["job"]}, status_code=409)
     return JSONResponse({"started": True}, status_code=202)
+
+
+@app.post("/api/qualys/cve")
+async def qualys_cve(request: Request):
+    """v4.18 Refresh this CVE: the findings for one CVE's QIDs on every host, straight from Qualys (read-only)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        res = await run_in_threadpool(qualys.cve_refresh, body.get("cves") or [], body.get("qids") or [])
+    except qualys.QxError as e:
+        return JSONResponse({"error": str(e), "kind": e.kind}, status_code=409 if e.kind == "busy" else 400)
+    try:
+        with conn_ctx() as c, c.cursor() as cur:
+            audit(cur, current_user(request), "qualys-cve-refresh", f"{', '.join(res['cves'])}: {len(res['hosts'])} hosts")
+    except Exception:
+        pass
+    return res
 
 
 @app.get("/api/qualys/history")

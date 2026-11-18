@@ -562,6 +562,68 @@ def fetch_kb(qids):
     return out
 
 
+_CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$")
+
+
+def cve_refresh(cves, qids):
+    """v4.18 Refresh this CVE (read-only): the QIDs Qualys has for these CVEs (KnowledgeBase, by CVE), plus the QIDs the page
+    already knows, then the findings for just those QIDs on every host in scope, Fixed included (so the page sees machines
+    newly found and machines remediated since the last full sync). Seconds, not the full sync. Refused while a full sync runs."""
+    if not configured():
+        raise QxError("setup", "Qualys is not set up on this server")
+    if blocked():
+        raise QxError("blocked", "Qualys refused the login earlier: fix it with ./deploy.sh qualys pass")
+    if _job.get("running"):
+        raise QxError("busy", "A full Qualys sync is running: refresh the CVE when it has finished")
+    cves = sorted({str(c).strip().upper() for c in (cves or []) if _CVE_RE.match(str(c).strip().upper())})[:20]
+    qset = {str(_int(q)) for q in (qids or []) if _int(q) > 0}
+    if not cves and not qset:
+        raise QxError("input", "No CVE numbers or QIDs given")
+    t0 = time.time()
+    kb, kb_note = {}, "not asked"
+    if cves:
+        try:
+            root = vm("/api/2.0/fo/knowledge_base/vuln/", {"action": "list", "details": "All", "cve": ",".join(cves)}, "KnowledgeBase by CVE")
+            for v in root.findall(".//VULN_LIST/VULN"):
+                k = normalise_kb(v)
+                if set(k["cves"]) & set(cves):
+                    kb[k["qid"]] = k
+            kb_note = "ok"
+        except QxError as e:
+            if e.kind == "auth":
+                raise
+            kb_note = f"not available: {e}"[:200]
+    allq = qset | set(kb)
+    missing = sorted(allq - set(kb), key=_int)
+    for i in range(0, len(missing), KB_BATCH):          # the page's QIDs: their full KnowledgeBase entry too (CVE lists)
+        root = vm("/api/2.0/fo/knowledge_base/vuln/", {"action": "list", "details": "All", "ids": ",".join(missing[i:i + KB_BATCH])}, "KnowledgeBase")
+        for v in root.findall(".//VULN_LIST/VULN"):
+            k = normalise_kb(v)
+            kb[k["qid"]] = k
+    hosts, id_min, pages = {}, None, 0
+    if allq:
+        while True:
+            p = _scope({"action": "list", "truncation_limit": HOSTS_PER_PAGE, "show_results": 0, "show_qds": 1, "show_asset_id": 1,
+                        "status": "New,Active,Re-Opened,Fixed", "qids": ",".join(sorted(allq, key=_int))})
+            if id_min:
+                p["id_min"] = id_min
+            root = vm("/api/2.0/fo/asset/host/vm/detection/", p, "detections for the CVE")
+            pages += 1
+            for h in root.findall(".//HOST_LIST/HOST"):
+                hid = h.findtext("ID")
+                x = hosts.setdefault(hid, {"id": hid, "a": h.findtext("ASSET_ID") or "", "ip": h.findtext("IP") or "", "dns": h.findtext("DNS") or "",
+                                           "nb": h.findtext("NETBIOS") or "", "os": h.findtext("OS") or "", "scan": h.findtext("LAST_SCAN_DATETIME") or "", "d": []})
+                for d in h.findall("./DETECTION_LIST/DETECTION"):
+                    x["d"].append(normalise_detection(d))
+            id_min = _next_id(root)
+            if not id_min or pages >= 200:
+                break
+    for h in hosts.values():
+        h["n"] = h["dns"] or h["nb"] or h["ip"]
+    return {"at": now_iso(), "cves": cves, "kb": kb_note, "kbQids": sorted(set(q for q, k in kb.items() if set(k["cves"]) & set(cves)), key=_int),
+            "qids": list(kb.values()), "hosts": list(hosts.values()), "seconds": round(time.time() - t0, 1)}
+
+
 def fetch_scores(warnings):
     """TruRisk, asset criticality and tags from CSAM, by asset id. On failure the sync goes on without them."""
     out, last = {}, None

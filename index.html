@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.17.0 · 18 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.18.0 · 18 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1482,6 +1482,7 @@
                         if (what === 'status') return json(this.qxStatus(S));
                         if (what === 'history') return json((S.qxHist || []).slice().reverse());
                         if (what === 'sync') { this.startJob(S, 'qx'); return json({ ok: true }, 202); }
+                        if (what === 'cve') return json(this.qxCve(S, JSON.parse(init.body || '{}')));
                         if (what === 'claim') return json({ ok: true });
                         if (what === 'data') return json(this.qxPackage(S.day || 0, S.qxLast));
                         if (what === 'applied') {
@@ -1697,6 +1698,24 @@
             }
 
             // The Qualys API package for a simulated day (the shape the real server sends).
+            // v4.18 Refresh this CVE in the demo: the day's findings for the CVE's QIDs, as if a scan had just run: about one in six
+            // open machines now fixed, and the check newly found on two scanned machines that did not have it.
+            static qxCve(S, body) {
+                const pkg = this.qxPackage(S.day || 0, S.qxLast), want = new Set((body.cves || []).map(String)), idOf = (c) => String(typeof c === 'string' ? c : c?.id || '');
+                const kbQ = pkg.qids.filter(q => (q.cves || []).some(c => want.has(idOf(c)))).map(q => String(q.qid));
+                const Q = new Set([...(body.qids || []).map(String), ...kbQ]);
+                S.cveRuns = (S.cveRuns || 0) + 1; this.saveState(S);
+                const at = new Date().toISOString(), hosts = [];
+                let n = 0;
+                pkg.hosts.forEach(h => {
+                    const rows = h.d.filter(r => Q.has(String(r[0]))).map(r => (r[3] !== 'FIXED' && (++n + S.cveRuns) % 6 === 0) ? [...r.slice(0, 3), 'FIXED', ...r.slice(4, 8), at, r[9], at] : r);
+                    if (rows.length) hosts.push({ ...h, n: h.n, scan: at, d: rows });
+                });
+                const template = hosts.find(h => h.d.length)?.d[0];
+                if (template) pkg.hosts.filter(h => !hosts.some(x => x.a === h.a) && /Cloud Agent/.test(h.tags || '')).slice(S.cveRuns * 2 % 7, S.cveRuns * 2 % 7 + 2)
+                    .forEach(h => hosts.push({ ...h, scan: at, d: [[template[0], 'Confirmed', template[2], 'NEW', template[4], template[5], template[6], at, at, 1, '']] }));
+                return { at, cves: [...want], kb: 'ok', kbQids: kbQ, qids: pkg.qids.filter(q => Q.has(String(q.qid))), hosts, seconds: 1.2 };
+            }
             static qxPackage(day, meta) {
                 const E = this.estate(), now = Date.now(), dayMs = 864e5, at = (meta && meta.at) || new Date().toISOString();
                 const byHost = new Map(E.machines.map(m => [m.id, []]));
@@ -4673,6 +4692,79 @@
                 this.renderCve();
             }
             cveFilt(k) { this.cveFilter = k; this.renderCve(true); }
+
+            // v4.18 ⟳ Refresh this CVE: Qualys's findings for the CVE's QIDs on every host right now (KnowledgeBase searched by CVE
+            // too), stored for those QIDs on the machines Qualys returned (nothing else changes), then Automox for those machines.
+            static DET_KEYS = ['k', 'asset', 'qid', 'proto', 'port', 'sev', 'qvs', 'cvss', 'status', 'type', 'first', 'last', 'age', 'times', 'patchable', 'cves'];
+            async cveRefresh() {
+                const C = this._cve; if (!C || !C.ids.length) return;
+                if (!Demo.api()) { StorageService.toast('Refreshing needs the CyberView server'); return; }
+                if (OrgSettings.blocked && OrgSettings.needsSetup && OrgSettings.needsSetup()) { OrgSettings.blocked('refreshing the CVE'); return; }
+                const btn = document.getElementById('cve-refresh-btn'); if (btn) { btn.disabled = true; btn.textContent = '⟳ Asking Qualys…'; }
+                let res;
+                try {
+                    const r = await fetch('api/qualys/cve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cves: C.ids, qids: C.qids }) });
+                    res = await r.json().catch(() => ({}));
+                    if (!r.ok) throw new Error(res.error || ('Qualys refresh refused (' + r.status + ')'));
+                } catch (e) { StorageService.toast(e.message); if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh this CVE'; } return; }
+                const vd = await this.getVulnData(), idOf = (c) => String(typeof c === 'string' ? c : c?.id || '');
+                const kb = new Map((res.qids || []).map(q => [String(q.qid), q])), Q = new Set([...kb.keys(), ...C.qids.map(String)]);
+                const openOf = (list) => new Set(list.filter(d => Q.has(String(d.qid)) && RemediationVerifier.ACTIVE(d.status)).map(d => d.asset));
+                const before = openOf(vd.all || []);
+                // QID records: new checks (found in the KnowledgeBase by CVE) and fuller CVE lists for known ones
+                const qRecs = [...kb.values()].map(q => { const old = vd.qmap.get(String(q.qid)) || {};
+                    return { ...old, qid: String(q.qid), title: q.title || old.title || '', sev: q.sev || old.sev, solution: q.solution || old.solution || '', threat: q.threat || old.threat || '', category: q.category || old.category || '',
+                        rti: q.rti || old.rti || [], patchable: !!q.patchable, published: q.published || old.published || '', patchReleased: old.patchReleased || '', cvss: +q.cvss || old.cvss || 0,
+                        cveCount: q.cveCount || (q.cves || []).length, cves: (q.cves || []).map(c => ({ id: idOf(c), cvss: 0 })) }; });
+                const newQids = qRecs.filter(q => !vd.qmap.has(q.qid)).map(q => q.qid);
+                // Hosts -> register machines (never creates one: unknown hosts are listed instead)
+                const ctx = this.newVulnCtx(), now = Date.now(), day = 864e5, fresh = new Map(), notInReg = [];
+                const sd0 = StorageService.load(StorageService.KEYS.SCAN_DATES), scans = (sd0 && !Array.isArray(sd0)) ? { ...sd0 } : {};
+                (res.hosts || []).forEach(h => {
+                    const a = this.resolveVulnAsset(ctx, { assetId: h.a, rawName: h.n, os: h.os, ipv4: h.ip, create: false });
+                    if (!a) { notInReg.push(h.n || h.ip || h.id); return; }
+                    const name = a.normalizedName; if (!fresh.has(name)) fresh.set(name, new Map());
+                    if (h.scan && h.scan > (scans[name] || '')) scans[name] = h.scan;
+                    for (const [qid, type, sev, status, proto, port, qds, first, last, times, lastFixed] of h.d || []) {
+                        const q = kb.get(String(qid)) || vd.qmap.get(String(qid)) || {}, k = `${name}|${qid}|${proto}|${port}`, prev = fresh.get(name).get(k);
+                        if (prev && RemediationVerifier.ACTIVE(prev.status) && !RemediationVerifier.ACTIVE(status)) continue;     // open beats Fixed (two Qualys records, one machine)
+                        const t0 = AutomoxService.time(first), t1 = status === 'FIXED' ? (AutomoxService.time(lastFixed) || now) : now;
+                        fresh.get(name).set(k, { k, asset: name, qid: String(qid), proto, port, sev, qvs: qds || 0, cvss: +q.cvss || 0, status, type, first, last,
+                            age: t0 ? Math.max(0, Math.floor((t1 - t0) / day)) : 0, times, patchable: !!q.patchable, cves: (q.cves || []).map(idOf).slice(0, 40) });
+                    }
+                });
+                // Per machine Qualys returned: its findings for other QIDs as they were, these QIDs as Qualys says now
+                const pick = (d) => Object.fromEntries(App.DET_KEYS.map(x => [x, d[x]]));
+                const assets = [...fresh.keys()], dets = [];
+                assets.forEach(n => { (vd.all || []).forEach(d => { if (d.asset === n && !Q.has(String(d.qid))) dets.push(pick(d)); }); fresh.get(n).forEach(d => dets.push(d)); });
+                try {
+                    await VulnStore.merge({ detections: dets, qids: qRecs, assets });
+                    StorageService.save(StorageService.KEYS.SCAN_DATES, scans);
+                } catch (e) { StorageService.toast('Could not save the refreshed findings: ' + e.message); if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh this CVE'; } return; }
+                this.invalidateVulnData();
+                const vd2 = await this.getVulnData(), after = openOf(vd2.all || []);
+                this._cveDelta = { ids: C.ids.join(','), at: res.at, seconds: res.seconds, found: [...after].filter(a => !before.has(a)), fixed: [...before].filter(a => !after.has(a) && fresh.has(a)),
+                    still: [...after].filter(a => before.has(a)).length, notInReg, kb: res.kb, kbQids: res.kbQids || [], newQids, ax: 'running' };
+                // Automox: refresh with these machines' devices (their installed fixes are read too)
+                let devs = [];
+                try { await AutomoxService.ensure(); const m = AutomoxService.match(); devs = m ? [...new Set([...after, ...before])].map(a => m.byAsset.get(a)?.dev?.id).filter(Boolean) : []; } catch (e) { devs = []; }
+                if (AutomoxService.status?.configured && !(AutomoxService.status?.job?.running)) { this.axSync(false, devs); }
+                else this._cveDelta.ax = AutomoxService.status?.configured ? 'a sync is already running' : 'not connected';
+                this._cve = null; this.renderCve();
+            }
+            cveDeltaHTML(C) {
+                const D = this._cveDelta; if (!D || D.ids !== C.ids.join(',')) return '';
+                const W = App.whenText, reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const nm = (a) => esc(reg.get(a)?.originalName || a), list = (a) => a.slice(0, 12).map(nm).join(', ') + (a.length > 12 ? ` +${a.length - 12} more` : '');
+                const ax = D.ax === 'done' ? '✓ Automox refreshed too' : D.ax === 'running' ? '⟳ Automox is refreshing these machines…' : `Automox: ${esc(D.ax)}`;
+                return `<div class="border-2 border-blue-300 bg-blue-50 text-blue-950 rounded-lg p-3 text-sm space-y-1">
+                    <p><strong>⟳ Refreshed from Qualys ${esc(W(StatusEngine.time(D.at)))}</strong> <span class="text-xs">(${esc(String(D.seconds))} s) · ${ax}</span></p>
+                    <p>${D.found.length ? `<strong>+${fmtNum(D.found.length)} newly found:</strong> ${list(D.found)}` : '+0 newly found'} · ${D.fixed.length ? `<strong>−${fmtNum(D.fixed.length)} fixed:</strong> ${list(D.fixed)}` : '−0 fixed'} · ${fmtNum(D.still)} still open</p>
+                    ${D.newQids.length ? `<p>Qualys has ${D.newQids.length === 1 ? 'a check' : 'checks'} for it we did not have: QID ${esc(D.newQids.join(', '))}.</p>` : ''}
+                    ${D.kb && D.kb !== 'ok' ? `<p class="text-xs">The KnowledgeBase could not be searched by CVE (${esc(D.kb)}), so only the checks we already knew were asked for.</p>` : ''}
+                    ${D.notInReg.length ? `<p>${fmtNum(D.notInReg.length)} host${D.notInReg.length === 1 ? '' : 's'} with it ${D.notInReg.length === 1 ? 'is' : 'are'} not in the register: ${esc(D.notInReg.slice(0, 8).join(', '))}${D.notInReg.length > 8 ? '…' : ''} (the next full sync adds ${D.notInReg.length === 1 ? 'it' : 'them'} to the Review Queue).</p>` : ''}
+                    <p class="text-xs text-blue-900">Qualys only knows what its last scan of each machine found: a machine fixed since then shows as fixed after its Cloud Agent next reports or a scan runs.</p></div>`;
+            }
             cveTick(n, on) { const S = this.cveSel = this.cveSel || new Set(); if (on) S.add(n); else S.delete(n); this.cveSelPaint(); }
             cveTickAll(on) { document.querySelectorAll('#cve-out .cve-tick').forEach(b => { b.checked = on; this.cveTick(b.dataset.n, on); }); }
             cveSelPaint() { const b = document.getElementById('cve-accept-btn'), n = (this.cveSel || new Set()).size; if (!b) return; b.textContent = `⚖️ Accept risk: ${fmtNum(n)} selected`; b.classList.toggle('hidden', !n); }
@@ -4811,7 +4903,7 @@
                 const internet = C.list.filter(x => /internet/i.test(x.exposure)).length, t1 = C.list.filter(x => x.tier === 1).length;
                 const perHTML = C.per.map(c => `<div class="border rounded-lg p-3 ${c.machines ? 'bg-white' : 'bg-gray-50'}">
                     <div class="flex flex-wrap items-baseline gap-2"><a class="font-mono font-bold text-blue-800 underline" target="_blank" rel="noopener noreferrer" href="https://nvd.nist.gov/vuln/detail/${esc(c.id)}">${esc(c.id)}</a>
-                    <span class="text-sm">${c.machines ? `<strong>${fmtNum(c.machines)}</strong> machine${c.machines === 1 ? '' : 's'} with it open` : (c.qids.length ? 'no machine has it open now' : '<strong>not in our Qualys data</strong>')}${c.hid ? ` · <strong class="text-amber-800">⚑ plus ${fmtNum(c.hid)} risk-accepted machine${c.hid === 1 ? '' : 's'} (hidden)</strong> <button class="underline print-hide" onclick="app.setShowAccepted(true)">Show</button>` : ''}</span></div>
+                    <span class="text-sm">${c.machines ? `<strong>${fmtNum(c.machines)}</strong> machine${c.machines === 1 ? '' : 's'} with it open` : (c.qids.length ? `Qualys has a check for it (QID ${esc(c.qids.slice(0, 3).join(', '))}${c.qids.length > 3 ? '…' : ''}); <strong>no machine has it open now</strong>` : '<strong>not in our Qualys data</strong>')}${c.hid ? ` · <strong class="text-amber-800">⚑ plus ${fmtNum(c.hid)} risk-accepted machine${c.hid === 1 ? '' : 's'} (hidden)</strong> <button class="underline print-hide" onclick="app.setShowAccepted(true)">Show</button>` : ''}</span></div>
                     ${!c.qids.length ? `<p class="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded p-2 mt-2">⚠ <strong>This does not mean you are not affected.</strong> No Qualys finding in our data names ${esc(c.id)}: either no scanned machine has it, or Qualys has no check for it yet (new CVEs can take a few days). Search the Qualys KnowledgeBase for ${esc(c.id)} to be sure.${C.axOnly.length ? ' Automox does list a waiting patch for it: see below.' : ''}</p>` : ''}
                     ${App.cveAxLine(c, C)}
                     <div class="text-xs text-gray-600 mt-1" id="cve-intel-${esc(c.id)}"></div></div>`).join('');
@@ -4830,7 +4922,7 @@
                 if (C.fixed) notes.push(`✓ ${fmtNum(C.fixed)} machine${C.fixed === 1 ? '' : 's'} already fixed (Qualys saw it fixed).`);
                 if (C.stale || C.never) notes.push(`⚠ Could have it without showing here: ${C.stale ? `${fmtNum(C.stale)} machine${C.stale === 1 ? '' : 's'} not scanned for over ${fmtNum(+C.S.scanStaleDays || 30)} days` : ''}${C.stale && C.never ? ', ' : ''}${C.never ? `${fmtNum(C.never)} with no scan date` : ''}.`);
                 if (!C.ax) notes.push('Automox data is not available here, so the fix column cannot say what Automox will do.');
-                out.innerHTML = `<div class="space-y-4">
+                out.innerHTML = `<div class="space-y-4">${this.cveDeltaHTML(C)}
                     <div class="grid grid-cols-1 ${C.per.length > 1 ? 'md:grid-cols-2' : ''} gap-3">${perHTML}</div>
                     ${C.list.length ? `<div class="grid grid-cols-2 md:grid-cols-5 gap-3">
                         ${[['Machines', C.list.length, teams.map(([t, v]) => `${t} ${v}`).join(' · ')], ['⟳ Automox will patch', n('will'), `within ${C.days} days`], ['⚠ Automox blocked', n('blocked'), 'patch waiting, not going on'], ['✋ Manual fix', n('manual'), C.list.some(x => x.state.b === 'manual' && x.axAvail) ? `${C.list.filter(x => x.state.b === 'manual' && x.axAvail).length} have an Automox patch to apply` : 'no Automox patch or agent'], ['Exposure', internet, `internet facing · ${t1} Tier 1`]]
@@ -4841,6 +4933,7 @@
                         <button onclick="app.cveList('manual')" class="disabled:opacity-40 disabled:cursor-not-allowed bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded shadow-sm text-sm" ${n('manual') + n('blocked') ? '' : 'disabled'} title="The machines Automox will not fix soon: manual fix plus Automox blocked">⬇ Not by Automox</button>
                         <button onclick="app.cveTrack()" class="disabled:opacity-40 disabled:cursor-not-allowed write-only bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded shadow-sm text-sm" ${C.list.length ? '' : 'disabled'}>＋ Track as a task</button>
                         <button id="cve-accept-btn" onclick="app.cveAccept()" class="write-only ${sel.size ? '' : 'hidden'} bg-amber-50 border border-amber-300 text-amber-900 hover:bg-amber-100 px-3 py-1.5 rounded shadow-sm text-sm" title="Accept the risk of this CVE on the ticked machines only (its Qualys checks are filled in)">⚖️ Accept risk: ${fmtNum(sel.size)} selected</button>
+                        ${Demo.api() ? `<button id="cve-refresh-btn" onclick="app.cveRefresh()" class="write-only bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded shadow-sm text-sm disabled:opacity-50" title="Ask Qualys now for every machine with this CVE (newly found and fixed since the last sync), and Automox for those machines. Read-only; seconds.">⟳ Refresh this CVE</button>` : ''}
                         <button onclick="app.cveCopy()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded shadow-sm text-sm">📋 Copy summary for the cyber team</button>
                     </div>
                     ${qHTML}
@@ -5626,9 +5719,9 @@
                 if (!StorageService.load(StorageService.KEYS.ASSET_REGISTER).some(r => r.normalizedName === asset)) { StorageService.toast(`No asset called ${asset} in the register`); return; }
                 this.axLink(asset, devId);
             }
-            async axSync(followUp = false) {
+            async axSync(followUp = false, extraIds = []) {
                 try { await AutomoxService.ensure(); } catch (e) { /* first sync: nothing yet */ }
-                const ids = AutomoxEvidence.deviceIds();
+                const ids = [...new Set([...AutomoxEvidence.deviceIds(), ...extraIds.map(String)])];      // v4.18: + the CVE's machines
                 const r = await fetch('api/automox/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceIds: ids }) });
                 const j = await r.json().catch(() => ({}));
                 if (r.status === 202) { this._axMine = { followUp, asked: ids.length }; this._axNote = ''; }
@@ -5653,6 +5746,8 @@
                         else { const s = await AutomoxEvidence.apply(await this.getVulnData()); this._axNote = 'Sync done. ' + AutomoxEvidence.summaryText(s); }
                     }
                     if (this.currentView === 'automox') this.renderAutomox();
+                    if (this._cveDelta && this._cveDelta.ax === 'running') this._cveDelta.ax = 'done';
+                    if (this.currentView === 'cve') { this._cve = null; this.renderCve(); }
                 }, 3000);
             }
             async axApplyTasks() {

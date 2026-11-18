@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.16.0 · 18 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.17.0 · 18 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -85,6 +85,7 @@
         </div>
         <div class="px-3 pt-3 print-hide" id="view-mode"></div>
         <div class="px-3 pt-2 print-hide simple-ok" id="acc-switch"></div>
+        <div class="px-3 pt-2 print-hide simple-ok" id="team-switch"></div>
         <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
             <p class="nav-group simple-ok px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Daily work</p>
             <button onclick="app.switchView('dashboard')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📊 Dashboard</button>
@@ -4181,9 +4182,9 @@
                 Prefs.listen();
                 this.applyViewMode();
                 this.applyAccepted();
+                this.applyTeamSwitch();
                 window.addEventListener('beforeprint', () => { if (this.currentView === 'eol' && this.eolCtx && !this._eolAll) { this.renderEOLAssets(true); this._eolPrintShort = true; } });
                 window.addEventListener('afterprint', () => { if (this._eolPrintShort) { this._eolPrintShort = false; this.renderEOLAssets(false); } });
-                document.addEventListener('change', (e) => { if (App.TEAM_PICKERS[e.target?.id]) App.rememberTeam(e.target.value); });     // v4.16: one team choice
                 OrgSettings.ensureSaved();          // v3.20: copy the built-in organisation values into the database once (administrators)
                 this.fillTeamSelects();
                 this.reviewState.filters = { state: document.getElementById('review-filter-state').value, owner: document.getElementById('review-filter-owner').value, service: document.getElementById('review-filter-service').value, search: '' };
@@ -4210,9 +4211,9 @@
                 this.currentView = viewId;
                 this.accNote(null);
                 OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
-                this.applyTeam(viewId);
+                this.applyTeamSwitch(); this.applyTeam(viewId);
                 const TITLES = { import: Demo.api() ? 'Manual import' : 'Import Data', plan: 'Patch Plan', cve: 'CVE Lookup', dashboard: 'Dashboard', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Organisation setup · Status rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
-                const pt = document.getElementById('page-title'); if (pt) pt.textContent = TITLES[viewId] || 'CyberView';
+                const pt = document.getElementById('page-title'); if (pt) pt.textContent = (TITLES[viewId] || 'CyberView') + (App.TEAM_VIEWS.includes(viewId) ? ' · ' + App.teamLabel() : '');
                 const navView = viewId === 'inspect' ? (this.inspectReturn || '') : ((viewId === 'import' && Demo.api()) || viewId === 'status-rules' ? 'org' : viewId);
                 document.querySelectorAll('aside .nav-btn').forEach(b => { const on = (b.getAttribute('onclick') || '').includes(`'${navView}'`); b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
                 
@@ -4237,19 +4238,38 @@
                 if (viewId === 'history') this.renderHistory();
             }
 
-            // ---------- One team choice (v4.16): the team picked on any of these pages is remembered, and each of them opens on it.
-            // The register, Review Queue and Remediation filters stay separate: they filter lists, they do not set the view.
-            static TEAM_PICKERS = { 'vuln-filter-owner': 'vuln', 'plan-team': 'plan', 'cve-scope': 'cve', 'report-scope-selector': 'reports', 'eol-scope-selector': 'eol', 'ax-scope': 'automox', 'st-scope': 'status' };
-            static rememberTeam(v) { if (v && v !== 'Unknown' && v !== 'Unrecognised') Prefs.set('team', v); }
+            // ---------- One team choice (v4.17): the 👥 Team control in the sidebar. Every report and plan page follows it, and
+            // their own team pickers become a label saying the team. The register and Review Queue keep their own filters (they
+            // need Unknown and Unrecognised, which are not teams). Starts on the main team from Organisation setup.
+            static TEAM_PICKERS = { 'vuln-filter-owner': 'vuln', 'plan-team': 'plan', 'cve-scope': 'cve', 'report-scope-selector': 'reports', 'eol-scope-selector': 'eol', 'ax-scope': 'automox', 'st-scope': 'status', 'rem-f-team': 'remediation' };
+            static TEAM_VIEWS = ['dashboard', 'plan', 'cve', 'vuln', 'remediation', 'status', 'reports', 'eol', 'automox'];
+            static team() { const T = OrgSettings.teams(), v = Prefs.get('team', null); return v === 'ALL' || T.includes(v) ? v : (OrgSettings.mainTeam() || 'ALL'); }
+            static teamLabel(t = App.team()) { return t === 'ALL' ? 'All teams' : t; }
+            applyTeamSwitch() {
+                const el = document.getElementById('team-switch'); if (!el) return;
+                const t = App.team(), opts = ['ALL', ...OrgSettings.teams()];
+                el.innerHTML = `<label class="w-full flex items-center justify-between gap-2 px-2.5 py-1 rounded-lg text-xs border border-slate-400 bg-white text-gray-700" title="The team every report and plan page shows (remembered for you)"><span>👥 Team</span>
+                    <select id="team-select" onchange="app.setTeam(this.value)" class="border-0 bg-transparent text-xs font-semibold py-0.5 pl-1 pr-6 text-right focus:ring-0" aria-label="Team">${opts.map(v => `<option value="${esc(v)}" ${v === t ? 'selected' : ''}>${esc(App.teamLabel(v))}</option>`).join('')}</select></label>`;
+            }
+            setTeam(v) {
+                Prefs.set('team', v); this._cve = null;
+                this.applyTeamSwitch();
+                this.switchView(this.currentView || 'dashboard');
+            }
             applyTeam(viewId) {
-                const t = Prefs.get('team', null); if (!t) return;
-                const id = Object.keys(App.TEAM_PICKERS).find(k => App.TEAM_PICKERS[k] === viewId); if (!id) return;
-                const sel = document.getElementById(id), has = (el) => el && [...el.options].some(o => o.value === t);
-                if (viewId === 'vuln' && this.vulnState) { if (has(sel)) { sel.value = t; this.vulnState.filters = { ...this.vulnState.filters, owner: t }; } }
-                else if (viewId === 'plan') { this.planF; if (t === 'ALL' || OrgSettings.teams().includes(t)) { this._planF.team = t; const f = this._planF; Prefs.set('plan', { team: f.team, p: f.p, open: f.open }); } }
+                const t = App.team();
+                // every page's own picker: set to the team, hidden, with a label in its place
+                Object.keys(App.TEAM_PICKERS).forEach(id => {
+                    const sel = document.getElementById(id); if (!sel) return;
+                    if ([...sel.options].some(o => o.value === t)) sel.value = t;
+                    sel.classList.add('hidden');
+                    let chip = sel.nextElementSibling; if (!chip || !chip.classList.contains('team-chip')) { chip = document.createElement('span'); chip.className = 'team-chip text-sm font-semibold text-slate-800'; sel.after(chip); }
+                    chip.textContent = App.teamLabel(t); chip.title = 'Change the team with 👥 Team in the sidebar';
+                });
+                if (viewId === 'vuln' && this.vulnState) this.vulnState.filters = { ...this.vulnState.filters, owner: t };
                 else if (viewId === 'cve') { const c = Prefs.get('cve', {}); if (c.team !== t) { Prefs.set('cve', { ...c, team: t }); this._cve = null; } }
-                else if (viewId === 'status') { this.stScope = t; Prefs.set('statusScope', t); }
-                else if (has(sel)) sel.value = t;
+                else if (viewId === 'status') { if (!this._stOther) this.stScope = t; this._stOther = false; }
+                else if (viewId === 'remediation') { this.remF.team = t; }
             }
 
             // ---------- Status (phase B): every source joined into one status per asset and per team.
@@ -4357,7 +4377,12 @@
                     ${shown.length > 400 ? `<p class="text-xs text-gray-500">Showing 400 of ${fmtNum(shown.length)}.</p>` : ''}
                     <h4 class="font-bold pt-2">Trend</h4>${this.statusTrendHTML(this.stScope, S)}`;
             }
-            stOpen(team) { this.stScope = team; Prefs.set('statusScope', team); this.stFilter = 'act'; this.renderStatus(); }
+            stOpen(team) {
+                this.stFilter = 'act';
+                if (team === 'ALL' || OrgSettings.teams().includes(team)) { if (team !== App.team()) { this.setTeam(team); return; } this.stScope = team; }
+                else { this.stScope = team; this._stOther = true; if (this.currentView !== 'status') { this.switchView('status'); return; } }
+                this.renderStatus();
+            }
             stFilt(k) { this.stFilter = k; this.renderStatus(); }
             // Dashboard: the estate headline from the same engine.
             // Reads the latest snapshot (saved after each applied sync), so landing on the Dashboard does not load every finding.
@@ -4905,7 +4930,7 @@
             // The team is the one chosen on the Patch Plan, else the main team as it is NOW (not cached: the setup can change).
             get planF() {
                 if (!this._planF) { const p = Prefs.get('plan', {}); this._planF = { team: p.team || null, p: p.p || 'ALL', open: p.open || { manual: true } }; }
-                const f = this._planF; return f.team ? f : { ...f, team: OrgSettings.mainTeam() };
+                return { ...this._planF, team: App.team() };     // v4.17: the sidebar team
             }
             planSet(k, v) { this.planF; this._planF[k] = v; const f = this._planF; Prefs.set('plan', { team: f.team, p: f.p, open: f.open }); this.renderPlan(); }
             planToggle(b) { const o = this.planF.open; o[b] = !o[b]; this.planSet('open', o); }
@@ -5798,13 +5823,13 @@
                 let st = null; try { st = await this.statusData(); } catch (e) { st = null; }
                 if (this.currentView !== 'dashboard' || dseq !== this._dsSeq) return;
                 if (st) {
-                    const exD = StatusEngine.exIndex(), a = (st.assets || []).filter(x => !x.r?.unrecognised && (RiskView.on() || !RiskView.machine(x.r, exD))), by = (k) => a.filter(x => x.checks?.eol?.s === k);   // v4.13 switch
+                    const exD = StatusEngine.exIndex(), tm = App.team(), a = (st.assets || []).filter(x => !x.r?.unrecognised && (tm === 'ALL' || x.team === tm) && (RiskView.on() || !RiskView.machine(x.r, exD))), by = (k) => a.filter(x => x.checks?.eol?.s === k);   // v4.13 switch
                     const S = StatusEngine.settings(), t1 = by('x').filter(x => x.tier === 1).length;
                     const eol = row('⛔', '<strong>No security fixes any more</strong>', `${sev(by('x').length)} machines`, t1 ? `${sev(t1)} of them Tier 1` : '')
                         + row('🔶', `Fixes end within ${S.eolActionMonths || 6} months`, `${sev(by('a').length)} machines`)
                         + row('⚠', `Fixes end within ${S.eolWatchMonths || 12} months`, `${sev(by('w').length)} machines`)
                         + row('?', 'Operating system not recognised', `${sev(by('u').length)} machines`);
-                    document.getElementById('ds-eol').innerHTML = card('⏳ End of life', eol, 'eol', 'Open the report');
+                    document.getElementById('ds-eol').innerHTML = card('⏳ End of life', `<p class="text-sm text-gray-600">${esc(App.teamLabel(tm))}</p>` + eol, 'eol', 'Open the report');
                     const rows = st.asOf || [];
                     document.getElementById('ds-fresh').innerHTML = `<div class="bg-white rounded-lg shadow px-5 py-3 text-sm flex flex-wrap gap-x-6 gap-y-1"><span class="font-semibold">Data as of</span>${rows.map(x => `<span>${x.stale ? '⚠' : '✓'} ${esc(x.label)}: ${x.t ? esc(new Date(x.t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : 'never'}${x.stale ? ' <strong>(old)</strong>' : ''}</span>`).join('')}<a href="#" onclick="app.switchView('health'); return false;" class="ml-auto text-blue-700 underline">Data Health →</a></div>`;
                 } else document.getElementById('ds-eol').innerHTML = card('⏳ End of life', '<p class="text-sm text-gray-600">Not available.</p>', 'eol', 'Open the report');

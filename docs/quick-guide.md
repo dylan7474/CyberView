@@ -23,7 +23,7 @@ CyberView turns your scanner output into a short, ranked to-do list, team by tea
 - **Simple view** (the default): just the Dashboard, Patch Plan, CVE Lookup, Team Risk Report and End of Life Report. **Advanced** opens every page and setting.
 - **Patch Plan:** every open finding set against Automox: what's patched, what Automox will patch in the next 7 days, what's blocked, and the gap that needs manual remediation, with machine lists for Ansible.
 - **CVE Lookup:** paste the CVE the cyber team sent: every machine with it open, and for each one whether Automox will patch it (and when), the Automox patch is blocked, or it needs a manual fix. Then a machine list, a task, or a summary to paste into your reply. If no Qualys finding names the CVE it says so, rather than "not affected". Tick machines and press **⚖️ Accept risk** to record an exception for just those.
-- **One team choice:** pick your team on any report or plan page and the others open on it too.
+- **👥 Team (sidebar):** choose your team once; every report and plan page shows it.
 - **Data Health:** every data source with when it last synced, when it syncs next and a **Sync now** button, plus the machines with no team, tier or service.
 - **Vuln Management:** *Machines to fix first* and *Fixes that clear the most*, with one-click machine lists ready for Ansible.
 - **Status:** one headline per team (On track / Slipping / Behind), with trend charts.

@@ -24,7 +24,7 @@ import automox
 import eol
 import qualys
 
-VERSION = "4.13.1"
+VERSION = "4.14.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)

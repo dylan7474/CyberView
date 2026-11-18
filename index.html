@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.13.1 · 18 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.14.0 · 18 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -97,6 +97,7 @@
                 <span id="nav-vuln-badge" class="hidden ml-auto w-fit bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"></span>
             </button>
             <button onclick="app.switchView('plan')" class="simple-ok server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🗓️ Patch Plan</button>
+            <button onclick="app.switchView('cve')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🔎 CVE Lookup</button>
             <button onclick="app.switchView('remediation')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🛠️ Remediation</button>
             <button onclick="app.switchView('risk-accept')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">✅ Risk Acceptances</button>
             <button onclick="app.switchView('status')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🚦 Status</button>
@@ -528,6 +529,26 @@
 
             <!-- VIEW: DATA HEALTH -->
             <!-- VIEW: PATCH PLAN (v4.5): Qualys findings against Automox: patched, will be patched, blocked, and the gap -->
+            <!-- CVE Lookup (v4.14): a CVE from the cyber team -> the machines that have it and what Automox will do about it -->
+            <section id="view-cve" class="view-section space-y-4">
+                <div class="bg-white rounded-lg shadow p-6 border" id="printable-cve">
+                    <div class="flex flex-wrap justify-between items-start gap-4 border-b pb-4 mb-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-800">🔎 CVE Lookup</h2>
+                            <p class="text-sm text-gray-500 mt-1">Which machines have a CVE, and whether Automox has a fix for them. Paste one or more CVE numbers.</p>
+                            <p class="text-xs text-gray-400 mt-1" id="cve-asof"></p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 print-hide">
+                            <input id="cve-input" type="text" placeholder="CVE-2024-6387" onkeydown="if (event.key === 'Enter') app.cveGo()" class="border border-gray-300 rounded text-sm font-mono shadow-sm py-2 px-3 w-72" aria-label="CVE numbers">
+                            <select id="cve-scope" onchange="app.cveGo()" class="border-gray-300 rounded text-sm font-medium shadow-sm py-2" aria-label="Team"></select>
+                            <button onclick="app.cveGo()" class="bg-blue-700 hover:bg-blue-600 text-white px-4 py-2 rounded shadow-sm text-sm font-medium">Look up</button>
+                            <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded shadow-sm text-sm font-medium">🖨️ Print</button>
+                        </div>
+                    </div>
+                    <div id="cve-out"></div>
+                </div>
+            </section>
+
             <section id="view-plan" class="view-section space-y-4">
                 <div><h3 class="text-xl font-semibold">Patch Plan</h3>
                     <p class="text-sm text-gray-600">Every open Qualys finding, set against Automox: what has been patched, what Automox will patch in the coming days, what it has a patch for but cannot install, and the gap that needs manual remediation.</p></div>
@@ -3384,7 +3405,7 @@
                 const src = t.source || {};
                 if (src.kind === 'os') return { os: src.match || src.key };
                 if (src.kind === 'hw') return { hw: src.match || src.key };
-                if (['qid', 'family', 'eolsw'].includes(src.kind) && (src.qids || []).length) return { qids: src.qids };
+                if (['qid', 'family', 'eolsw', 'cve'].includes(src.kind) && (src.qids || []).length) return { qids: src.qids };
                 return {};
             }
             static live(a) { return a.state !== 'moved' && a.state !== 'excluded'; }
@@ -4230,7 +4251,7 @@
                 this.currentView = viewId;
                 this.accNote(null);
                 OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
-                const TITLES = { import: Demo.api() ? 'Manual import' : 'Import Data', plan: 'Patch Plan', dashboard: 'Dashboard', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Organisation setup · Status rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
+                const TITLES = { import: Demo.api() ? 'Manual import' : 'Import Data', plan: 'Patch Plan', cve: 'CVE Lookup', dashboard: 'Dashboard', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Organisation setup · Status rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
                 const pt = document.getElementById('page-title'); if (pt) pt.textContent = TITLES[viewId] || 'CyberView';
                 const navView = viewId === 'inspect' ? (this.inspectReturn || '') : ((viewId === 'import' && Demo.api()) || viewId === 'status-rules' ? 'org' : viewId);
                 document.querySelectorAll('aside .nav-btn').forEach(b => { const on = (b.getAttribute('onclick') || '').includes(`'${navView}'`); b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
@@ -4247,6 +4268,7 @@
                 if (viewId === 'eol') this.renderEOL();
                 if (viewId === 'automox') this.renderAutomox();
                 if (viewId === 'plan') this.renderPlan();
+                if (viewId === 'cve') this.renderCve();
                 if (viewId === 'remediation') this.renderRemediation(true);
                 if (viewId === 'vuln') this.renderVulnDashboard();
                 if (viewId === 'risk-accept') this.renderRiskAcceptances();
@@ -4450,6 +4472,7 @@
                     'report-scope-selector': opt('ALL', 'Entire Estate') + team(t => t + ' Team'),
                     'ax-scope': opt(main, main + ' Team') + opt('ALL', 'Entire register') + T.filter(t => t !== main).map(t => opt(t, t + ' Team')).join(''),
                     'eol-scope-selector': opt('ALL', 'Entire Estate') + team(t => t + ' Team'),
+                    'cve-scope': opt('ALL', 'All teams') + team(t => t + ' Team'),
                     'rem-f-team': opt('ALL', 'All') + team() + opt('Unknown', 'Unknown'),
                     'edit-asset-owner': team() + opt('Unknown', 'Unknown') + opt('Unrecognised', 'Unrecognised')
                 };
@@ -4603,6 +4626,248 @@
                     this.fillTeamSelects(); this.renderOrgSetup(); StorageService.toast('Organisation setup imported');
                 });
                 ev.target.value = '';
+            }
+
+            // =================== CVE Lookup (v4.14) ===================
+            // A CVE from the cyber team -> the Qualys checks that name it -> the machines with it open, and for each machine
+            // what Automox will do (the Patch Plan's own rules, App.planClassify). Follows the Risk-accepted switch like every
+            // page; machine lists never contain risk-accepted machines. "Nothing found" is never shown as "not affected".
+            static cveIds(text) { return [...new Set(String(text || '').toUpperCase().match(/CVE-\d{4}-\d{4,7}/g) || [])].slice(0, 20); }
+            static CVE_STATE = {
+                manual: { w: '✋ Manual fix', order: 0, cls: 'bg-red-50 text-red-900 border-red-300' },
+                blocked: { w: '⚠ Automox patch blocked', order: 1, cls: 'bg-amber-50 text-amber-900 border-amber-300' },
+                will: { w: '⟳ Automox will patch', order: 2, cls: 'bg-blue-50 text-blue-900 border-blue-300' },
+                done: { w: '✓ Installed, awaiting rescan', order: 3, cls: 'bg-green-50 text-green-900 border-green-300' },
+                unknown: { w: '? No Automox data', order: 4, cls: 'bg-gray-50 text-gray-700 border-gray-300' }
+            };
+            cveGo() {
+                const $ = (id) => document.getElementById(id);
+                const ids = App.cveIds($('cve-input').value);
+                if (!ids.length && $('cve-input').value.trim()) { StorageService.toast('Enter a CVE number such as CVE-2024-6387'); return; }
+                Prefs.set('cve', { q: ids.join(' '), team: $('cve-scope').value || 'ALL' });
+                this.cveFilter = 'all';
+                this.renderCve();
+            }
+            cveFilt(k) { this.cveFilter = k; this.renderCve(true); }
+
+            async cveData(ids, team) {
+                const vd = await this.getVulnData();
+                const S = StatusEngine.settings(), end = Demo.now() + (+S.patchPlanDays || 7) * 864e5;
+                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), regMap = new Map(reg.map(r => [r.normalizedName, r]));
+                const want = new Set(ids), idOf = (c) => String(typeof c === 'string' ? c : (c && c.id) || '').toUpperCase();
+                // The Qualys checks naming the CVE: from the KnowledgeBase entry, and from any finding that lists it
+                const qidHits = new Map();
+                const addHit = (qid, list) => { qid = String(qid); let s = qidHits.get(qid); if (!s) qidHits.set(qid, s = new Set()); list.forEach(c => s.add(c)); };
+                for (const q of vd.qmap.values()) { const h = (q.cves || []).map(idOf).filter(c => want.has(c)); if (h.length) addHit(q.qid, h); }
+                for (const d of [...vd.dets, ...(vd.excepted || [])]) { if (qidHits.has(String(d.qid))) continue; const h = (d.cves || []).map(idOf).filter(c => want.has(c)); if (h.length) addHit(d.qid, h); }
+                let D = null; if (Demo.api()) { try { D = await AutomoxService.ensure(); } catch (e) { D = null; } }
+                const m = D ? AutomoxService.match() : null, auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
+                const show = RiskView.on(), hidden = { machines: 0, findings: 0, expiring: 0 }, hm = new Set(), hidBy = new Map();     // hidBy: CVE -> hidden machines
+                const hide = (cves, a) => cves.forEach(c => { if (!hidBy.has(c)) hidBy.set(c, new Set()); hidBy.get(c).add(a); });
+                const inScope = (r) => r && (team === 'ALL' || r.owner === team);
+                const rows = new Map();
+                for (const d of [...vd.dets, ...(vd.excepted || [])]) {
+                    const hit = qidHits.get(String(d.qid)); if (!hit) continue;
+                    const r = regMap.get(d.asset); if (!inScope(r)) continue;
+                    const am = RiskView.machine(r, vd.ex);
+                    if (!show && (am || d.accF)) {
+                        hide(hit, d.asset);
+                        if (am) { if (!hm.has(d.asset)) { hm.add(d.asset); if (RiskView.expiring(am)) hidden.expiring++; } }
+                        else { hidden.findings++; if (RiskView.expiring(d.accF)) hidden.expiring++; }
+                        continue;
+                    }
+                    const q = vd.qmap.get(d.qid) || {};
+                    const c = m ? App.planClassify({ ...d, cves: [...new Set([...hit, ...(d.cves || []).map(idOf)])] }, r, m, end, S, q, auto.has(String(r.owner || '').toLowerCase()))
+                        : { b: 'unknown', why: Demo.api() ? 'Automox is not set up or has not synced' : 'Automox needs the server version' };
+                    let x = rows.get(d.asset);
+                    if (!x) rows.set(d.asset, x = { name: d.asset, r, team: StatusEngine.teamOf(r), tier: StatusEngine.tierOf(r), exposure: r.exposure || 'Unknown', p: 5, cves: new Set(), qids: new Set(), first: '', state: null, acc: am, accF: [], pkgs: [], when: 0 });
+                    hit.forEach(c => x.cves.add(c)); x.qids.add(String(d.qid));
+                    x.p = Math.min(x.p, d.p || 5);
+                    if (d.first && (!x.first || d.first < x.first)) x.first = d.first;
+                    if (d.accF) x.accF.push(d.accF);
+                    if (!x.state || App.CVE_STATE[c.b].order < App.CVE_STATE[x.state.b].order) x.state = c;
+                }
+                hidden.machines = hm.size;
+                // Automox's waiting / installed packages that name the CVE, per machine
+                const pk = (p) => `${p.n}${p.v ? ' ' + p.v : ''}`;
+                rows.forEach(x => {
+                    const dev = m && m.byAsset.get(x.name)?.dev;
+                    if (dev) { x.pkgs = AutomoxService.pendingFor(dev, ids).map(pk); x.inst = AutomoxService.installedFor(dev, ids).map(pk); x.kev = AutomoxService.pendingFor(dev, ids).some(p => p.kev?.length); }
+                    x.when = x.state.when || 0;
+                    // A team Automox does not patch: still say when Automox has the patch, so it can be applied by hand there
+                    if (x.state.b === 'manual' && x.pkgs.length) { x.axAvail = true; if (/team not patched/.test(x.state.why)) x.state = { ...x.state, why: 'Automox has the patch, but this team is not patched by Automox: apply it by hand or in Automox' }; }
+                });
+                // Machines Automox says need a patch for it, but Qualys has not flagged (or not scanned yet); devices not in the register
+                const axOnly = [], axUnmatched = [];
+                if (D && m) D.devices.forEach(dev => {
+                    const p = AutomoxService.pendingFor(dev, ids); if (!p.length) return;
+                    const a = m.byDev.get(dev.id);
+                    if (!a) { if (team === 'ALL') axUnmatched.push({ name: dev.name || dev.display || String(dev.id), pkgs: p.map(pk) }); return; }
+                    if (rows.has(a)) return;
+                    const r = regMap.get(a); if (!inScope(r)) return;
+                    const am = RiskView.machine(r, vd.ex);
+                    if (am && !show) { hide(ids.filter(c => p.some(x => (x.cves || []).includes(c))), a); if (!hm.has(a)) { hm.add(a); hidden.machines++; } return; }
+                    const nr = AutomoxService.nextRun(dev, p);
+                    axOnly.push({ name: a, team: StatusEngine.teamOf(r), tier: StatusEngine.tierOf(r), pkgs: p.map(pk), when: nr.t || 0, why: nr.t ? '' : nr.why, acc: am });
+                });
+                // Already fixed: Qualys saw it fixed on machines that no longer have it open
+                const fixed = new Set();
+                (vd.all || []).forEach(d => { if (!RemediationVerifier.ACTIVE(d.status) && qidHits.has(String(d.qid)) && !rows.has(d.asset) && inScope(regMap.get(d.asset))) fixed.add(d.asset); });
+                // Machines in scope that could have it without it showing: not scanned for a while, or never
+                const sd = StorageService.load(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
+                let stale = 0, never = 0;
+                reg.filter(r => inScope(r) && !r.unrecognised).forEach(r => {
+                    if (!show && RiskView.machine(r, vd.ex)) return;
+                    const ls = scans[r.normalizedName] || r.lastScan;
+                    if (!ls) never++; else if ((Date.now() - StatusEngine.time(ls)) / 864e5 > (+S.scanStaleDays || 30)) stale++;
+                });
+                // Per CVE: its checks and how many machines
+                const per = ids.map(id => {
+                    const qs = [...qidHits].filter(([, s]) => s.has(id)).map(([q]) => q);
+                    return { id, qids: qs, machines: [...rows.values()].filter(x => x.cves.has(id)).length, hid: (hidBy.get(id) || new Set()).size, ax: axOnly.filter(a => a.pkgs.length).length };
+                });
+                const qinfo = [...qidHits.keys()].map(q => { const k = vd.qmap.get(q) || {}; return { qid: q, title: k.title || 'QID ' + q, patchable: !!k.patchable, open: [...rows.values()].filter(x => x.qids.has(q)).length, exploited: PriorityEngine.isExploited(k) }; })
+                    .sort((a, b) => b.open - a.open);
+                const list = [...rows.values()].sort((a, b) => App.CVE_STATE[a.state.b].order - App.CVE_STATE[b.state.b].order || a.p - b.p || (a.tier || 2) - (b.tier || 2) || a.name.localeCompare(b.name));
+                return { ids, team, list, per, qinfo, axOnly, axUnmatched, fixed: fixed.size, stale, never, hidden, show, ax: !!m, S, days: +S.patchPlanDays || 7, qids: [...qidHits.keys()], asOf: this.loadVulnMeta() };
+            }
+
+            async renderCve(keep = false) {
+                const $ = (id) => document.getElementById(id);
+                const pref = Prefs.get('cve', {}), team = pref.team || 'ALL';
+                if ($('cve-scope') && [...$('cve-scope').options].some(o => o.value === team)) $('cve-scope').value = team;
+                if (document.activeElement !== $('cve-input')) $('cve-input').value = pref.q || '';
+                const ids = App.cveIds(pref.q), out = $('cve-out');
+                const asOf = (this.loadVulnMeta().imports || []).slice(-1)[0];
+                $('cve-asof').textContent = asOf ? `Qualys data as of ${new Date(asOf.at || asOf.date || Date.now()).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
+                if (!ids.length) {
+                    this.accNote(null); this._cve = null;
+                    out.innerHTML = `<div class="text-sm text-gray-600 space-y-2"><p>Type or paste CVE numbers (any text works: the CVE numbers are picked out of it) and press <strong>Look up</strong>.</p>
+                        <p>You get every machine with it open, by team, and for each one whether <strong>Automox will patch it</strong> (and when), whether the Automox patch is <strong>blocked</strong> (reboot pending, no patch policy, agent not seen), or whether it needs a <strong>manual fix</strong>. Then a machine list for Ansible, a task, or a summary to send back to the cyber team.</p></div>`;
+                    return;
+                }
+                const seq = this._cveSeq = (this._cveSeq || 0) + 1;
+                if (!keep || !this._cve) { out.innerHTML = '<p class="text-sm text-gray-500">Looking…</p>'; this._cve = await this.cveData(ids, team); }
+                if (seq !== this._cveSeq || this.currentView !== 'cve') return;
+                const C = this._cve, f = this.cveFilter || 'all', ST = App.CVE_STATE;
+                this.accNote(C.hidden);
+                const n = (k) => C.list.filter(x => x.state.b === k).length;
+                const day = (t) => t ? new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+                const chip = (k, label, v) => `<button onclick="app.cveFilt('${k}')" class="px-2 py-1 rounded border text-xs ${f === k ? 'bg-slate-800 text-white' : 'bg-white'}">${label} (${fmtNum(v)})</button>`;
+                const shown = f === 'all' ? C.list : C.list.filter(x => x.state.b === f);
+                const teams = [...C.list.reduce((m, x) => m.set(x.team, (m.get(x.team) || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
+                const internet = C.list.filter(x => /internet/i.test(x.exposure)).length, t1 = C.list.filter(x => x.tier === 1).length;
+                const perHTML = C.per.map(c => `<div class="border rounded-lg p-3 ${c.machines ? 'bg-white' : 'bg-gray-50'}">
+                    <div class="flex flex-wrap items-baseline gap-2"><a class="font-mono font-bold text-blue-800 underline" target="_blank" rel="noopener noreferrer" href="https://nvd.nist.gov/vuln/detail/${esc(c.id)}">${esc(c.id)}</a>
+                    <span class="text-sm">${c.machines ? `<strong>${fmtNum(c.machines)}</strong> machine${c.machines === 1 ? '' : 's'} with it open` : (c.qids.length ? 'no machine has it open now' : '<strong>not in our Qualys data</strong>')}${c.hid ? ` · <strong class="text-amber-800">⚑ plus ${fmtNum(c.hid)} risk-accepted machine${c.hid === 1 ? '' : 's'} (hidden)</strong> <button class="underline print-hide" onclick="app.setShowAccepted(true)">Show</button>` : ''}</span></div>
+                    ${!c.qids.length ? `<p class="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded p-2 mt-2">⚠ <strong>This does not mean you are not affected.</strong> No Qualys finding in our data names ${esc(c.id)}: either no scanned machine has it, or Qualys has no check for it yet (new CVEs can take a few days). Search the Qualys KnowledgeBase for ${esc(c.id)} to be sure.${C.axOnly.length ? ' Automox does list a waiting patch for it: see below.' : ''}</p>` : ''}
+                    <div class="text-xs text-gray-600 mt-1" id="cve-intel-${esc(c.id)}"></div></div>`).join('');
+                const qHTML = C.qinfo.length ? `<div><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">Qualys checks for ${C.ids.length === 1 ? 'it' : 'them'}</p><div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.qinfo.map(q => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(q.qid)}" onclick="app.inspectQid(this.dataset.q, 'cve')"><td class="px-2 py-1.5 font-mono text-xs text-gray-500">${esc(q.qid)}</td><td class="px-2 py-1.5">${esc(q.title)}${q.exploited ? ' <strong class="text-red-800 text-xs">⚑ exploited</strong>' : ''}</td><td class="px-2 py-1.5 text-xs text-gray-600">${q.patchable ? 'patch exists' : 'no patch (configuration or end of life)'}</td><td class="px-2 py-1.5 text-right font-mono text-xs">${fmtNum(q.open)} open</td></tr>`).join('')}</tbody></table></div></div>` : '';
+                const rowHTML = (x) => { const s = ST[x.state.b];
+                    return `<tr class="align-top cursor-pointer hover:bg-blue-50" data-n="${esc(x.name)}" onclick="app.openAssetDetail(this.dataset.n)">
+                        <td class="px-2 py-1.5 font-mono text-xs">${esc(x.r.originalName || x.name)}${x.acc ? '<div class="font-sans">' + RiskView.flag(x.acc, true) + '</div>' : (x.accF.length ? '<div class="font-sans">' + RiskView.flag(x.accF[0], true) + '</div>' : '')}</td>
+                        <td class="px-2 py-1.5 text-xs">${esc(x.team)}</td><td class="px-2 py-1.5 text-center text-xs">${StatusEngine.tierCell(x.r)}</td><td class="px-2 py-1.5 text-xs">${esc(x.exposure)}</td>
+                        <td class="px-2 py-1.5">${x.p <= 4 ? StatusEngine.pBadge(x.p) : ''}</td>
+                        <td class="px-2 py-1.5 text-xs"><span class="inline-block px-1.5 py-0.5 rounded border font-semibold ${s.cls}">${s.w}${x.state.b === 'will' && x.when ? ' ' + esc(day(x.when)) : ''}</span>
+                            <div class="text-[10px] text-gray-600 mt-0.5">${esc(x.state.why)}${x.state.approx ? ' ≈' : ''}</div>${x.pkgs.length ? `<div class="text-[10px] text-gray-500 font-mono">${esc(x.pkgs.slice(0, 3).join(', '))}${x.pkgs.length > 3 ? ' +' + (x.pkgs.length - 3) : ''}</div>` : ''}</td>
+                        <td class="px-2 py-1.5 text-xs text-gray-600 whitespace-nowrap">${x.first ? esc(new Date(x.first).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })) : ''}</td></tr>`; };
+                const notes = [];
+                if (C.fixed) notes.push(`✓ ${fmtNum(C.fixed)} machine${C.fixed === 1 ? '' : 's'} already fixed (Qualys saw it fixed).`);
+                if (C.stale || C.never) notes.push(`⚠ Could have it without showing here: ${C.stale ? `${fmtNum(C.stale)} machine${C.stale === 1 ? '' : 's'} not scanned for over ${fmtNum(+C.S.scanStaleDays || 30)} days` : ''}${C.stale && C.never ? ', ' : ''}${C.never ? `${fmtNum(C.never)} with no scan date` : ''}.`);
+                if (!C.ax) notes.push('Automox data is not available here, so the fix column cannot say what Automox will do.');
+                out.innerHTML = `<div class="space-y-4">
+                    <div class="grid grid-cols-1 ${C.per.length > 1 ? 'md:grid-cols-2' : ''} gap-3">${perHTML}</div>
+                    ${C.list.length ? `<div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        ${[['Machines', C.list.length, teams.map(([t, v]) => `${t} ${v}`).join(' · ')], ['⟳ Automox will patch', n('will'), `within ${C.days} days`], ['⚠ Automox blocked', n('blocked'), 'patch waiting, not going on'], ['✋ Manual fix', n('manual'), C.list.some(x => x.state.b === 'manual' && x.axAvail) ? `${C.list.filter(x => x.state.b === 'manual' && x.axAvail).length} have an Automox patch to apply` : 'no Automox patch or agent'], ['Exposure', internet, `internet facing · ${t1} Tier 1`]]
+                            .map(([l, v, sub]) => `<div class="p-3 rounded border bg-white"><p class="text-[10px] uppercase text-gray-500 font-semibold">${l}</p><p class="text-xl font-bold">${fmtNum(v)}</p><p class="text-[11px] text-gray-600">${esc(sub)}</p></div>`).join('')}</div>` : ''}
+                    ${notes.length ? `<div class="text-xs text-gray-700 space-y-1">${notes.map(t => `<p>${esc(t)}</p>`).join('')}</div>` : ''}
+                    <div class="flex flex-wrap gap-2 print-hide">
+                        <button onclick="app.cveList('all')" class="disabled:opacity-40 disabled:cursor-not-allowed bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded shadow-sm text-sm" ${C.list.length ? '' : 'disabled'} title="Every machine with it open, one name per line (risk-accepted machines are never in a list)">⬇ Machine list</button>
+                        <button onclick="app.cveList('manual')" class="disabled:opacity-40 disabled:cursor-not-allowed bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded shadow-sm text-sm" ${n('manual') + n('blocked') ? '' : 'disabled'} title="The machines Automox will not fix soon: manual fix plus Automox blocked">⬇ Not by Automox</button>
+                        <button onclick="app.cveTrack()" class="disabled:opacity-40 disabled:cursor-not-allowed write-only bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded shadow-sm text-sm" ${C.list.length ? '' : 'disabled'}>＋ Track as a task</button>
+                        <button onclick="app.cveCopy()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded shadow-sm text-sm">📋 Copy summary for the cyber team</button>
+                    </div>
+                    ${qHTML}
+                    ${C.list.length ? `<div class="flex flex-wrap gap-2 items-center print-hide"><span class="text-sm font-semibold">Machines:</span>${chip('all', 'All', C.list.length)}${chip('manual', ST.manual.w, n('manual'))}${chip('blocked', ST.blocked.w, n('blocked'))}${chip('will', ST.will.w, n('will'))}${n('done') ? chip('done', ST.done.w, n('done')) : ''}${n('unknown') ? chip('unknown', ST.unknown.w, n('unknown')) : ''}</div>
+                    <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-2 py-2 text-left">Machine</th><th class="px-2 py-2 text-left">Team</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Exposure</th><th class="px-2 py-2 text-left">Priority</th><th class="px-2 py-2 text-left">Fix</th><th class="px-2 py-2 text-left">First found</th></tr></thead>
+                        <tbody class="divide-y">${shown.slice(0, 500).map(rowHTML).join('') || '<tr><td colspan="7" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
+                    ${shown.length > 500 ? `<p class="text-xs text-gray-500">Showing 500 of ${fmtNum(shown.length)}: the machine list has them all.</p>` : ''}` : ''}
+                    ${C.axOnly.length ? `<div><p class="text-sm font-semibold">Automox has a waiting patch for it, but Qualys has not flagged it (${fmtNum(C.axOnly.length)})</p><p class="text-xs text-gray-500 mb-1">Not scanned since, or Qualys checks it differently. Worth including.</p>
+                        <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.axOnly.slice(0, 200).map(a => `<tr><td class="px-2 py-1.5 font-mono text-xs">${esc(a.name)}${a.acc ? ' ' + RiskView.flag(a.acc, true) : ''}</td><td class="px-2 py-1.5 text-xs">${esc(a.team)}</td><td class="px-2 py-1.5 text-xs">${a.when ? '⟳ next patch run ' + esc(day(a.when)) : '⚠ ' + esc(a.why)}</td><td class="px-2 py-1.5 text-[10px] font-mono text-gray-500">${esc(a.pkgs.slice(0, 3).join(', '))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+                    ${C.axUnmatched.length ? `<p class="text-xs text-gray-600">Also ${fmtNum(C.axUnmatched.length)} Automox device${C.axUnmatched.length === 1 ? '' : 's'} not in the register with a waiting patch for it: ${esc(C.axUnmatched.slice(0, 8).map(a => a.name).join(', '))}${C.axUnmatched.length > 8 ? '…' : ''}.</p>` : ''}
+                </div>`;
+                this.cveIntel(C.ids, seq);
+            }
+
+            // Public context, only the CVE number leaves the browser: CISA KEV, FIRST EPSS, NVD (score + one line).
+            async cveIntel(ids, seq) {
+                if (AIService.load().webResearch === false) return;
+                const ok = () => seq === this._cveSeq && this.currentView === 'cve';
+                this._cveIntel = this._cveIntel || new Map();
+                const need = ids.filter(id => !this._cveIntel.has(id));
+                if (need.length) {
+                    const [kev, epss] = await Promise.all([WebResearch.kev().catch(() => null), WebResearch.epss(need).catch(() => ({}))]);
+                    const nvd = await Promise.all(need.slice(0, 5).map(id => WebResearch.nvd(id).catch(() => null)));
+                    need.forEach((id, i) => this._cveIntel.set(id, { kev: kev ? (kev.get(id) || false) : null, epss: epss?.[id] || null, nvd: nvd[i] || null }));
+                }
+                if (!ok()) return;
+                ids.forEach(id => {
+                    const el = document.getElementById('cve-intel-' + id), x = this._cveIntel.get(id); if (!el || !x) return;
+                    const bits = [];
+                    if (x.kev) bits.push(`<strong class="text-red-800">⚑ On the CISA known-exploited list</strong> (added ${esc(x.kev.added)}${x.kev.ransomware === 'Known' ? ', used by ransomware' : ''})`);
+                    else if (x.kev === false) bits.push('Not on the CISA known-exploited list');
+                    if (x.epss) bits.push(`EPSS ${(x.epss.epss * 100).toFixed(1)}% chance of exploitation in 30 days`);
+                    if (x.nvd?.cvss) bits.push(`CVSS ${esc(x.nvd.cvss)} ${esc(x.nvd.sev || '')}`);
+                    el.innerHTML = bits.join(' · ') + (x.nvd?.desc ? `<div class="text-gray-500 mt-0.5">${esc(x.nvd.desc.slice(0, 260))}${x.nvd.desc.length > 260 ? '…' : ''}</div>` : '');
+                });
+            }
+
+            cveList(which) {
+                const C = this._cve; if (!C) return;
+                const rows = which === 'manual' ? C.list.filter(x => x.state.b === 'manual' || x.state.b === 'blocked') : C.list;
+                const names = App.hostNames(new Set([...rows.filter(x => !x.accF.length || x.accF.length < x.qids.size).map(x => x.name), ...(which === 'all' ? C.axOnly.map(a => a.name) : [])]));
+                if (!names.length) { const k = App._leftOut; App._leftOut = 0; StorageService.toast(k ? `Only risk-accepted machine${k === 1 ? '' : 's'} here: machine lists never include them` : 'No machines to export'); return; }
+                App.downloadList(`cve_${C.ids.join('-').slice(0, 60)}_${which === 'manual' ? 'not-by-automox_' : ''}${C.team === 'ALL' ? 'all-teams' : C.team.replace(/[^A-Za-z0-9_-]+/g, '')}`, names);
+                StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
+            }
+
+            async cveTrack() {
+                const C = this._cve; if (!C || !C.list.length) return;
+                const acc = RiskView.machineSet(), assets = C.list.filter(x => !acc.has(x.name) && !(x.accF.length && x.accF.length >= x.qids.size)).map(x => x.name);
+                if (!assets.length) { StorageService.toast('Every machine here is risk-accepted'); return; }
+                this.openTaskCreate({ type: 'vuln', title: `Fix ${C.ids.join(', ')}`, source: { kind: 'cve', key: C.ids.join(','), label: `${C.ids.join(', ')} · QIDs ${C.qids.slice(0, 6).join(', ')}${C.qids.length > 6 ? '…' : ''}`, qids: C.qids },
+                    assets, ...(await this.vulnTaskPriority(C.qids, new Set(assets), Math.min(...C.list.map(x => x.p)))) });
+            }
+
+            cveSummary() {
+                const C = this._cve; if (!C) return '';
+                const ST = App.CVE_STATE, n = (k) => C.list.filter(x => x.state.b === k).length, L = [];
+                const when = C.list.filter(x => x.state.b === 'will' && x.when).map(x => x.when);
+                L.push(`${C.ids.join(', ')}: CyberView lookup ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${C.team !== 'ALL' ? ' (' + C.team + ' team)' : ''}`);
+                C.per.forEach(c => { const x = this._cveIntel?.get(c.id);
+                    L.push(`${c.id}: ${c.machines ? c.machines + ' machine' + (c.machines === 1 ? '' : 's') + ' affected' : (c.qids.length ? 'no machine has it open' : 'not in our Qualys data yet (not proof we are unaffected)')}${c.hid ? `, plus ${c.hid} risk-accepted machine${c.hid === 1 ? '' : 's'}` : ''}${x?.kev ? '; on the CISA KEV list' : ''}${x?.nvd?.cvss ? '; CVSS ' + x.nvd.cvss : ''}`); });
+                if (C.qinfo.length) L.push(`Qualys checks: ${C.qinfo.map(q => 'QID ' + q.qid + ' ' + q.title).join('; ')}`);
+                if (C.list.length) {
+                    const teams = [...C.list.reduce((m, x) => m.set(x.team, (m.get(x.team) || 0) + 1), new Map())].map(([t, v]) => `${t} ${v}`).join(', ');
+                    L.push('', `Affected: ${C.list.length} machine${C.list.length === 1 ? '' : 's'} (${teams}); ${C.list.filter(x => /internet/i.test(x.exposure)).length} internet facing; ${C.list.filter(x => x.tier === 1).length} Tier 1`);
+                    L.push(`- Automox will patch: ${n('will')}${when.length ? ' (by ' + new Date(Math.max(...when)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ')' : ''}`);
+                    L.push(`- Automox patch waiting but blocked: ${n('blocked')}`);
+                    const av = C.list.filter(x => x.state.b === 'manual' && x.axAvail).length;
+                    L.push(`- Manual fix needed: ${n('manual')}${av ? ` (Automox has the patch for ${av} of them)` : ''}`);
+                    if (n('done')) L.push(`- Installed by Automox, waiting for a Qualys rescan: ${n('done')}`);
+                    if (n('unknown')) L.push(`- Automox state unknown: ${n('unknown')}`);
+                }
+                if (C.axOnly.length) L.push(`- Automox lists a waiting patch on ${C.axOnly.length} more machine${C.axOnly.length === 1 ? '' : 's'} Qualys has not flagged`);
+                if (C.fixed) L.push(`Already fixed: ${C.fixed}`);
+                if (C.hidden.machines || C.hidden.findings) L.push(`Not included: ${[C.hidden.machines ? C.hidden.machines + ' risk-accepted machine' + (C.hidden.machines === 1 ? '' : 's') : '', C.hidden.findings ? C.hidden.findings + ' accepted finding' + (C.hidden.findings === 1 ? '' : 's') : ''].filter(Boolean).join(', ')}`);
+                if (C.show && C.list.some(x => x.acc || x.accF.length)) L.push(`Includes ${C.list.filter(x => x.acc || x.accF.length).length} risk-accepted (flagged in CyberView)`);
+                if (C.stale || C.never) L.push(`Caveat: ${C.stale ? C.stale + ' machines not scanned for over ' + (+C.S.scanStaleDays || 30) + ' days' : ''}${C.stale && C.never ? ', ' : ''}${C.never ? C.never + ' with no scan date' : ''}`);
+                return L.join('\n');
+            }
+            cveCopy() {
+                const t = this.cveSummary(); if (!t) return;
+                const done = () => StorageService.toast('Summary copied: paste it into your reply');
+                if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, () => prompt('Copy the summary:', t)); else prompt('Copy the summary:', t);
             }
 
             // =================== Patch Plan (v4.5) ===================
@@ -5120,7 +5385,7 @@
                         if (!ctx.qids.has(String(qid))) ctx.qids.set(String(qid), {
                             qid: String(qid), title: q.title || '', sev: q.sev || sev, solution: q.solution || '', threat: q.threat || '', category: q.category || '',
                             rti: q.rti || [], patchable: !!q.patchable, published: q.published || '', patchReleased: '', cvss: +q.cvss || 0,
-                            cveCount: q.cveCount || 0, cves: (q.cves || []).slice(0, 25).map(id => ({ id, cvss: 0 }))
+                            cveCount: q.cveCount || 0, cves: (q.cves || []).map(id => ({ id, cvss: 0 }))      // all of them (v4.14: CVE Lookup); the server keeps up to 1000
                         });
                     }
                 }
@@ -5472,7 +5737,7 @@
             setViewMode(m) {
                 Prefs.set('view', m === 'advanced' ? 'advanced' : 'simple');
                 this.applyViewMode();
-                const keep = ['dashboard', 'plan', 'reports', 'eol', 'inspect'];
+                const keep = ['dashboard', 'plan', 'cve', 'reports', 'eol', 'inspect'];
                 this.switchView(m === 'simple' && !keep.includes(this.currentView) ? 'dashboard' : (this.currentView || 'dashboard'));
             }
 
@@ -7894,6 +8159,7 @@
                 else if (from === 'ax' && this.axState) scope = { owner: this.axState.scope || 'ALL' };
                 else if (from === 'plan') { const f = this.planF; scope = { owner: f.team, p: f.p }; }
                 else if (from === 'eol') scope = { owner: (document.getElementById('eol-scope-selector') || {}).value || 'ALL' };
+                else if (from === 'cve') scope = { owner: (document.getElementById('cve-scope') || {}).value || 'ALL' };
                 else if (!from && this.currentView === 'inspect') scope = [...this.inspectState.stack].reverse().find(x => x.type === 'qid')?.scope || null;
                 this.inspectNav({ type: 'qid', id: String(qid), scope: App.inspectScope(scope) });
             }
@@ -7952,7 +8218,7 @@
                 const e = this.inspectState.stack[this.inspectState.stack.length - 1];
                 if (!e) return;
                 document.getElementById('view-container').scrollTop = 0;
-                const retLabel = { plan: 'Patch Plan', automox: 'Patch Coverage', reports: 'Report', eol: 'End of Life Report', vuln: 'Vuln Management', dashboard: 'Dashboard', 'risk-accept': 'Risk Acceptances', register: 'Register' }[this.inspectReturn] || 'Back';
+                const retLabel = { cve: 'CVE Lookup', plan: 'Patch Plan', automox: 'Patch Coverage', reports: 'Report', eol: 'End of Life Report', vuln: 'Vuln Management', dashboard: 'Dashboard', 'risk-accept': 'Risk Acceptances', register: 'Register' }[this.inspectReturn] || 'Back';
                 const crumbs = this.inspectState.stack.map((s, i) => {
                     const label = s.type === 'asset' ? s.id : 'QID ' + s.id;
                     const last = i === this.inspectState.stack.length - 1;
@@ -8129,7 +8395,7 @@
                     : (entry.saved ? `<div class="flex flex-wrap items-center gap-2 bg-gray-50 border rounded-lg px-4 py-2 text-sm text-gray-700"><span>🌐 <strong>Showing: every asset</strong> · ${fmtNum(assets.length)} affected</span><button class="print-hide underline text-blue-700 hover:text-blue-900" onclick="app.inspectScopeBack()">Back to ${esc(App.inspectScopeLabel(entry.saved))}</button></div>` : '');
                 setTimeout(() => { const c = this.intelCache.get('intel:qid:' + qid), el = document.getElementById('intel-out'); if (c && el) el.innerHTML = c; }, 0);
                 const kpi = (label, v) => `<div class="bg-gray-50 border p-3 rounded"><p class="text-[10px] uppercase font-semibold opacity-70">${label}</p><p class="text-xl font-bold">${v}</p></div>`;
-                const cves = (q.cves || []).map(c => `<a class="inline-block mr-1 mb-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-mono hover:bg-blue-100" target="_blank" rel="noopener noreferrer" href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(c.id)}">${esc(c.id)}${c.cvss ? ' · ' + c.cvss : ''}</a>`).join('');
+                const cves = (q.cves || []).slice(0, 30).map(c => `<a class="inline-block mr-1 mb-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-mono hover:bg-blue-100" target="_blank" rel="noopener noreferrer" href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(c.id)}">${esc(c.id)}${c.cvss ? ' · ' + c.cvss : ''}</a>`).join('');
 
                 body.innerHTML = `${scopeBar}
                     <div class="bg-white rounded-lg shadow border p-5">
@@ -8148,7 +8414,7 @@
                             ${kpi('Patch released', esc((q.patchReleased || '-').split(' ').slice(0, 3).join(' ')))}
                             ${kpi('Fix available', q.patchable ? '✅ Patchable' : 'No patch')}
                         </div>
-                        ${cves ? `<div class="mt-4"><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">CVEs (${fmtNum(q.cveCount || q.cves.length)}${(q.cveCount || 0) > q.cves.length ? ', highest CVSS shown' : ''})</p>${cves}</div>` : ''}
+                        ${cves ? `<div class="mt-4"><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">CVEs (${fmtNum(q.cveCount || q.cves.length)}${(q.cveCount || q.cves.length) > 30 ? ', first 30 shown' : ''})</p>${cves}</div>` : ''}
                     </div>
 
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">

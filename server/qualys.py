@@ -278,7 +278,7 @@ def normalise_kb(v):
         "published": v.findtext("PUBLISHED_DATETIME") or "", "patchReleased": "",
         # CVSS comes back only when "CVSS Scoring" is switched on for the Qualys subscription; 0 = not supplied
         "cvss": _num(v.findtext("CVSS_V3/BASE")) or _num(v.findtext("CVSS/BASE")),
-        "cveCount": len(cves), "cves": cves[:200],
+        "cveCount": len(cves), "cves": cves[:1000],     # all of them in practice (v4.14 CVE Lookup searches this list)
     }
 
 

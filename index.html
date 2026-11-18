@@ -74,7 +74,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.13.0 · 18 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.13.1 · 18 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -2561,7 +2561,7 @@
                         cov = age <= S.scanOkDays ? { s: 'ok', why: `scanned ${age} d ago` } : age <= S.scanStaleDays ? { s: 'w', why: `scanned ${age} d ago` } : { s: 'u', hard: true, why: `last scan ${age} d ago` };
                     } else cov = dets.length || (ctx.vd.allBy && ctx.vd.allBy.has(name)) ? { s: 'u', hard: false, why: 'no scan date (CSV import)' } : { s: 'u', hard: true, why: 'not in the Qualys data' };
                     const b = ctx.life(r);
-                    const eol = [{ s: 'x', why: 'OS unsupported' }, { s: 'a', why: `OS support ends within ${S.eolActionMonths} months` }, { s: 'w', why: `OS support ends within ${S.eolWatchMonths} months` }, { s: 'ok', why: 'OS supported' }, { s: 'u', why: 'OS not recognised' }][b ?? 4];
+                    let eol = [{ s: 'x', why: 'OS unsupported' }, { s: 'a', why: `OS support ends within ${S.eolActionMonths} months` }, { s: 'w', why: `OS support ends within ${S.eolWatchMonths} months` }, { s: 'ok', why: 'OS supported' }, { s: 'u', why: 'OS not recognised' }][b ?? 4];
                     let patch = { s: 'na', why: 'not patched by Automox' };
                     if (r.patchNA) patch = { s: 'na', why: 'no Automox agent possible (set in the register)' };
                     else if (auto.has(team.toLowerCase())) {
@@ -2569,6 +2569,10 @@
                         patch = !c ? { s: 'na', why: 'no Automox data' } : c.has('ambiguous') ? { s: 'u', why: 'Automox match to check' } : c.has('none') ? { s: 'x', why: 'no Automox agent' }
                             : c.has('stale') ? { s: 'u', why: 'Automox agent stale' } : (c.has('noncompliant') || c.has('reboot')) ? { s: 'a', why: c.has('noncompliant') ? 'patch policy failing' : 'reboot pending' }
                             : c.has('waiting') ? { s: 'w', why: 'patches waiting' } : { s: 'ok', why: 'agent OK' };
+                    }
+                    if (accepted) {     // v4.13.1: a whole-machine acceptance also covers its OS support and Automox checks (scan coverage still counts: we must still see it)
+                        if (['x', 'a', 'w'].includes(eol.s)) eol = { s: 'na', why: `${eol.why}: whole machine accepted` };
+                        if (['x', 'a', 'w', 'u'].includes(patch.s)) patch = { s: 'na', why: `${patch.why}: whole machine accepted` };
                     }
                     const e = ex.get(name), nEx = (ctx.vd.excepted || []).filter(d => d.asset === name).length;
                     let exc = { s: 'ok', why: nEx ? `${nEx} finding${nEx === 1 ? '' : 's'} excepted` : 'none' };
@@ -2581,7 +2585,7 @@
                     if (cov.s === 'u' && cov.hard) overall = 'u';
                     assets.push({ name, r, team, tier: this.tierOf(r), checks: { vuln, cov, eol, patch, exc }, overall, open: dets.length,
                         p1: dets.filter(d => d.p === 1).length, p2: dets.filter(d => d.p === 2).length, newP12: newP12.length, newIn: newP12.filter(d => !d.overdue).length,
-                        bl12: bl12.length, bl1: bl12.filter(d => d.p === 1).length, blOver: bl12.filter(d => d.overdue).length, over12: over.length, unsupT1: b === 0 && this.tierOf(r) === 1, worstP: dets.length ? Math.min(...dets.map(d => d.p)) : 5 });
+                        bl12: bl12.length, bl1: bl12.filter(d => d.p === 1).length, blOver: bl12.filter(d => d.overdue).length, over12: over.length, unsupT1: b === 0 && !accepted && this.tierOf(r) === 1, worstP: dets.length ? Math.min(...dets.map(d => d.p)) : 5 });
                 }
                 const teams = new Map();
                 for (const a of assets) {

@@ -41,6 +41,7 @@
         body:not(.server-mode):not(.demo-mode) .api-only { display: none !important; }
         /* Simple view (v4.7, the default): four pages in the sidebar and a four-panel Dashboard; Advanced shows everything */
         body.simple-view aside nav .nav-btn:not(.simple-ok) { display: none !important; }
+        body.simple-view aside nav .nav-group:not(.simple-ok) { display: none !important; }
         body.simple-view aside .adv-only { display: none !important; }
         body.simple-view #view-dashboard > :not(.simple-keep) { display: none !important; }
         body:not(.simple-view) #dash-simple { display: none !important; }
@@ -74,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.14.1 · 18 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.15.0 · 18 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -85,38 +86,35 @@
         <div class="px-3 pt-3 print-hide" id="view-mode"></div>
         <div class="px-3 pt-2 print-hide simple-ok" id="acc-switch"></div>
         <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+            <p class="nav-group simple-ok px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Daily work</p>
             <button onclick="app.switchView('dashboard')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📊 Dashboard</button>
-            <button onclick="app.switchView('import')" class="local-only write-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📥 Import Data</button>
+            <button onclick="app.switchView('plan')" class="simple-ok server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🗓️ Patch Plan</button>
+            <button onclick="app.switchView('cve')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🔎 CVE Lookup</button>
+            <button onclick="app.switchView('vuln')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">
+                <span>🛡️ Vuln Management</span>
+                <span id="nav-vuln-badge" class="hidden ml-auto w-fit bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"></span>
+            </button>
+            <button onclick="app.switchView('remediation')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🛠️ Remediation</button>
+            <p class="nav-group simple-ok px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Reports</p>
+            <button onclick="app.switchView('status')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🚦 Status</button>
+            <button onclick="app.switchView('reports')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📄 Team Risk Reports</button>
+            <button onclick="app.switchView('eol')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⏳ End of Life Report</button>
+            <button onclick="app.switchView('automox')" class="server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩹 Patch Coverage</button>
+            <p class="nav-group px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Register and data</p>
             <button onclick="app.switchView('review')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition justify-between">
                 <span>📋 Review Queue</span>
                 <span id="nav-review-badge" class="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full hidden">0</span>
             </button>
             <button onclick="app.switchView('register')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🗄️ Asset Register</button>
-            <button onclick="app.switchView('vuln')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">
-                <span>🛡️ Vuln Management</span>
-                <span id="nav-vuln-badge" class="hidden ml-auto w-fit bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"></span>
-            </button>
-            <button onclick="app.switchView('plan')" class="simple-ok server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🗓️ Patch Plan</button>
-            <button onclick="app.switchView('cve')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🔎 CVE Lookup</button>
-            <button onclick="app.switchView('remediation')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🛠️ Remediation</button>
             <button onclick="app.switchView('risk-accept')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">✅ Risk Acceptances</button>
-            <button onclick="app.switchView('status')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🚦 Status</button>
             <button onclick="app.switchView('health')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩺 Data Health</button>
+            <button onclick="app.switchView('import')" class="local-only write-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📥 Import Data</button>
+            <p class="nav-group px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Admin</p>
             <button onclick="app.switchView('org')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⚙ Organisation setup</button>
-            <button onclick="app.switchView('reports')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📄 Team Risk Reports</button>
-            <button onclick="app.switchView('eol')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⏳ End of Life Report</button>
-            <button onclick="app.switchView('automox')" class="server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩹 Patch Coverage</button>
+            <button onclick="app.switchView('users')" class="server-only admin-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">👥 Users</button>
             <button onclick="app.switchView('history')" class="server-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🕘 History</button>
             <button onclick="app.switchView('backup')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">💾 Backup &amp; Restore</button>
-            <button onclick="app.switchView('users')" class="server-only admin-only nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">👥 Users</button>
         </nav>
-        <div class="adv-only p-4 border-t border-slate-200 print-hide">
-            <button onclick="app.openAISettings()" class="w-full border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold py-2 rounded-lg transition mb-2">🤖 AI Settings</button>
-            <button onclick="app.exportDatabase()" class="w-full border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold py-2 rounded-lg transition mb-2">💾 Backup DB (JSON)</button>
-            <input type="file" id="restore-file-input" accept=".json,application/json" class="hidden admin-only" onchange="app.handleRestoreFile(event)">
-            <button onclick="document.getElementById('restore-file-input').click()" class="admin-only w-full border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold py-2 rounded-lg transition mb-2">♻️ Restore DB (JSON)</button>
-            <button onclick="app.promptReset()" class="admin-only w-full bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold py-2 rounded-lg transition border border-red-200">⚠️ Reset Database</button>
-        </div>
     </aside>
 
     <!-- Main Content Area -->
@@ -143,57 +141,13 @@
                     <h2 class="text-2xl font-bold tracking-tight">CyberView <span id="hero-org" class="font-normal text-indigo-200 text-lg ml-2"></span></h2>
                     <p class="text-sm text-indigo-100 mt-1 max-w-2xl">One view of who owns each machine, what is wrong with it, and where to focus: Qualys findings, patching, end of life and remediation joined to your asset register.</p>
                 </div>
-                <div id="dash-coverage"></div>
-                <div id="dash-automox" class="hidden"></div>
                 <div id="dash-status" class="simple-keep"></div>
                 <div id="dash-simple" class="simple-keep space-y-6"></div>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div class="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
-                        <p class="text-sm text-gray-500 font-medium uppercase">Total Assets</p>
-                        <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-total-assets">0</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-6 border-l-4 border-emerald-500">
-                        <p id="kpi-main-team-label" class="text-sm text-gray-500 font-medium uppercase">Main team assets</p>
-                        <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-platform-assets">0</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-6 border-l-4 border-amber-500">
-                        <p class="text-sm text-gray-500 font-medium uppercase">Pending Review</p>
-                        <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-pending-review">0</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
-                        <p class="text-sm text-gray-500 font-medium uppercase">Data Health Score</p>
-                        <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-health-score">100%</p>
-                    </div>
-                </div>
-                
-                <h3 class="text-lg font-semibold mt-8 mb-4">Vulnerability Detections by Status</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <div class="bg-white rounded-lg shadow p-6 border-b-4 border-red-600">
-                        <p class="text-sm text-gray-500 font-medium uppercase">Actionable Detections</p>
-                        <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-risk-actionable">0</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-6 border-b-4 border-amber-500">
-                        <p class="text-sm text-gray-500 font-medium uppercase">Accepted Detections</p>
-                        <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-risk-accepted">0</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-6 border-b-4 border-blue-500">
-                        <p class="text-sm text-gray-500 font-medium uppercase">Awaiting Patch (detections)</p>
-                        <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-risk-awaiting">0</p>
-                    </div>
-                    <div class="bg-white rounded-lg shadow p-6 border-b-4 border-green-500">
-                        <p class="text-sm text-gray-500 font-medium uppercase">Resolved (detections)</p>
-                        <p class="text-3xl font-bold text-gray-900 mt-2" id="kpi-risk-resolved">0</p>
-                    </div>
-                </div>
-
+                <!-- Advanced only (v4.15): the register and acceptances, and remediation -->
+                <div id="dash-register"></div>
                 <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex justify-between items-center border-b pb-3 mb-4"><h3 class="text-lg font-semibold">Remediation</h3><button onclick="app.switchView('remediation')" class="text-sm text-blue-700 underline">Open the tracker</button></div>
+                    <div class="flex justify-between items-center border-b pb-3 mb-4"><h3 class="text-lg font-semibold">🛠️ Remediation</h3><a href="#" onclick="app.switchView('remediation'); return false;" class="text-sm text-blue-700 underline">Open Remediation →</a></div>
                     <div id="dash-remediation"></div>
-                </div>
-
-                <div class="bg-white rounded-lg shadow p-6 mt-8">
-                    <h3 class="text-lg font-semibold border-b pb-4 mb-4">Recommended Actions</h3>
-                    <ul id="dashboard-actions" class="space-y-3 text-sm text-gray-700"></ul>
                 </div>
             </section>
 
@@ -268,7 +222,7 @@
                 
                 <div class="bg-white p-4 rounded-lg shadow mb-4 border flex flex-wrap gap-4 items-end">
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">State</label><select id="review-filter-state" onchange="app.updateReviewFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All States</option><option value="PENDING" selected>Pending</option><option value="IN_REVIEW">In Review</option><option value="ESCALATED">Escalated</option></select></div>
-                    <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Suggested Owner</label><select id="review-filter-owner" onchange="app.updateReviewFilters()" class="border-gray-300 rounded text-sm"></select></div>
+                    <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Suggested team</label><select id="review-filter-owner" onchange="app.updateReviewFilters()" class="border-gray-300 rounded text-sm"></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Service Type</label><select id="review-filter-service" onchange="app.updateReviewFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Services</option><option value="Active Directory">Active Directory</option><option value="DNS">DNS</option><option value="Monitoring">Monitoring</option><option value="Database">Database</option><option value="Backup">Backup</option><option value="Unclassified">Unclassified</option></select></div>
                     <div class="flex-1"><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Search Assets</label><input type="text" id="review-filter-search" oninput="app.updateReviewFilters()" placeholder="Search names, IPs, services..." class="border-gray-300 rounded text-sm w-full"></div>
                 </div>
@@ -284,7 +238,7 @@
                     </div>
                     <div class="space-x-2">
                         <span id="review-bulk-teams" class="space-x-2"></span>
-                        <button onclick="app.promptBulkAction('REJECT', null)" class="bg-red-50 border border-red-200 text-red-700 px-3 py-1 rounded shadow-sm font-medium">Bulk Reject</button>
+                        <button onclick="app.promptBulkAction('REJECT', null)" class="bg-red-50 border border-red-200 text-red-700 px-3 py-1 rounded shadow-sm font-medium">✗ Reject selected</button>
                     </div>
                 </div>
 
@@ -295,7 +249,7 @@
                                 <tr>
                                     <th class="px-4 py-3 w-10 text-center"></th>
                                     <th class="px-4 py-3">Asset Details</th>
-                                    <th class="px-4 py-3 w-40">Owner Suggestion</th>
+                                    <th class="px-4 py-3 w-40">Suggested team</th>
                                     <th class="px-4 py-3">Inferred Service</th>
                                     <th class="px-4 py-3" title="Optional: set now, or later in the Asset Register">Tier</th>
                                     <th class="px-4 py-3" title="Optional: set now, or later in the Asset Register">Exposure</th>
@@ -312,9 +266,9 @@
             <!-- VIEW: ASSET REGISTER -->
             <section id="view-register" class="view-section h-full flex flex-col">
                 <div class="flex justify-between items-end mb-4">
-                    <h3 class="text-xl font-semibold">Authoritative Register</h3>
+                    <h3 class="text-xl font-semibold">Asset Register</h3>
                     <div class="flex space-x-2">
-                        <button onclick="app.openBulkRiskModal('register')" class="bg-amber-100 text-amber-800 border border-amber-300 px-4 py-2 rounded text-sm font-medium shadow-sm hover:bg-amber-200">⚖️ Bulk Accept Risk</button>
+                        <button onclick="app.openBulkRiskModal('register')" class="bg-amber-100 text-amber-800 border border-amber-300 px-4 py-2 rounded text-sm font-medium shadow-sm hover:bg-amber-200">⚖️ Accept risk for selected</button>
                     </div>
                 </div>
                 
@@ -327,7 +281,7 @@
                         </div>
                         <p id="register-search-err" class="text-[11px] text-red-700 mt-0.5 hidden"></p>
                     </div>
-                    <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Owner</label><select id="reg-f-owner" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"></select></div>
+                    <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Team</label><select id="reg-f-owner" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Service</label><select id="reg-f-service" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Services</option></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Environment</label><select id="reg-f-env" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Environments</option><option value="Production">Production</option><option value="Non-Prod">Non-Prod</option><option value="DR">DR</option></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label><select id="reg-f-status" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Statuses</option><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending</option></select></div>
@@ -351,7 +305,7 @@
                 <div id="reg-bulk" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm">
                     <div class="flex items-center gap-3 mb-2"><strong id="reg-bulk-count"></strong><span class="text-xs text-gray-600">Choose only the fields to change; &ldquo;no change&rdquo; leaves a field alone.</span><button onclick="app.clearRegisterSelection()" class="text-xs text-blue-700 underline ml-auto">Clear selection</button></div>
                     <div class="flex flex-wrap gap-3 items-end">
-                        <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Owner</label><select id="bulk-owner" class="border-gray-300 rounded text-sm"></select></div>
+                        <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Team</label><select id="bulk-owner" class="border-gray-300 rounded text-sm"></select></div>
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label><select id="bulk-status" class="border-gray-300 rounded text-sm"><option value="">no change</option><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending Review</option></select></div>
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Environment</label><select id="bulk-env" class="border-gray-300 rounded text-sm"><option value="">no change</option><option value="Production">Production</option><option value="Non-Prod">Non-Prod / Dev</option><option value="DR">Disaster Recovery</option></select></div>
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Service Type</label><input type="text" id="bulk-service" list="reg-service-list" placeholder="no change" class="border-gray-300 rounded text-sm w-40"><datalist id="reg-service-list"></datalist></div>
@@ -370,8 +324,8 @@
                             <thead class="bg-gray-100 text-gray-600 border-b sticky top-0 z-10">
                                 <tr>
                                     <th class="px-6 py-3 w-10 text-center"><input type="checkbox" id="reg-select-all" onchange="app.toggleAllRegister(this.checked)" class="rounded border-gray-300"></th>
-                                    <th class="px-6 py-3">Normalized Name</th>
-                                    <th class="px-6 py-3">Owner</th>
+                                    <th class="px-6 py-3">Machine</th>
+                                    <th class="px-6 py-3">Team</th>
                                     <th class="px-6 py-3">Service</th>
                                     <th class="px-6 py-3">Env</th>
                                     <th class="px-6 py-3">Status</th>
@@ -474,6 +428,11 @@
                 <div id="backup-restore-denied" class="hidden bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-5 text-sm">
                     Restoring is for <b>administrators</b>. You are signed in as <b id="backup-role"></b>. Ask an administrator to restore, or have one change your role on the Users page.
                 </div>
+                <div class="admin-only bg-white rounded-lg shadow p-5 space-y-3 border border-red-200">
+                    <h3 class="font-bold text-red-800">3. Start again (wipe everything)</h3>
+                    <p class="text-sm text-gray-600">Deletes all the data in the portal. Download a backup first. You are asked to confirm.</p>
+                    <button onclick="app.promptReset()" class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-800 border border-red-300 rounded text-sm font-semibold">⚠️ Reset the database</button>
+                </div>
                 <div class="server-only bg-white rounded-lg shadow p-5 space-y-2 text-sm text-gray-600">
                     <h3 class="font-bold text-gray-800">On the server itself</h3>
                     <p>The database is also dumped on the server with <code class="bg-gray-100 px-1">./deploy.sh backup</code> (files in <code class="bg-gray-100 px-1">backups/</code>) and loaded back with <code class="bg-gray-100 px-1">./deploy.sh restore backups/FILE.sql.gz</code>. Use that for a nightly copy or if the portal will not start.</p>
@@ -570,7 +529,7 @@
             <section id="view-status" class="view-section space-y-4">
                 <div class="flex flex-wrap justify-between items-end gap-3">
                     <div><h3 class="text-xl font-semibold">Vulnerability Status</h3><p class="text-sm text-gray-600"><span id="st-date"></span> · every source joined: findings, scan coverage, end of life, patching, exceptions.</p></div>
-                    <div class="flex gap-2 items-center print-hide"><select id="st-scope" onchange="app.stOpen(this.value)" class="border-gray-300 rounded text-sm"></select><button onclick="window.print()" class="border px-3 py-1.5 rounded text-sm">🖨 Print</button></div>
+                    <div class="flex gap-2 items-center print-hide"><select id="st-scope" onchange="app.stOpen(this.value)" class="border-gray-300 rounded text-sm"></select><button onclick="window.print()" class="border px-3 py-1.5 rounded text-sm">🖨️ Print</button></div>
                 </div>
                 <div id="st-body" class="space-y-4"></div>
             </section>
@@ -589,18 +548,15 @@
                 <div id="sr-body" class="space-y-4 text-sm"></div>
             </section>
 
-            <section id="view-health" class="view-section">
-                 <h3 class="text-xl font-semibold mb-6">Governance Data Health</h3>
-                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     <div class="bg-white shadow rounded-lg p-6 border">
-                         <h4 class="font-medium text-red-600 border-b pb-2 mb-3">Missing Ownership</h4>
-                         <ul id="health-missing-owner" class="text-sm space-y-2 text-gray-700"></ul>
-                     </div>
-                     <div class="bg-white shadow rounded-lg p-6 border">
-                         <h4 class="font-medium text-amber-600 border-b pb-2 mb-3">Unclassified Services</h4>
-                         <ul id="health-missing-service" class="text-sm space-y-2 text-gray-700"></ul>
-                     </div>
-                 </div>
+            <section id="view-health" class="view-section space-y-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">🩺 Data Health</h2>
+                    <p class="text-sm text-gray-500 mt-1">Can you trust what the portal shows? Where the data comes from, when it last arrived, and what is missing.</p>
+                </div>
+                <div id="health-sources"></div>
+                <div id="dash-coverage"></div>
+                <div id="dash-automox" class="hidden"></div>
+                <div id="health-gaps"></div>
             </section>
 
             <!-- VIEW: TEAM RISK REPORTS -->
@@ -615,7 +571,7 @@
                         <div class="flex items-center space-x-4 print-hide">
                             
                             <select id="report-scope-selector" onchange="app.renderReports()" class="border-gray-300 rounded text-sm font-medium shadow-sm py-2"></select>
-                            <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded shadow-sm text-sm font-medium">🖨️ Print PDF</button>
+                            <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded shadow-sm text-sm font-medium">🖨️ Print</button>
                         </div>
                     </div>
 
@@ -718,7 +674,7 @@
                         <div class="flex items-center space-x-4 print-hide">
                             <select id="eol-scope-selector" onchange="app.renderEOL()" class="border-gray-300 rounded text-sm font-medium shadow-sm py-2"></select>
                             <button onclick="app.renderEOL(false, true)" title="Fetch the dates from endoflife.date again (they are kept for a week)" class="bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm">↻ Dates</button>
-                            <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded shadow-sm text-sm font-medium">🖨️ Print PDF</button>
+                            <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded shadow-sm text-sm font-medium">🖨️ Print</button>
                         </div>
                     </div>
                     <div id="eol-notice" class="mb-6"></div>
@@ -754,13 +710,13 @@
                         </div>
                     </div>
                     <div class="mb-8 print-break">
-                        <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">5. Assets to act on <span class="text-xs font-normal text-gray-400">most urgent first, then criticality, then TruRisk</span></h3>
+                        <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">5. Assets to act on <span class="text-xs font-normal text-gray-400">most urgent first, then tier, then TruRisk</span></h3>
                         <div class="print-hide bg-gray-50 border rounded p-3 mb-3 space-y-2 text-sm">
                             <div class="flex flex-wrap items-center gap-2"><span class="text-xs font-semibold text-gray-600 w-16">Status</span><span id="eol-f-status" class="flex flex-wrap gap-1.5"></span></div>
                             <div class="flex flex-wrap items-center gap-2"><span class="text-xs font-semibold text-gray-600 w-16">Reason</span><span id="eol-f-reason" class="flex flex-wrap gap-1.5"></span></div>
                             <div class="flex flex-wrap items-center gap-3">
-                                <label class="text-xs font-semibold text-gray-600">Criticality
-                                    <select id="eol-f-crit" onchange="app.eolSetFilter('crit', this.value)" class="ml-1 border-gray-300 rounded text-sm py-1"><option value="0">All</option><option value="4">4-5</option><option value="5">5 only</option></select></label>
+                                <label class="text-xs font-semibold text-gray-600">Tier
+                                    <select id="eol-f-crit" onchange="app.eolSetFilter('crit', this.value)" class="ml-1 border-gray-300 rounded text-sm py-1"><option value="0">All</option><option value="1">Tier 1</option><option value="2">Tier 1–2</option></select></label>
                                 <span class="flex gap-1 items-center">
                                     <select id="eol-f-field" onchange="app.eolSetFilter('field', this.value)" title="Which field to search" class="border-gray-300 rounded text-sm py-1"><option value="ALL">All fields</option><option value="Name">Name</option><option value="OS">OS</option><option value="Owner">Owner</option><option value="Service">Service</option><option value="Hardware">Hardware</option></select>
                                     <input id="eol-f-q" oninput="app.eolSearch(this.value)" placeholder="Search: text, * ? wildcards, /regex/" title="Plain words: contains. * any characters, ? one character: the pattern must match a whole value (web01* = starts with). /regex/ for a regular expression." class="border rounded px-2 py-1 text-sm w-72">
@@ -769,13 +725,13 @@
                                 <button onclick="app.eolResetFilters()" class="text-xs text-blue-700 underline">Reset</button>
                                 <span class="flex-1"></span>
                                 <button onclick="app.trackEolFiltered()" class="write-only bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded shadow-sm text-sm" title="One remediation task for every asset in the filtered list">＋ Track these assets</button>
-                                <button onclick="app.eolExportCSV()" class="bg-white border border-gray-300 hover:bg-gray-100 px-3 py-1.5 rounded shadow-sm text-sm">⬇ Export CSV</button>
+                                <button onclick="app.eolExportCSV()" class="bg-white border border-gray-300 hover:bg-gray-100 px-3 py-1.5 rounded shadow-sm text-sm">⬇ CSV</button>
                             </div>
                         </div>
                         <p id="eol-f-summary" class="text-xs text-gray-600 mb-2"></p>
                         <div class="overflow-x-auto">
                         <table class="min-w-full text-sm text-left">
-                            <thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2 font-semibold">Asset</th><th class="py-2 px-2 font-semibold">Owner</th><th class="py-2 px-2 font-semibold text-center">Crit</th><th class="py-2 px-2 font-semibold">TruRisk</th><th class="py-2 px-2 font-semibold">Status</th><th class="py-2 px-2 font-semibold">Operating system</th><th class="py-2 px-2 font-semibold">Next action</th><th class="py-2 px-2 print-hide"></th></tr></thead>
+                            <thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2 font-semibold">Asset</th><th class="py-2 px-2 font-semibold">Team</th><th class="py-2 px-2 font-semibold text-center">Tier</th><th class="py-2 px-2 font-semibold">TruRisk</th><th class="py-2 px-2 font-semibold">Status</th><th class="py-2 px-2 font-semibold">Operating system</th><th class="py-2 px-2 font-semibold">Next action</th><th class="py-2 px-2 print-hide"></th></tr></thead>
                             <tbody id="eol-assets" class="divide-y"></tbody>
                         </table>
                         </div>
@@ -809,7 +765,7 @@
                     <div><h3 class="text-xl font-semibold text-gray-800">Remediation tasks</h3><p class="text-sm text-gray-500">One fix on a set of assets, owned by a team and a person, with a due date. Create tasks with <strong>＋ Track</strong> in Vuln Management, Inspect or the End of Life Report.</p></div>
                     <div class="flex gap-2">
                         <button onclick="app.renderRemediation(true)" class="bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm" title="Load the latest tasks from the server">↻ Refresh</button>
-                        <button onclick="app.remExportCSV()" class="bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm">⬇ Export CSV</button>
+                        <button onclick="app.remExportCSV()" class="bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded shadow-sm text-sm">⬇ CSV</button>
                         <button onclick="app.openTaskCreate({ type: 'other', title: '', assets: [], source: { kind: 'manual', key: '', label: 'Manual task' } })" class="write-only bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow-sm text-sm font-medium">＋ New task</button>
                     </div>
                 </div>
@@ -856,8 +812,8 @@
             <!-- VIEW: RISK ACCEPTANCES -->
             <section id="view-risk-accept" class="view-section h-full flex flex-col">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-semibold">Risk Acceptance Register</h3>
-                    <button onclick="app.openRiskModal()" class="bg-blue-600 text-white px-4 py-2 rounded shadow-sm hover:bg-blue-700 font-medium">➕ Record Acceptance</button>
+                    <h3 class="text-xl font-semibold">Risk Acceptances</h3>
+                    <button onclick="app.openRiskModal()" class="bg-blue-600 text-white px-4 py-2 rounded shadow-sm hover:bg-blue-700 font-medium">＋ Record an acceptance</button>
                 </div>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4" id="risk-accept-kpis">
                      <!-- KPIs go here -->
@@ -867,11 +823,11 @@
                          <table class="min-w-full text-left text-sm whitespace-nowrap">
                              <thead class="bg-gray-100 text-gray-600 border-b sticky top-0 z-10">
                                  <tr>
-                                     <th class="px-6 py-3">Asset</th>
+                                     <th class="px-6 py-3">Machine</th>
                                      <th class="px-6 py-3">Scope</th>
-                                     <th class="px-6 py-3">Owner</th>
+                                     <th class="px-6 py-3">Team</th>
                                      <th class="px-6 py-3">Status</th>
-                                     <th class="px-6 py-3 text-right">Accepted Detections</th>
+                                     <th class="px-6 py-3 text-right">Accepted findings</th>
                                      <th class="px-6 py-3 text-center">Expiry</th>
                                      <th class="px-6 py-3 text-right">Actions</th>
                                  </tr>
@@ -994,7 +950,7 @@
                 <h3 class="text-lg font-bold">Edit Asset Record</h3>
                 <div class="bg-gray-100 p-2 rounded font-mono font-semibold" id="edit-asset-name"></div>
                 <div class="grid grid-cols-2 gap-4">
-                    <div><label class="block font-medium mb-1">Owner</label><select id="edit-asset-owner" class="w-full border rounded p-2"></select></div>
+                    <div><label class="block font-medium mb-1">Team</label><select id="edit-asset-owner" class="w-full border rounded p-2"></select></div>
                     <div><label class="block font-medium mb-1">Status</label><select id="edit-asset-status" class="w-full border rounded p-2"><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending Review</option></select></div>
                     <div><label class="block font-medium mb-1">Environment</label><select id="edit-asset-env" class="w-full border rounded p-2"><option value="Production">Production</option><option value="Non-Prod">Non-Prod / Dev</option><option value="DR">Disaster Recovery</option></select></div>
                     <div><label class="block font-medium mb-1">Service Type</label><input type="text" id="edit-asset-service" class="w-full border rounded p-2"></div>
@@ -4325,7 +4281,7 @@
                 const st = await this.statusData();
                 if (this.currentView !== 'status') return;
                 const sel = $('st-scope'), cur = this.stScope || 'ALL';
-                sel.innerHTML = `<option value="ALL">Estate (all teams)</option>${st.teams.map(t => `<option value="${esc(t.team)}" ${t.team === cur ? 'selected' : ''}>${esc(t.team)}</option>`).join('')}`;
+                sel.innerHTML = `<option value="ALL">All teams</option>${st.teams.map(t => `<option value="${esc(t.team)}" ${t.team === cur ? 'selected' : ''}>${esc(t.team)}</option>`).join('')}`;
                 if (cur !== 'ALL' && !st.teams.some(t => t.team === cur)) this.stScope = 'ALL';
                 sel.value = this.stScope || 'ALL';
                 $('st-date').textContent = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -4465,15 +4421,15 @@
                     'bulk-crit': opt('', 'no change') + tierOpts + opt('clear', 'Not set'),
                     'bulk-confirm-tier': opt('0', 'Not set yet') + tierOpts,
                     'edit-asset-criticality': opt('0', 'Not set (counts as Tier 2)') + tierOpts,
-                    'review-filter-owner': opt('ALL', 'All Owners') + team() + opt('Unknown', 'Unknown'),
-                    'reg-f-owner': opt('ALL', 'All Owners') + team() + opt('Unknown', 'Unknown') + opt('Unrecognised', 'Unrecognised'),
+                    'review-filter-owner': opt('ALL', 'All teams') + team() + opt('Unknown', 'Unknown'),
+                    'reg-f-owner': opt('ALL', 'All teams') + team() + opt('Unknown', 'Unknown') + opt('Unrecognised', 'Unrecognised'),
                     'bulk-owner': opt('', 'no change') + team() + opt('Unknown', 'Unknown'),
-                    'vuln-filter-owner': opt('ALL', 'All Teams') + team() + opt('Unrecognised', 'Unrecognised'),
-                    'report-scope-selector': opt('ALL', 'Entire Estate') + team(t => t + ' Team'),
-                    'ax-scope': opt(main, main + ' Team') + opt('ALL', 'Entire register') + T.filter(t => t !== main).map(t => opt(t, t + ' Team')).join(''),
-                    'eol-scope-selector': opt('ALL', 'Entire Estate') + team(t => t + ' Team'),
-                    'cve-scope': opt('ALL', 'All teams') + team(t => t + ' Team'),
-                    'rem-f-team': opt('ALL', 'All') + team() + opt('Unknown', 'Unknown'),
+                    'vuln-filter-owner': opt('ALL', 'All teams') + team() + opt('Unrecognised', 'Unrecognised'),
+                    'report-scope-selector': opt('ALL', 'All teams') + team(),
+                    'ax-scope': opt(main, main) + opt('ALL', 'All teams') + T.filter(t => t !== main).map(t => opt(t, t)).join(''),
+                    'eol-scope-selector': opt('ALL', 'All teams') + team(),
+                    'cve-scope': opt('ALL', 'All teams') + team(),
+                    'rem-f-team': opt('ALL', 'All teams') + team() + opt('Unknown', 'Unknown'),
                     'edit-asset-owner': team() + opt('Unknown', 'Unknown') + opt('Unrecognised', 'Unrecognised')
                 };
                 Object.entries(spec).forEach(([id, html]) => {
@@ -4484,7 +4440,7 @@
                 if (!this._prefsApplied) { this._prefsApplied = true; Prefs.applyAll(); }      // remembered choices, once per page load
                 if (this.vulnState) this.syncVulnFilterControls();
                 const bulk = document.getElementById('review-bulk-teams');
-                if (bulk) bulk.innerHTML = T.map(t => `<button data-t="${esc(t)}" onclick="app.promptBulkAction('APPROVE', this.dataset.t)" class="bg-white border text-blue-700 px-3 py-1 rounded shadow-sm font-medium">Bulk ${esc(t)}</button>`).join('');
+                if (bulk) bulk.innerHTML = T.map(t => `<button data-t="${esc(t)}" onclick="app.promptBulkAction('APPROVE', this.dataset.t)" title="Approve the selected machines with this team" class="bg-white border text-blue-700 px-3 py-1 rounded shadow-sm font-medium">✓ Approve as ${esc(t)}</button>`).join('');
                 const S = OrgSettings.get();
                 const on = document.getElementById('org-name'); if (on) on.textContent = S.orgName || '';
                 document.title = 'CyberView' + (S.orgName ? ' · ' + S.orgName : '');
@@ -4569,7 +4525,7 @@
             // Organisation setup is the one settings page (v4.5.1): its two parts, the chosen one marked with ● and a heavy outline.
             static settingsPartsHTML(active) {
                 const b = (v, label, help) => { const on = v === active; return `<button role="tab" aria-selected="${on}" onclick="app.switchView('${v}')" title="${esc(help)}" class="px-4 py-2 rounded-lg text-sm ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${label}</button>`; };
-                return `<div role="tablist" class="flex flex-wrap gap-2 print-hide">${b('org', '⚙ Organisation', 'Teams, tiers, name matching, rules, manual imports')}${b('status-rules', '📐 Status rules', 'Priorities, due dates, backlog, status checks, Patch Plan period')}</div>`;
+                return `<div role="tablist" class="flex flex-wrap gap-2 print-hide">${b('org', '⚙ Organisation', 'Teams, tiers, name matching, rules, manual imports')}${b('status-rules', '📐 Status rules', 'Priorities, due dates, backlog, status checks, Patch Plan period')}<button onclick="app.openAISettings()" class="ml-auto px-4 py-2 rounded-lg text-sm border border-slate-300 bg-white hover:bg-slate-50" title="Which AI writes the remediation plan (kept in this browser)">🤖 AI settings</button></div>`;
             }
 
             // The findings CSV import lives on Vuln Management (its progress shows there): go there, open the panel, pick the file.
@@ -5472,7 +5428,7 @@
                     out.push(`<div class="bg-blue-50 border border-blue-200 text-blue-900 rounded p-3">⟳ <strong>Syncing</strong> (started by ${esc(j.by || '?')} ${esc(AutomoxService.ago(j.started))}): ${esc(j.phase || '')} ${prog}. Automox allows under 30 requests a minute, so this takes a while; you can leave this page.</div>`);
                 }
                 if (L) {
-                    out.push(`<p class="text-gray-600">Last sync <strong>${esc(new Date(AutomoxService.time(L.at)).toLocaleString('en-GB'))}</strong> by ${esc(L.by)} · organisation ${esc(L.orgName || L.org)} · ${fmtNum(L.devices)} devices · ${fmtNum(L.pending)} waiting patches · ${fmtNum(L.installedDevices || 0)} device${L.installedDevices === 1 ? '' : 's'} checked for installed fixes${L.newlyInstalled ? ` · ${fmtNum(L.newlyInstalled)} fixes seen installed since the sync before` : ''} · ${fmtNum(L.seconds || 0)} s${st.scheduleHours ? ` · syncs every ${esc(st.scheduleHours)} h` : ''}</p>`);
+                    out.push(`<p class="text-gray-600">Last sync <strong>${esc(App.whenText(AutomoxService.time(L.at)))}</strong> by ${esc(L.by)} · organisation ${esc(L.orgName || L.org)} · ${fmtNum(L.devices)} devices · ${fmtNum(L.pending)} waiting patches · ${fmtNum(L.installedDevices || 0)} device${L.installedDevices === 1 ? '' : 's'} checked for installed fixes${L.newlyInstalled ? ` · ${fmtNum(L.newlyInstalled)} fixes seen installed since the sync before` : ''} · ${fmtNum(L.seconds || 0)} s${st.scheduleHours ? ` · syncs every ${esc(st.scheduleHours)} h` : ''}</p>`);
                     (L.warnings || []).forEach(w => out.push(`<p class="text-xs text-amber-800">⚠ ${esc(w)}</p>`));
                 } else if (!j.running) out.push('<p class="text-gray-600">Not synced yet. Press <strong>Sync from Automox</strong>.</p>');
                 if (E && (!L || AutomoxService.time(E.at) > AutomoxService.time(L.at))) out.push(`<div class="mt-2 bg-red-50 border border-red-300 text-red-900 rounded p-3">✗ <strong>The last sync failed</strong> (${esc(new Date(AutomoxService.time(E.at)).toLocaleString('en-GB'))}, ${esc(E.kind)}): ${esc(E.message)}</div>`);
@@ -5525,12 +5481,12 @@
                 reg.forEach(r => {
                     const n = r.normalizedName, mx = m.byAsset.get(n), dev = mx?.dev || null, unsure = mx?.how === 'ambiguous' || mx?.how === 'duplicate';
                     (vd.byAsset.get(n) || []).forEach(d => {
-                        if (d.tier > maxTier) return;
+                        if ((d.p || 4) > maxTier) return;      // v4.15: P1-P4 (priority incl. the machine's tier), like every other page
                         const w = dev ? AutomoxService.waitingFor(dev, d, vd.qmap.get(d.qid)?.title) : { pkgs: [], by: '' }, pend = w.pkgs;
                         let g = byQid.get(d.qid);
-                        if (!g) byQid.set(d.qid, g = { qid: d.qid, tier: d.tier, assets: new Set(), waiting: new Set(), agentNoPatch: new Set(), noAgent: new Set(), unsure: new Set(), pkgs: new Map(), kev: false, cves: d.cves.length, byName: false });
+                        if (!g) byQid.set(d.qid, g = { qid: d.qid, tier: d.p || 4, assets: new Set(), waiting: new Set(), agentNoPatch: new Set(), noAgent: new Set(), unsure: new Set(), pkgs: new Map(), kev: false, cves: d.cves.length, byName: false });
                         if (w.by === 'name') g.byName = true;
-                        g.tier = Math.min(g.tier, d.tier);
+                        g.tier = Math.min(g.tier, d.p || 4);
                         g.assets.add(n);
                         if (pend.length) { g.waiting.add(n); pend.forEach(p => { g.pkgs.set(p.n, (g.pkgs.get(p.n) || 0) + 1); if (p.kev?.length) g.kev = true; }); assetFix.set(n, (assetFix.get(n) || 0) + 1); }
                         else if (dev) g.agentNoPatch.add(n);
@@ -5567,7 +5523,7 @@
                 const regNames = StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => r.normalizedName).sort();
                 const extra = m.extra.slice().sort((a, b) => a.name.localeCompare(b.name));
                 const canWrite = !this.me || this.me.role !== 'viewer';
-                const tierOpts = [['1', 'Fix now'], ['2', 'Fix now + This sprint'], ['3', '… + Scheduled'], ['4', 'All priorities']].map(([v, l]) => `<option value="${v}" ${S.tier === v ? 'selected' : ''}>${l}</option>`).join('');
+                const tierOpts = [['1', 'P1'], ['2', 'P1–P2'], ['3', 'P1–P3'], ['4', 'All priorities']].map(([v, l]) => `<option value="${v}" ${S.tier === v ? 'selected' : ''}>${l}</option>`).join('');
 
                 body.innerHTML = `
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-4">1. Summary <span class="text-xs font-normal text-gray-400">click a box to list those assets</span></h3>
@@ -5579,7 +5535,7 @@
                             <span class="text-xs text-gray-600">Of ${fmtNum(tot.a)} detections: <strong class="text-blue-800">🩹 ${fmtNum(tot.w)} have an Automox patch waiting</strong> · ${fmtNum(tot.p)} on managed assets with no matching patch · <span class="text-red-800">✗ ${fmtNum(tot.n)} on assets with no agent</span>${tot.u ? ` · ? ${fmtNum(tot.u)} on assets still to check (section 4)` : ''}</span></div>
                         <p class="text-xs text-gray-500 mb-2">Linked by CVE; for Linux "Update for &lt;package&gt;" findings also by package name (marked ≈). Automox names CVEs mostly for Windows updates, so "no patch" can also mean Automox does not name it. Only CVE links count as proof for tasks. A Linux release past its end of life gets no updates at all: see the End of Life Report.</p>
                         <div class="overflow-x-auto max-h-[28rem]"><table class="min-w-full text-sm text-left"><thead class="text-gray-500 bg-gray-50 border-b sticky top-0"><tr><th class="py-2 px-2">Priority</th><th class="py-2 px-2">QID</th><th class="py-2 px-2 w-full">Title</th><th class="py-2 px-2 text-right">Assets</th><th class="py-2 px-2 text-right" title="Automox has a patch waiting for one of its CVEs">🩹 Waiting</th><th class="py-2 px-2 text-right" title="Managed, but Automox has no waiting patch naming its CVEs">No patch</th><th class="py-2 px-2 text-right" title="No Automox agent">✗ No agent</th><th class="py-2 px-2">Automox patches</th><th class="py-2 px-2 print-hide"></th></tr></thead>
-                        <tbody class="divide-y">${groups.slice(0, 300).map(g => { const qr = vd.qmap.get(g.qid) || {}; return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-q="${esc(g.qid)}" onclick="app.inspectQid(this.dataset.q, 'ax')"><td class="px-2 py-2">${PriorityEngine.tierBadge(g.tier)}</td><td class="px-2 py-2 font-mono text-xs text-gray-500">${esc(g.qid)}</td><td class="px-2 py-2 text-gray-800 max-w-xl"><div class="truncate" title="${esc(qr.title || '')}">${esc(qr.title || 'QID ' + g.qid)}</div></td><td class="px-2 py-2 text-right font-mono">${fmtNum(g.assets.size)}</td><td class="px-2 py-2 text-right font-mono ${g.waiting.size ? 'font-bold text-blue-800' : 'text-gray-400'}">${fmtNum(g.waiting.size)}</td><td class="px-2 py-2 text-right font-mono text-gray-600">${fmtNum(g.agentNoPatch.size)}</td><td class="px-2 py-2 text-right font-mono ${g.noAgent.size ? 'text-red-800' : 'text-gray-400'}">${fmtNum(g.noAgent.size)}</td><td class="px-2 py-2 text-xs max-w-[260px]"><div class="truncate" title="${esc([...g.pkgs.keys()].join('\n'))}">${g.kev ? '<strong class="text-red-800">⚑ KEV</strong> ' : ''}${esc([...g.pkgs.keys()].slice(0, 3).join(', '))}${g.pkgs.size > 3 ? ' +' + (g.pkgs.size - 3) : ''}</div>${g.byName ? '<div class="text-[10px] text-gray-500">≈ matched by package name</div>' : ''}</td><td class="px-2 py-2 text-right print-hide whitespace-nowrap">${RemediationVerifier.chip(RIX.byQid.get(g.qid) || [], [...g.assets])}</td></tr>`; }).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">No Qualys detections at this priority for these assets (or no vulnerability export imported yet).</td></tr>'}
+                        <tbody class="divide-y">${groups.slice(0, 300).map(g => { const qr = vd.qmap.get(g.qid) || {}; return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-q="${esc(g.qid)}" onclick="app.inspectQid(this.dataset.q, 'ax')"><td class="px-2 py-2">${StatusEngine.pBadge(g.tier)}</td><td class="px-2 py-2 font-mono text-xs text-gray-500">${esc(g.qid)}</td><td class="px-2 py-2 text-gray-800 max-w-xl"><div class="truncate" title="${esc(qr.title || '')}">${esc(qr.title || 'QID ' + g.qid)}</div></td><td class="px-2 py-2 text-right font-mono">${fmtNum(g.assets.size)}</td><td class="px-2 py-2 text-right font-mono ${g.waiting.size ? 'font-bold text-blue-800' : 'text-gray-400'}">${fmtNum(g.waiting.size)}</td><td class="px-2 py-2 text-right font-mono text-gray-600">${fmtNum(g.agentNoPatch.size)}</td><td class="px-2 py-2 text-right font-mono ${g.noAgent.size ? 'text-red-800' : 'text-gray-400'}">${fmtNum(g.noAgent.size)}</td><td class="px-2 py-2 text-xs max-w-[260px]"><div class="truncate" title="${esc([...g.pkgs.keys()].join('\n'))}">${g.kev ? '<strong class="text-red-800">⚑ KEV</strong> ' : ''}${esc([...g.pkgs.keys()].slice(0, 3).join(', '))}${g.pkgs.size > 3 ? ' +' + (g.pkgs.size - 3) : ''}</div>${g.byName ? '<div class="text-[10px] text-gray-500">≈ matched by package name</div>' : ''}</td><td class="px-2 py-2 text-right print-hide whitespace-nowrap">${RemediationVerifier.chip(RIX.byQid.get(g.qid) || [], [...g.assets])}</td></tr>`; }).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">No Qualys detections at this priority for these assets (or no vulnerability export imported yet).</td></tr>'}
                         ${groups.length > 300 ? `<tr><td colspan="9" class="px-2 py-2 text-xs text-gray-500 text-center">First 300 of ${fmtNum(groups.length)} findings.</td></tr>` : ''}</tbody></table></div></div>
 
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">3. Assets <span class="text-sm font-normal text-gray-500">${S.filter === 'ALL' ? 'all' : esc(tiles.find(t => t[0] === S.filter)?.[1] || S.filter)} · ${fmtNum(list.length)}</span></h3>
@@ -5723,7 +5679,7 @@
             async renderDashAutomox() {
                 const el = document.getElementById('dash-automox'); if (!el) return;
                 const st = await AutomoxService.loadStatus();
-                if (this.currentView !== 'dashboard') return;
+                if (this.currentView !== 'health') return;      // shown on Data Health since v4.15
                 if (StorageService.mode !== 'server' && !Demo.ON) { el.classList.add('hidden'); return; }    // no server: Automox does not apply
                 if (!st || !st.configured) {
                     el.className = 'rounded-lg border p-4 text-sm bg-amber-50 border-amber-300 text-amber-900';
@@ -5785,7 +5741,7 @@
 
             // The Simple view's Dashboard panels (team status is the existing panel above them).
             async renderDashSimple() {
-                const el = document.getElementById('dash-simple'); if (!el || App.viewMode() !== 'simple') return;
+                const el = document.getElementById('dash-simple'); if (!el) return;      // both views since v4.15
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER) || [];
                 if (StorageService.mode !== 'server' && !Demo.ON && !reg.length) { el.innerHTML = Demo.welcomeHTML(); return; }
                 const card = (title, body, link, linkText) => `<div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">${title}</h3>${link ? `<a href="#" onclick="app.switchView('${link}'); return false;" class="text-sm text-blue-700 underline whitespace-nowrap">${linkText} →</a>` : ''}</div>${body}</div>`;
@@ -5817,61 +5773,34 @@
                         + row('?', 'Operating system not recognised', `${sev(by('u').length)} machines`);
                     document.getElementById('ds-eol').innerHTML = card('⏳ End of life', eol, 'eol', 'Open the report');
                     const rows = st.asOf || [];
-                    document.getElementById('ds-fresh').innerHTML = `<div class="bg-white rounded-lg shadow px-5 py-3 text-sm flex flex-wrap gap-x-6 gap-y-1"><span class="font-semibold">Data as of</span>${rows.map(x => `<span>${x.stale ? '⚠' : '✓'} ${esc(x.label)}: ${x.t ? esc(new Date(x.t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : 'never'}${x.stale ? ' <strong>(old)</strong>' : ''}</span>`).join('')}</div>`;
+                    document.getElementById('ds-fresh').innerHTML = `<div class="bg-white rounded-lg shadow px-5 py-3 text-sm flex flex-wrap gap-x-6 gap-y-1"><span class="font-semibold">Data as of</span>${rows.map(x => `<span>${x.stale ? '⚠' : '✓'} ${esc(x.label)}: ${x.t ? esc(new Date(x.t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : 'never'}${x.stale ? ' <strong>(old)</strong>' : ''}</span>`).join('')}<a href="#" onclick="app.switchView('health'); return false;" class="ml-auto text-blue-700 underline">Data Health →</a></div>`;
                 } else document.getElementById('ds-eol').innerHTML = card('⏳ End of life', '<p class="text-sm text-gray-600">Not available.</p>', 'eol', 'Open the report');
             }
 
             renderDashboard() {
                 const register = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
-                const queue = ReviewQueueService.getQueue().filter(x => x.status === 'PENDING' || x.status === 'IN_REVIEW');
-                document.getElementById('dash-coverage').innerHTML = (StorageService.mode !== 'server' && !Demo.ON && !register.length) ? Demo.welcomeHTML() : this.coverageHTML('ALL');
                 this.renderDashSimple();
-                this.renderDashAutomox();
                 this.renderDashStatus();
                 const drawRem = () => { const el = document.getElementById('dash-remediation'); if (el) el.innerHTML = RemediationStats.html(RemediationStats.compute(RemediationService.list())); };
                 drawRem();
                 RemediationService.refreshQuiet().then(() => { if (this.currentView === 'dashboard') drawRem(); });
-                document.getElementById('kpi-total-assets').textContent = register.length;
-                document.getElementById('kpi-platform-assets').textContent = register.filter(r => r.owner === OrgSettings.mainTeam()).length;
-                document.getElementById('kpi-main-team-label').textContent = OrgSettings.mainTeam() + ' assets';
-                document.getElementById('kpi-pending-review').textContent = queue.length;
-                const missing = register.filter(r => !r.owner || r.owner === 'Unknown').length;
-                document.getElementById('kpi-health-score').textContent = missing === 0 ? '100%' : Math.round(((register.length - missing) / register.length) * 100) + '%';
-                
-                const vulnSum = StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || [];
-                let actionable = 0, accepted = 0, awaiting = 0, resolved = 0;
-                
-                vulnSum.forEach(v => {
-                    const stat = v.riskStatus || 'Open';
-                    const n = v.detections || 0;
-                    if (stat === 'Risk Accepted') accepted += n;
-                    else if (stat === 'Awaiting Patch') awaiting += n;
-                    else if (stat === 'Resolved') resolved += n;
-                    else actionable += n;
-                });
+                this.renderDashRegister(register);
+            }
 
-                const formatNum = (n) => Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
-                document.getElementById('kpi-risk-actionable').textContent = formatNum(actionable);
-                document.getElementById('kpi-risk-accepted').textContent = formatNum(accepted);
-                document.getElementById('kpi-risk-awaiting').textContent = formatNum(awaiting);
-                document.getElementById('kpi-risk-resolved').textContent = formatNum(resolved);
-
-                const acceptances = StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || [];
-                const now = new Date();
-                let expiring = 0, overdue = 0;
-                acceptances.forEach(a => {
-                    if (a.status === 'Risk Accepted' || a.status === 'Open') {
-                        const diff = new Date(a.expDate) - now;
-                        if (diff < 0) overdue++;
-                        else if (diff <= 30*24*60*60*1000) expiring++;
-                    }
-                });
-
-                const actionsEl = document.getElementById('dashboard-actions');
-                actionsEl.innerHTML = '';
-                if (overdue > 0) actionsEl.innerHTML += `<li><strong class="text-red-600">Risk Exposure:</strong> ${overdue} risk acceptances are overdue and require immediate review.</li>`;
-                if (expiring > 0) actionsEl.innerHTML += `<li><strong class="text-amber-600">Compliance Renewal:</strong> ${expiring} risk acceptances are expiring within 30 days.</li>`;
-                if (actionsEl.innerHTML === '') actionsEl.innerHTML = '<li>No urgent actions recommended at this time.</li>';
+            // Advanced dashboard (v4.15): the register's gaps and the acceptances, each linking to the page that fixes it.
+            renderDashRegister(reg) {
+                const el = document.getElementById('dash-register'); if (!el) return;
+                const known = reg.filter(r => !r.unrecognised), queue = ReviewQueueService.getQueue().filter(x => x.status === 'PENDING' || x.status === 'IN_REVIEW').length;
+                const noTeam = reg.filter(r => StatusEngine.teamOf(r) === 'Unassigned').length, noTier = known.filter(r => !StatusEngine.tierOf(r)).length, noSvc = known.filter(r => !r.service || r.service === 'Unclassified').length;
+                const ras = (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => a.status === 'Risk Accepted' || a.status === 'Open');
+                const now = Date.now(), exp = (a) => StatusEngine.time(a.expDate);
+                const expired = ras.filter(a => exp(a) && exp(a) < now).length, soon = ras.filter(a => exp(a) >= now && exp(a) - now <= 30 * 864e5).length;
+                const row = (sym, label, n, view, ok) => `<a href="#" onclick="app.switchView('${view}'); return false;" class="flex justify-between items-baseline gap-3 border rounded-lg px-3 py-2 hover:bg-blue-50"><span>${n ? sym : '✓'} ${label}</span><span class="font-semibold ${n && !ok ? '' : 'text-gray-500'}">${fmtNum(n)}</span></a>`;
+                el.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">🗄️ Register</h3><span class="text-sm text-gray-500">${fmtNum(known.length)} machines</span></div>
+                        ${row('📋', 'Waiting in the Review Queue', queue, 'review')}${row('?', 'No team', noTeam, 'health')}${row('?', 'No tier (counts as Tier 2)', noTier, 'health')}${row('?', 'No service', noSvc, 'health')}</div>
+                    <div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">✅ Risk acceptances</h3><span class="text-sm text-gray-500">${fmtNum(ras.length)} in the register</span></div>
+                        ${row('✖', '<strong>Expired</strong>: their findings count again', expired, 'risk-accept')}${row('⚠', 'Expire within 30 days', soon, 'risk-accept')}${row('✓', 'In date', ras.length - expired - soon, 'risk-accept', true)}</div></div>`;
             }
 
             rebuildQueue() {
@@ -6281,7 +6210,7 @@
                             <td class="px-6 py-2">${StatusEngine.tierCell(r, this._regSums?.get(r.normalizedName))}</td>
                             <td class="px-6 py-2"><span class="${rsBadge} text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm">${rs}</span></td>
                             <td class="px-6 py-2 text-right" onclick="event.stopPropagation()">
-                                <button onclick="app.openRiskModal(['${r.normalizedName}'], 'register')" class="text-amber-600 px-2 text-xs font-semibold hover:underline">Accept Risk</button>
+                                <button onclick="app.openRiskModal(['${r.normalizedName}'], 'register')" class="text-amber-600 px-2 text-xs font-semibold hover:underline">Accept risk</button>
                                 <button onclick="app.editAsset('${r.normalizedName}')" class="text-blue-600 px-2 text-xs hover:underline">Edit</button>
                                 <button onclick="app.promptDeleteAsset('${r.normalizedName}')" class="text-red-600 px-2 text-xs hover:underline">Del</button>
                             </td>
@@ -6423,12 +6352,91 @@
                 this.renderRegister();
             }
 
-            renderHealth() {
+            // Data Health (v4.15): one page for "can I trust the data?": every source with its last and next sync and a Sync now
+            // button, the coverage banners (moved from the dashboard), and the register's gaps.
+            async renderHealth() {
+                const $ = (id) => document.getElementById(id);
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
-                const lo = document.getElementById('health-missing-owner'); lo.innerHTML = '';
-                const ls = document.getElementById('health-missing-service'); ls.innerHTML = '';
-                lo.innerHTML = reg.filter(r => !r.owner || r.owner === 'Unknown').map(r => `<li>${esc(r.normalizedName)}</li>`).join('');
-                ls.innerHTML = reg.filter(r => !r.service || r.service === 'Unclassified').map(r => `<li>${esc(r.normalizedName)}</li>`).join('');
+                $('dash-coverage').innerHTML = (StorageService.mode !== 'server' && !Demo.ON && !reg.length) ? Demo.welcomeHTML() : this.coverageHTML('ALL');
+                this.renderDashAutomox();
+                this.renderHealthGaps(reg);
+                await this.renderHealthSources();
+            }
+            static dateText(d) { const t = StatusEngine.time(d); return t ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : (d || ''); }
+            static whenText(t) { return t ? new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; }
+            async renderHealthSources() {
+                const el = document.getElementById('health-sources'); if (!el) return;
+                const canWrite = !this.me || this.me.role !== 'viewer', W = App.whenText, now = Date.now(), H = 3600000;
+                const rows = [];
+                const api = Demo.api();
+                // Qualys
+                let qx = null; if (api) qx = await this.qxStatus();
+                if (qx?.configured) {
+                    const last = StatusEngine.time(qx.last?.at), err = StatusEngine.time(qx.error?.at), run = !!qx.job?.running;
+                    let next = 0; if (qx.scheduleHour !== null && qx.scheduleHour !== undefined) { const d = new Date(); d.setUTCHours(qx.scheduleHour, 0, 0, 0); if (d.getTime() <= now) d.setUTCDate(d.getUTCDate() + 1); next = d.getTime(); }
+                    const applied = qx.applied && qx.last && qx.applied.syncId === qx.last.syncId;
+                    rows.push({ name: 'Qualys findings', how: 'Qualys API, by the server', last, run, next, sched: next ? `daily at ${String(qx.scheduleHour).padStart(2, '0')}:00 UTC` : 'on demand only',
+                        result: run ? '⟳ syncing now' : err > last ? '✗ last attempt failed ' + W(err) : last ? (applied ? '✓ synced and applied' : '● synced, waiting to be applied (open Vuln Management)') : 'no sync yet',
+                        warn: !run && (err > last || !last), btn: canWrite && !qx.blocked ? (Demo.ON ? "Demo.nextDay()" : "app.healthSync('qx')") : '' });
+                } else {
+                    const lastImp = [...(this.loadVulnMeta().imports || [])].reverse()[0];
+                    rows.push({ name: 'Qualys findings', how: api ? 'Qualys API not set up: CSV imports' : 'CSV imports (this browser)', last: lastImp ? StatusEngine.time(lastImp.at) : 0, next: 0, sched: 'when you import',
+                        result: lastImp ? '✓ ' + (lastImp.file || 'imported') : 'nothing imported yet', warn: !lastImp, link: ['vuln', 'Import findings'] });
+                }
+                // Automox
+                let ax = null; if (api) ax = await AutomoxService.loadStatus();
+                if (ax?.configured) {
+                    const last = StatusEngine.time(ax.last?.at), err = StatusEngine.time(ax.error?.at), run = !!ax.job?.running, hrs = +ax.scheduleHours || 0;
+                    rows.push({ name: 'Automox devices and patches', how: 'Automox API, by the server (read only)', last, run, next: hrs && last ? last + hrs * H : 0, sched: hrs ? `every ${hrs} h` : 'on demand only',
+                        result: run ? '⟳ syncing now' : err > last ? '✗ last attempt failed ' + W(err) : last ? `✓ ${fmtNum(ax.last.devices || 0)} devices, ${fmtNum(ax.last.pending || 0)} waiting patches` : 'no sync yet',
+                        warn: !run && (err > last || !last), btn: canWrite ? "app.healthSync('ax')" : '' });
+                } else rows.push({ name: 'Automox devices and patches', how: api ? 'Automox API key not set on the server' : 'needs the CyberView server', last: 0, next: 0, sched: '', result: 'not connected', warn: false });
+                // End-of-life dates
+                let eolSt = null; if (EolDates.server()) { try { const r = await fetch('api/eol/status', { cache: 'no-store' }); if (r.ok) eolSt = await r.json(); } catch (e) { eolSt = null; } }
+                const eLast = EolDates.fetchedAt(), eHrs = +(eolSt?.scheduleHours || 0), eRun = !!eolSt?.job?.running, failed = eolSt?.last?.failed || [];
+                rows.push({ name: 'End-of-life dates', how: EolDates.server() ? 'endoflife.date, by the server, plus your own dates' : 'endoflife.date, by this browser, plus your own dates', last: eLast, run: eRun,
+                    next: eHrs && eLast ? eLast + eHrs * H : 0, sched: EolDates.server() ? (eHrs ? `every ${eHrs} h` : 'on demand only') : 'kept for a week',
+                    result: eRun ? '⟳ fetching now' : eLast ? (failed.length ? `⚠ ${failed.length} product${failed.length === 1 ? '' : 's'} could not be fetched: ${failed.join(', ')}` : '✓ fetched') : 'not fetched yet', warn: !eLast || failed.length, btn: canWrite ? "app.healthSync('eol')" : '' });
+                // Register (asset export) and the live records
+                const seen = reg0 => reg0.filter(r => !r.unrecognised).map(r => StatusEngine.time(r.lastSeen)).filter(Boolean);
+                const sr = seen(StorageService.load(StorageService.KEYS.ASSET_REGISTER));
+                rows.push({ name: 'Asset register', how: 'Qualys asset export, plus the Review Queue and your edits', last: sr.length ? Math.max(...sr) : 0, next: 0, sched: 'with each Qualys sync or asset import', result: sr.length ? '✓ machines last seen ' + W(Math.max(...sr)) : 'no machines yet', warn: !sr.length, link: ['review', 'Review Queue'] });
+                const S = StatusEngine.settings();
+                const ageTxt = (t) => { if (!t) return 'never'; const d = (now - t) / 864e5; return d < 1 / 24 ? 'just now' : d < 1 ? Math.round(d * 24) + ' h ago' : Math.round(d) + ' d ago'; };
+                el.innerHTML = `<div class="bg-white rounded-lg shadow border overflow-x-auto"><div class="px-5 py-3 border-b flex flex-wrap justify-between items-baseline gap-2"><h3 class="text-lg font-semibold">Data sources</h3><span class="text-xs text-gray-500">Stale limits are set in Organisation setup → Status rules (findings ${S.staleDays.findings} d, Automox ${S.staleDays.automox} d)</span></div>
+                    <table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-4 py-2 text-left">Source</th><th class="px-4 py-2 text-left">Last</th><th class="px-4 py-2 text-left">Next</th><th class="px-4 py-2 text-left">Result</th><th class="px-4 py-2"></th></tr></thead>
+                    <tbody class="divide-y">${rows.map(r => `<tr class="align-top"><td class="px-4 py-2"><div class="font-semibold">${esc(r.name)}</div><div class="text-xs text-gray-500">${esc(r.how)}</div></td>
+                        <td class="px-4 py-2 whitespace-nowrap">${r.last ? esc(W(r.last)) + `<div class="text-xs text-gray-500">${esc(ageTxt(r.last))}</div>` : '<span class="text-gray-500">never</span>'}</td>
+                        <td class="px-4 py-2 whitespace-nowrap">${r.next ? esc(W(r.next)) : ''}<div class="text-xs text-gray-500">${esc(r.sched)}</div></td>
+                        <td class="px-4 py-2 ${r.warn ? 'text-amber-900 font-semibold' : ''}">${esc(r.result)}</td>
+                        <td class="px-4 py-2 text-right whitespace-nowrap">${r.btn ? `<button onclick="${r.btn}" ${r.run ? 'disabled' : ''} class="bg-blue-700 hover:bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-medium disabled:opacity-40">${r.run ? '⟳ Running…' : '⟳ Sync now'}</button>` : r.link ? `<a href="#" onclick="app.switchView('${r.link[0]}'); return false;" class="text-blue-700 underline text-xs">${esc(r.link[1])} →</a>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+                // Keep it current while anything runs
+                if (rows.some(r => r.run) && !this._healthTimer) this._healthTimer = setInterval(() => { if (this.currentView !== 'health') { clearInterval(this._healthTimer); this._healthTimer = null; return; } this.renderHealthSources().then(() => { if (!document.querySelector('#health-sources button[disabled]')) { clearInterval(this._healthTimer); this._healthTimer = null; this.renderHealth(); } }); }, 4000);
+            }
+            async healthSync(k) {
+                if (k === 'qx') { await this.qxSync(); }
+                else if (k === 'ax') { await this.axSync(); }
+                else if (k === 'eol') {
+                    StorageService.toast('Fetching end-of-life dates…');
+                    const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), products = [...new Set(reg.map(r => EolDates.match(r.os)?.product).filter(Boolean))];
+                    try { await EolDates.load(products, true); StorageService.toast('End-of-life dates fetched'); } catch (e) { StorageService.toast('Could not fetch the dates: ' + e.message); }
+                    this._eolLoaded = false;
+                }
+                if (this.currentView === 'health') setTimeout(() => this.renderHealthSources(), 800);
+            }
+            // The register's gaps, each with the machines (click one to open it)
+            renderHealthGaps(reg) {
+                const el = document.getElementById('health-gaps'); if (!el) return;
+                const known = reg.filter(r => !r.unrecognised);
+                const gaps = [
+                    ['No team', reg.filter(r => StatusEngine.teamOf(r) === 'Unassigned'), 'Nobody owns these: set a team in the Asset Register or the Review Queue.'],
+                    ['No tier', known.filter(r => !StatusEngine.tierOf(r)), 'Their priorities assume Tier 2 until a tier is set.'],
+                    ['No service', known.filter(r => !r.service || r.service === 'Unclassified'), 'The service helps suggest owners for new machines.'],
+                    ['Exposure unknown', known.filter(r => !r.exposure || r.exposure === 'Unknown'), 'Internet-facing machines are fixed first: set the exposure.']
+                ];
+                el.innerHTML = `<div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b"><h3 class="text-lg font-semibold">Register gaps</h3><p class="text-xs text-gray-500">Click a machine to open it.</p></div>
+                    <div class="divide-y">${gaps.map(([label, list, help]) => `<details class="px-5 py-3" ${list.length && list.length <= 10 ? 'open' : ''}><summary class="cursor-pointer flex justify-between gap-3"><span><span class="font-semibold">${list.length ? '?' : '✓'} ${esc(label)}</span> <span class="text-xs text-gray-500">${esc(help)}</span></span><span class="font-semibold">${fmtNum(list.length)}</span></summary>
+                        ${list.length ? `<div class="mt-2 flex flex-wrap gap-1">${list.slice(0, 200).map(r => `<button data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)" class="px-2 py-0.5 rounded border text-xs font-mono hover:bg-blue-50">${esc(r.originalName || r.normalizedName)}</button>`).join('')}${list.length > 200 ? `<span class="text-xs text-gray-500">+${fmtNum(list.length - 200)} more</span>` : ''}</div>` : ''}</details>`).join('')}</div></div>`;
             }
 
             exportDatabase() { StorageService.exportDatabase(); }
@@ -6682,18 +6690,18 @@
                 const resolve = (r) => { const st = Lifecycle.stageOf(r), k = (r.os || '') + '|' + st; if (!resCache.has(k)) resCache.set(k, EolDates.resolve(r.os, st, own, dates.data)); return resCache.get(k); };
                 const rows = reg.map(r => {
                     const life = resolve(r), hwR = Lifecycle.hwRank(r.hwLifecycle), swList = swByAsset.get(r.normalizedName) || [];
-                    return { r, life, hwR, sw: swList, crit: crit(r), tru: tru(r) };
+                    return { r, life, hwR, sw: swList, crit: crit(r), tier: StatusEngine.tierOf(r) || 0, tru: tru(r) };
                 });
                 const cnt = (b) => rows.filter(x => x.life.bucket === b);
                 const b0 = cnt(0), b1 = cnt(1), b2 = cnt(2), b4 = cnt(4);
                 const hwObs = rows.filter(x => x.hwR === 0), hwEos = rows.filter(x => x.hwR === 1);
-                const critHi = (l) => l.filter(x => x.crit >= 4).length;
+                const critHi = (l) => l.filter(x => x.tier === 1).length;     // v4.15: Tier 1 (your tiers), not Qualys criticality
 
                 const tile = (label, value, sub, cls, onclick) => `<button type="button" onclick="${onclick}" title="Show these assets in the list below" class="text-left p-4 rounded hover:ring-2 hover:ring-slate-400 ${cls}"><p class="text-[10px] text-gray-500 uppercase font-semibold">${label}</p><p class="text-xl font-bold text-gray-900">${value}</p>${sub ? `<p class="text-[11px] text-gray-500 mt-0.5">${sub}</p>` : ''}<p class="text-[10px] text-blue-700 mt-1 print-hide">Show these ↓</p></button>`;
                 $('eol-summary').innerHTML =
-                    tile('⛔ OS unsupported', fmtNum(b0.length), `no security fixes · ${fmtNum(critHi(b0))} with criticality 4-5`, 'bg-red-50 border border-red-300', "app.eolTile([0], ['os'])") +
-                    tile('🔶 Ends within 6 months', fmtNum(b1.length), `${fmtNum(critHi(b1))} with criticality 4-5`, 'bg-orange-50 border border-orange-300', "app.eolTile([1], ['os'])") +
-                    tile('⚠ Ends in 6–12 months', fmtNum(b2.length), `${fmtNum(critHi(b2))} with criticality 4-5`, 'bg-amber-50 border border-amber-300', "app.eolTile([2], ['os'])") +
+                    tile('⛔ OS unsupported', fmtNum(b0.length), `no security fixes · ${fmtNum(critHi(b0))} Tier 1`, 'bg-red-50 border border-red-300', "app.eolTile([0], ['os'])") +
+                    tile('🔶 Ends within 6 months', fmtNum(b1.length), `${fmtNum(critHi(b1))} Tier 1`, 'bg-orange-50 border border-orange-300', "app.eolTile([1], ['os'])") +
+                    tile('⚠ Ends in 6–12 months', fmtNum(b2.length), `${fmtNum(critHi(b2))} Tier 1`, 'bg-amber-50 border border-amber-300', "app.eolTile([2], ['os'])") +
                     tile('⛔ EOL software', fmtNum(swByAsset.size), `assets · ${fmtNum(sw.length)} products found by scans`, 'bg-red-50 border border-red-300', "app.eolTile([0, 1, 2, 3, 4], ['sw'])") +
                     tile('Hardware', `${fmtNum(hwObs.length)} <span class="text-sm font-medium text-gray-500">obsolete</span>`, `${fmtNum(hwEos.length)} end of sale (still supported)`, 'bg-slate-50 border', "app.eolTile([0, 1, 2, 3, 4], ['hw'])");
                 $('eol-summary-note').innerHTML = `<p class="text-[11px] text-gray-500">No end-of-life date known for ${fmtNum(b4.length)} of ${fmtNum(rows.length)} assets (mostly unidentified or network devices, or an OS name without a version): see section 6 to add dates.</p>`;
@@ -6788,7 +6796,7 @@
                 const out = [];
                 if (!search.ok) return out;
                 for (const x of this.eolCtx?.rows || []) {
-                    if (f.crit && x.crit < f.crit) continue;
+                    if (f.crit > 0 && f.crit <= 2 && !(x.tier && x.tier <= f.crit)) continue;      // Tier 1, or Tier 1-2
                     const hit = x.issues.filter(i => f.reason.has(i.type) && f.status.has(i.status));
                     if (!hit.length) continue;
                     let found = [];
@@ -6799,7 +6807,7 @@
                     }
                     out.push({ ...x, worst: Math.min(...hit.map(i => i.status)), hit, found: f.field === 'ALL' && !found.includes('Name') ? found : [] });
                 }
-                return out.sort((a, b) => a.worst - b.worst || b.crit - a.crit || b.tru - a.tru || a.r.normalizedName.localeCompare(b.r.normalizedName));
+                return out.sort((a, b) => a.worst - b.worst || (a.tier || 2) - (b.tier || 2) || b.tru - a.tru || a.r.normalizedName.localeCompare(b.r.normalizedName));
             }
 
             eolFilterText() {
@@ -6813,7 +6821,7 @@
                 const f = this.eolF, B = EolDates.BUCKETS;
                 const chip = (on, label, onclick) => `<button onclick="${onclick}" aria-pressed="${on}" class="px-2 py-0.5 rounded-full border text-xs ${on ? 'bg-slate-800 text-white border-slate-800 font-semibold' : 'bg-white text-gray-600 border-gray-300'}">${on ? '☑' : '☐'} ${esc(label)}</button>`;
                 const all = this.eolCtx.rows;
-                const countFor = (pred) => all.filter(x => x.issues.some(pred) && (!f.crit || x.crit >= f.crit)).length;
+                const countFor = (pred) => all.filter(x => x.issues.some(pred) && (!(f.crit > 0 && f.crit <= 2) || (x.tier && x.tier <= f.crit))).length;
                 $('eol-f-status').innerHTML = B.map((b, i) => chip(f.status.has(i), `${b.label} (${fmtNum(countFor(it => it.status === i && f.reason.has(it.type)))})`, `app.eolToggle('status', ${i})`)).join('');
                 $('eol-f-reason').innerHTML = [['os', 'Operating system'], ['sw', 'EOL software'], ['hw', 'Hardware']].map(([k, label]) => chip(f.reason.has(k), `${label} (${fmtNum(countFor(it => it.type === k && f.status.has(it.status)))})`, `app.eolToggle('reason', '${k}')`)).join('');
 
@@ -6829,7 +6837,7 @@
                     const acts = x.issues.filter(i => i.action).sort((a, b) => a.status - b.status);
                     const actHtml = acts.map(i => `<div class="${x.hit.includes(i) ? 'text-gray-800' : 'text-gray-400'}">${i.status === 0 ? '⛔ ' : i.status <= 2 ? '▸ ' : '· '}${esc(i.action)}</div>`).join('')
                         + (x.ra ? `<div class="mt-0.5">${RiskView.flag(x.ra, true)}</div>` : '');
-                    return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)"><td class="px-2 py-2 font-medium text-gray-700 max-w-[200px]"><div class="truncate" title="${esc(r.originalName || r.normalizedName)}">${esc(r.originalName || r.normalizedName)}</div><div class="text-[10px] text-gray-500">${esc(r.service || 'Unclassified')}${x.found.length ? ` · <span class="text-gray-400">matched: ${esc(x.found.join(', ').toLowerCase())}</span>` : ''}</div></td><td class="px-2 py-2 text-xs">${esc(r.owner || 'Unknown')}</td><td class="px-2 py-2 text-center font-mono">${x.crit || '-'}</td><td class="px-2 py-2">${x.tru ? PriorityEngine.truRiskBadge(x.tru) : '<span class="text-gray-400">-</span>'}</td><td class="px-2 py-2">${EolDates.badge(x.worst)}</td><td class="px-2 py-2 text-xs text-gray-600 max-w-[200px]">${esc(Lifecycle.osFamily(r.os))} ${Lifecycle.editedBadge(r)}<div class="text-[10px] text-gray-500">${l.bucket === 4 ? 'no date' : 'security fixes ' + esc(EolDates.fmt(l.secEnd))}${Lifecycle.stageOf(r) ? ' · Qualys ' + esc(Lifecycle.stageOf(r)) : ''}</div></td><td class="px-2 py-2 text-xs max-w-[320px]">${actHtml || '<span class="text-gray-400">-</span>'}</td><td class="px-2 py-2 text-right print-hide whitespace-nowrap">${RemediationVerifier.chip((RIX.byAsset.get(r.normalizedName) || []).filter(t => t.type === 'eol'))} <button class="write-only text-[11px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50" data-n="${esc(r.normalizedName)}" onclick="event.stopPropagation(); app.trackEolAsset(this.dataset.n)" title="Create a remediation task for this asset">＋</button></td></tr>`;
+                    return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)"><td class="px-2 py-2 font-medium text-gray-700 max-w-[200px]"><div class="truncate" title="${esc(r.originalName || r.normalizedName)}">${esc(r.originalName || r.normalizedName)}</div><div class="text-[10px] text-gray-500">${esc(r.service || 'Unclassified')}${x.found.length ? ` · <span class="text-gray-400">matched: ${esc(x.found.join(', ').toLowerCase())}</span>` : ''}</div></td><td class="px-2 py-2 text-xs">${esc(r.owner || 'Unknown')}</td><td class="px-2 py-2 text-center text-xs">${StatusEngine.tierCell(r)}</td><td class="px-2 py-2">${x.tru ? PriorityEngine.truRiskBadge(x.tru) : '<span class="text-gray-400">-</span>'}</td><td class="px-2 py-2">${EolDates.badge(x.worst)}</td><td class="px-2 py-2 text-xs text-gray-600 max-w-[200px]">${esc(Lifecycle.osFamily(r.os))} ${Lifecycle.editedBadge(r)}<div class="text-[10px] text-gray-500">${l.bucket === 4 ? 'no date' : 'security fixes ' + esc(EolDates.fmt(l.secEnd))}${Lifecycle.stageOf(r) ? ' · Qualys ' + esc(Lifecycle.stageOf(r)) : ''}</div></td><td class="px-2 py-2 text-xs max-w-[320px]">${actHtml || '<span class="text-gray-400">-</span>'}</td><td class="px-2 py-2 text-right print-hide whitespace-nowrap">${RemediationVerifier.chip((RIX.byAsset.get(r.normalizedName) || []).filter(t => t.type === 'eol'))} <button class="write-only text-[11px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-50" data-n="${esc(r.normalizedName)}" onclick="event.stopPropagation(); app.trackEolAsset(this.dataset.n)" title="Create a remediation task for this asset">＋</button></td></tr>`;
                 }).join('') : empty;
                 $('eol-more').innerHTML = list.length > shown.length ? `<button onclick="app.renderEOLAssets(true)" class="text-sm text-blue-700 underline">Show all ${fmtNum(list.length)} assets (${fmtNum(list.length - shown.length)} more)</button> <span class="text-xs text-gray-500">Show them all before printing.</span>` : '';
             }
@@ -7949,7 +7957,9 @@
                 const b = document.getElementById('vuln-bulk-btn');
                 if (!b) return;
                 const n = this.vulnState.selectedAssets.size;
-                b.textContent = n ? `⚖️ Accept risk: ${n} selected` : `⚖️ Accept risk: all ${fmtNum(this.vulnData ? this.vulnData.assets.length : 0)} shown`;
+                // v4.15: only for machines ticked in the list (accepting everything shown was one click away)
+                b.textContent = `⚖️ Accept risk: ${n} selected`;
+                b.classList.toggle('hidden', !n);
             }
 
             toggleVulnAsset(name, isChecked) {
@@ -8145,10 +8155,10 @@
                 });
                 
                 document.getElementById('risk-accept-kpis').innerHTML = `
-                    <div class="p-4 bg-white rounded border shadow-sm"><p class="text-[10px] text-gray-500 uppercase font-semibold">Accepted Detections</p><p class="text-2xl font-bold text-amber-600">${formatNum(acceptedRisk)}</p></div>
-                    <div class="p-4 bg-white rounded border shadow-sm"><p class="text-[10px] text-gray-500 uppercase font-semibold">Accepted Assets</p><p class="text-2xl font-bold text-gray-900">${acceptedAssets.size}</p></div>
-                    <div class="p-4 bg-white rounded border shadow-sm"><p class="text-[10px] text-gray-500 uppercase font-semibold">Expiring (30d)</p><p class="text-2xl font-bold ${expiringCount > 0 ? 'text-amber-600' : 'text-gray-900'}">${expiringCount}</p></div>
-                    <div class="p-4 bg-white rounded border shadow-sm"><p class="text-[10px] text-gray-500 uppercase font-semibold">Overdue</p><p class="text-2xl font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-gray-900'}">${overdueCount}</p></div>
+                    <div class="p-4 bg-white rounded border shadow-sm"><p class="text-[10px] text-gray-500 uppercase font-semibold">Accepted findings</p><p class="text-2xl font-bold text-amber-600">${formatNum(acceptedRisk)}</p></div>
+                    <div class="p-4 bg-white rounded border shadow-sm"><p class="text-[10px] text-gray-500 uppercase font-semibold">Machines</p><p class="text-2xl font-bold text-gray-900">${acceptedAssets.size}</p></div>
+                    <div class="p-4 bg-white rounded border shadow-sm"><p class="text-[10px] text-gray-500 uppercase font-semibold">⚠ Expire within 30 days</p><p class="text-2xl font-bold ${expiringCount > 0 ? 'text-amber-600' : 'text-gray-900'}">${expiringCount}</p></div>
+                    <div class="p-4 bg-white rounded border shadow-sm"><p class="text-[10px] text-gray-500 uppercase font-semibold">✖ Expired</p><p class="text-2xl font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-gray-900'}">${overdueCount}</p></div>
                 `;
 
                 const tbody = document.getElementById('risk-accept-tbody');
@@ -8165,19 +8175,29 @@
                         else if (expiryDiff <= thirtyDaysMs) expStyle = "text-amber-600 font-bold";
                     }
                     
+                    // v4.15: the state in words (not only the colour of the date): Expired / Expires in N days / Review due
+                    let stWord = a.status, stCls = 'bg-gray-100';
+                    if (a.status === 'Risk Accepted' || a.status === 'Open') {
+                        const days = Math.ceil(expiryDiff / 864e5), rev = a.revDate && new Date(a.revDate) < now;
+                        if (a.expDate && expiryDiff < 0) { stWord = '✖ Expired: its findings count again'; stCls = 'bg-red-50 text-red-900 border border-red-300 font-semibold'; }
+                        else if (a.expDate && expiryDiff <= thirtyDaysMs) { stWord = `⚠ Expires in ${days} day${days === 1 ? '' : 's'}`; stCls = 'bg-amber-50 text-amber-900 border border-amber-300 font-semibold'; }
+                        else if (rev) { stWord = '◐ Review due'; stCls = 'bg-amber-50 text-amber-900 border border-amber-300'; }
+                        else if (a.status === 'Open') stWord = 'Requested (not approved yet)';
+                        else stWord = '✓ Accepted';
+                    }
                     const as = vulnSum.find(v => v.name === a.asset);
                     const trueRisk = a.scope === 'finding' ? (a.qids || []).length : (as ? (as.detections || 0) : 0);
 
                     return `<tr class="cursor-pointer hover:bg-gray-50" onclick="app.openRiskDetail(this.dataset.id)" data-id="${esc(a.id)}">
                         <td class="px-6 py-3">
                             <div class="font-medium text-gray-800">${esc(a.asset)}</div>
-                            <div class="text-[10px] text-gray-500 uppercase">${a.service}</div>
+                            <div class="text-[10px] text-gray-500 uppercase">${esc(a.service || '')}</div>
                         </td>
-                        <td class="px-6 py-3 text-xs">${a.scope === 'finding' ? `QID ${esc((a.qids || []).slice(0, 4).join(', '))}${(a.qids || []).length > 4 ? '…' : ''}` : '<span title="Hides new findings too: convert to specific findings">◐ whole asset</span>'}</td>
+                        <td class="px-6 py-3 text-xs">${a.scope === 'finding' ? `QID ${esc((a.qids || []).slice(0, 4).join(', '))}${(a.qids || []).length > 4 ? '…' : ''}` : '<span title="Hides new findings too: convert to specific findings">◐ whole machine</span>'}</td>
                         <td class="px-6 py-3 text-gray-600">${a.owner}</td>
-                        <td class="px-6 py-3"><span class="bg-gray-100 text-xs px-2 py-1 rounded">${a.status}</span></td>
+                        <td class="px-6 py-3"><span class="${stCls} text-xs px-2 py-1 rounded">${esc(stWord)}</span></td>
                         <td class="px-6 py-3 text-right font-mono font-semibold">${formatNum(trueRisk)}</td>
-                        <td class="px-6 py-3 text-center ${expStyle}">${a.expDate}</td>
+                        <td class="px-6 py-3 text-center ${expStyle}">${esc(App.dateText(a.expDate))}</td>
                         <td class="px-6 py-3 text-right" onclick="event.stopPropagation()">
                             <button onclick="app.deleteRiskAcceptance('${a.id}', '${a.asset}')" class="text-red-600 px-2 text-sm hover:underline">Revoke</button>
                         </td>
@@ -8856,7 +8876,7 @@ Finish with a "Verify" section saying how to confirm in Qualys (agent check-in o
                 const form = document.getElementById('ra-form');
                 form.reset();
                 
-                document.getElementById('ra-modal-title').textContent = `Risk Governance Action`;
+                document.getElementById('ra-modal-title').textContent = 'Accept risk';
                 
                 document.getElementById('ra-opt-selected').textContent = `Selected Assets (${this.raState.selectedAssets.length})`;
                 document.getElementById('ra-opt-filtered').textContent = `All Filtered Assets (${this.raState.filteredAssets.length})`;

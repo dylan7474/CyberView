@@ -25,7 +25,7 @@ import eol
 import redhat
 import qualys
 
-VERSION = "4.22.0"
+VERSION = "4.22.1"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -842,6 +842,19 @@ def eol_sync(request: Request):
     """Fetch the dates again now (editors)."""
     if not eol.start(current_user(request)):
         return JSONResponse({"error": "Already fetching", "job": eol.status()["job"]}, status_code=409)
+    return JSONResponse({"started": True}, status_code=202)
+
+
+@app.get("/api/redhat/status")
+def redhat_status():
+    """Data Health: when the watched CVEs were last refreshed from Red Hat, how many CVEs are kept."""
+    return redhat.status()
+
+
+@app.post("/api/redhat/sync")
+def redhat_sync(request: Request):
+    if not redhat.start(current_user(request)):
+        return JSONResponse({"error": "A refresh is already running"}, status_code=409)
     return JSONResponse({"started": True}, status_code=202)
 
 

@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.22.0 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.22.1 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1878,7 +1878,7 @@
             static cache = new Map();
             static norm(cve, j) {
                 const txt = (v, n) => String((v && v.value) || v || '').replace(/\s+/g, ' ').trim().slice(0, n);
-                return { cve, severity: j.threat_severity || '', cvss: (j.cvss3 || {}).cvss3_base_score || '', public: String(j.public_date || '').slice(0, 10), statement: txt(j.statement, 900), mitigation: txt(j.mitigation, 900),
+                return { cve, at: new Date().toISOString(), severity: j.threat_severity || '', cvss: (j.cvss3 || {}).cvss3_base_score || '', public: String(j.public_date || '').slice(0, 10), statement: txt(j.statement, 900), mitigation: txt(j.mitigation, 900),
                     fixed: (j.affected_release || []).map(r => ({ p: r.product_name || '', a: r.advisory || '', pkg: r.package || '', d: String(r.release_date || '').slice(0, 10) })),
                     states: (j.package_state || []).map(r => ({ p: r.product_name || '', s: r.fix_state || '', pkg: r.package_name || '' })) };
             }
@@ -4930,7 +4930,8 @@
                 if (!doc || (doc.none && !rhel.length) || (doc.error && !rhel.length)) return '';
                 const notAff = rhel.filter(x => RedHat.forMajor(doc, RedHat.major(x.r.os || x.r.qualysOs)).kind === 'not');
                 const links = [...new Set((doc.fixed || []).filter(f => /^Red Hat Enterprise Linux \d+$/.test(f.p)).map(f => f.a))].slice(0, 3);
-                return `<div class="mt-1 text-sm"><span class="font-semibold text-slate-800">🎩 ${esc(RedHat.summary(doc))}</span>
+                const age = doc.at ? ` <span class="text-gray-400 font-normal text-xs">(Red Hat data ${esc(App.whenText(StatusEngine.time(doc.at)))}${doc.stale ? ' · could not refresh, older copy' : ''})</span>` : '';
+                return `<div class="mt-1 text-sm"><span class="font-semibold text-slate-800">🎩 ${esc(RedHat.summary(doc))}</span>${age}
                     ${links.length ? ` <span class="text-xs">${links.map(a => `<a class="underline text-blue-800" target="_blank" rel="noopener noreferrer" href="${esc(RedHat.advLink(a))}">${esc(a)}</a>`).join(' ')}</span>` : ''}
                     ${notAff.length ? `<div class="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded px-2 py-1 mt-1">⚠ Qualys flags ${fmtNum(notAff.length)} RHEL machine${notAff.length === 1 ? '' : 's'} on a release Red Hat says is <strong>not affected</strong>: check those findings (a back-ported fix or a false positive).</div>` : ''}
                     ${doc.statement || doc.mitigation ? `<details class="text-xs text-gray-700 mt-1"><summary class="cursor-pointer text-blue-800">Red Hat's statement${doc.mitigation ? ' and mitigation' : ''}</summary>${doc.statement ? `<p class="mt-1">${esc(doc.statement)}</p>` : ''}${doc.mitigation ? `<p class="mt-1"><strong>Mitigation:</strong> ${esc(doc.mitigation)}</p>` : ''}<p class="mt-1"><a class="underline" target="_blank" rel="noopener noreferrer" href="https://access.redhat.com/security/cve/${esc(id)}">Red Hat's page for ${esc(id)}</a></p></details>` : ''}</div>`;
@@ -6958,6 +6959,17 @@
                 rows.push({ name: 'End-of-life dates', how: EolDates.server() ? 'endoflife.date, by the server, plus your own dates' : 'endoflife.date, by this browser, plus your own dates', last: eLast, run: eRun,
                     next: eHrs && eLast ? eLast + eHrs * H : 0, sched: EolDates.server() ? (eHrs ? `every ${eHrs} h` : 'on demand only') : 'kept for a week',
                     result: eRun ? '⟳ fetching now' : eLast ? (failed.length ? `⚠ ${failed.length} product${failed.length === 1 ? '' : 's'} could not be fetched: ${failed.join(', ')}` : '✓ fetched') : 'not fetched yet', warn: !eLast || failed.length, btn: canWrite ? "app.healthSync('eol')" : '' });
+                // Red Hat Security Data (v4.22.1): asked per CVE when looked up (kept a day), the watched CVEs refreshed on a schedule
+                if (EolDates.server()) {
+                    let rh = null; try { const r = await fetch('api/redhat/status', { cache: 'no-store' }); if (r.ok) rh = await r.json(); } catch (e) { rh = null; }
+                    if (rh) {
+                        const last = StatusEngine.time(rh.last?.at), hrs = +rh.scheduleHours || 0, run = !!rh.job?.running, failed = rh.last?.failed || [];
+                        rows.push({ name: 'Red Hat Security Data', how: `Red Hat's public API, by the server: each CVE when looked up (kept ${rh.keepHours || 24} h); the ${fmtNum(rh.watched || 0)} watched CVE${rh.watched === 1 ? '' : 's'} on a schedule`,
+                            last, run, next: hrs && last ? last + hrs * H : 0, sched: hrs ? `watched CVEs every ${hrs} h` : 'when looked up only',
+                            result: run ? '⟳ refreshing now' : rh.job?.error ? '✗ ' + rh.job.error : failed.length ? `⚠ ${failed.length} CVE${failed.length === 1 ? '' : 's'} could not be refreshed (older copies kept): ${failed.slice(0, 4).join(', ')}` : last ? `✓ ${fmtNum(rh.last.ok || 0)} watched CVE${rh.last.ok === 1 ? '' : 's'} refreshed · ${fmtNum(rh.cves || 0)} CVE${rh.cves === 1 ? '' : 's'} held` : `${fmtNum(rh.cves || 0)} CVEs held · no scheduled refresh yet`,
+                            warn: !run && (!!rh.job?.error || failed.length > 0), btn: canWrite ? "app.healthSync('rh')" : '' });
+                    }
+                } else rows.push({ name: 'Red Hat Security Data', how: "Red Hat's public API, asked by this browser when a CVE is looked up", last: 0, next: 0, sched: 'when looked up', result: `${fmtNum(RedHat.cache.size)} CVEs asked this session`, warn: false });
                 // Register (asset export) and the live records
                 const seen = reg0 => reg0.filter(r => !r.unrecognised).map(r => StatusEngine.time(r.lastSeen)).filter(Boolean);
                 const sr = seen(StorageService.load(StorageService.KEYS.ASSET_REGISTER));
@@ -6977,6 +6989,10 @@
             async healthSync(k) {
                 if (k === 'qx') { await this.qxSync(); }
                 else if (k === 'ax') { await this.axSync(); }
+                else if (k === 'rh') {
+                    try { const r = await fetch('api/redhat/sync', { method: 'POST' }); if (!r.ok && r.status !== 409) throw new Error('refused (' + r.status + ')'); RedHat.cache.clear(); StorageService.toast('Refreshing the watched CVEs from Red Hat…'); }
+                    catch (e) { StorageService.toast('Could not start the Red Hat refresh: ' + e.message); }
+                }
                 else if (k === 'eol') {
                     StorageService.toast('Fetching end-of-life dates…');
                     const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), products = [...new Set(reg.map(r => EolDates.match(r.os)?.product).filter(Boolean))];

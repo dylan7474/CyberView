@@ -129,16 +129,67 @@ def _watched():
     return [p["cve"] for p in (d.get("pins") or []) if isinstance(p, dict) and p.get("cve") and not p.get("closedAt")]
 
 
+_job = {"running": False}
+
+
+def refresh_watched(user="schedule"):
+    """Fetch every watched CVE again now and record the run (Data Health shows it)."""
+    cves, ok, failed = _watched(), [], []
+    for i in range(0, len(cves), 20):
+        for cve, d in get(cves[i:i + 20], force=True).items():
+            (failed if d.get("error") or d.get("stale") else ok).append(cve)
+    meta = {"at": now_iso(), "by": user, "ok": len(ok), "failed": failed[:50]}
+    with _conn_ctx() as c, c.cursor() as cur:
+        cur.execute("REPLACE INTO redhat_cve (k, at, doc) VALUES ('meta:last', UTC_TIMESTAMP(), %s)", (json.dumps(meta),))
+    return meta
+
+
+def start(user):
+    """Data Health's Sync now. False if a refresh is already running."""
+    if _job.get("running"):
+        return False
+    _job.update({"running": True, "by": user, "startedAt": now_iso()})
+
+    def run():
+        try:
+            refresh_watched(user)
+        except Exception as e:
+            _job["error"] = f"{type(e).__name__}: {str(e)[:150]}"
+        finally:
+            _job["running"] = False
+    threading.Thread(target=run, name="redhat-sync", daemon=True).start()
+    return True
+
+
+def status():
+    out = {"scheduleHours": HOURS, "keepHours": KEEP_HOURS, "job": dict(_job)}
+    try:
+        with _conn_ctx() as c, c.cursor() as cur:
+            cur.execute("SELECT doc FROM redhat_cve WHERE k='meta:last'")
+            r = cur.fetchone()
+            out["last"] = json.loads(r[0]) if r else None
+            cur.execute("SELECT COUNT(*), MAX(at) FROM redhat_cve WHERE k LIKE 'CVE-%%'")
+            n, newest = cur.fetchone()
+            out["cves"] = int(n or 0)
+            out["newest"] = newest.strftime("%Y-%m-%dT%H:%M:%SZ") if newest else None
+        out["watched"] = len(_watched())
+    except Exception as e:
+        out["dbError"] = str(e)[:200]
+    return out
+
+
 def _scheduler():
     """Refresh the watched CVEs every REDHAT_SYNC_HOURS (first about two minutes after start-up)."""
     time.sleep(120)
     while True:
-        try:
-            cves = _watched()
-            for i in range(0, len(cves), 20):
-                get(cves[i:i + 20], force=True)
-        except Exception:
-            pass
+        if not _job.get("running"):
+            _job["running"] = True
+            try:
+                refresh_watched("schedule")
+            except Exception:
+                pass
+            finally:
+                _job["running"] = False
         time.sleep(max(1.0, HOURS) * 3600)
 
 

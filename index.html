@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.25.0 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.25.1 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1105,23 +1105,32 @@
                 if (!this.on()) return;
                 this.install();
                 if (this.cur) this.finish(true);
-                const c = this.cur = { what, at: new Date().toISOString(), t0: performance.now(), last: performance.now(), reads: 0, copies: 0, copyKeys: {}, longTasks: 0, blocked: 0, longest: 0 };
+                const c = this.cur = { what, at: new Date().toISOString(), t0: performance.now(), last: performance.now(), reads: 0, copies: 0, copyKeys: {}, longTasks: 0, blocked: 0, longest: 0, busy: 0, maxLag: 0, muts: [] };
                 const main = document.querySelector('main');
-                c.mo = new MutationObserver(() => { c.last = performance.now(); }); if (main) c.mo.observe(main, { childList: true, subtree: true, characterData: true });
+                // v4.25.1 "still changing": which part of the page each change was in (the nearest element with an id)
+                const where = (n) => { const e = n && (n.nodeType === 1 ? n : n.parentElement); const h = e && e.closest('[id]'); return h ? '#' + h.id : (e ? e.tagName.toLowerCase() : '?'); };
+                c.mo = new MutationObserver((list) => { const t = performance.now(); c.last = t; if (c.muts.length < 4000) list.forEach(m => c.muts.push([t, where(m.target)])); });
+                if (main) c.mo.observe(main, { childList: true, subtree: true, characterData: true });
+                // v4.25.1 "busy": a 50 ms timer that runs late when the browser is busy (works in every browser)
+                let exp = performance.now() + 50;
+                c.lag = setInterval(() => { const now = performance.now(), late = now - exp; if (late > 50) { c.busy += late; c.maxLag = Math.max(c.maxLag, late); } exp = now + 50; }, 50);
                 const tick = () => { if (this.cur !== c) return; const now = performance.now(); if (now - c.last > 800 || now - c.t0 > 90000) this.finish(false); else c.timer = setTimeout(tick, 200); };
                 c.timer = setTimeout(tick, 300);
             }
             static finish(cut) {
                 const c = this.cur; if (!c) return; this.cur = null;
-                clearTimeout(c.timer); c.mo && c.mo.disconnect();
+                clearTimeout(c.timer); c.mo && c.mo.disconnect(); clearInterval(c.lag);
                 const end = cut ? performance.now() : c.last;
+                // what was still changing in the last second (and after the first second at all)
+                const tail = {}; c.muts.forEach(([t, w]) => { if (t >= end - 1000 && t - c.t0 > 1000) tail[w] = (tail[w] || 0) + 1; });
                 const api = performance.getEntriesByType('resource').filter(r => r.startTime >= c.t0 - 5 && r.startTime <= end && /\/api\//.test(r.name));
                 const srv = (r) => Math.round((r.serverTiming || []).reduce((a, x) => a + (x.duration || 0), 0));
                 const reqs = api.map(r => ({ u: r.name.replace(/^.*?\/api\//, 'api/').split('?')[0], ms: Math.round(r.duration), srv: srv(r), kb: Math.round((r.encodedBodySize || r.transferSize || 0) / 1024) }));
                 const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || [];
                 const e = { at: c.at, what: c.what, ms: Math.round(end - c.t0), cut: !!cut, api: reqs.length, apiMs: reqs.reduce((a, r) => Math.max(a, r.ms), 0), srvMs: reqs.reduce((a, r) => a + r.srv, 0),
                     kb: reqs.reduce((a, r) => a + r.kb, 0), slowest: reqs.sort((a, b) => b.ms - a.ms).slice(0, 3), reads: c.reads, copies: c.copies,
-                    copyKeys: Object.entries(c.copyKeys).sort((a, b) => b[1] - a[1]).slice(0, 4), frozen: Math.round(c.blocked), longest: Math.round(c.longest), machines: reg.length,
+                    copyKeys: Object.entries(c.copyKeys).sort((a, b) => b[1] - a[1]).slice(0, 4), frozen: Math.round(c.blocked), longest: Math.round(Math.max(c.longest, c.maxLag)), busy: Math.round(c.busy),
+                    tail: Object.entries(tail).sort((a, b) => b[1] - a[1]).slice(0, 3), machines: reg.length,
                     findings: (window.app && app._vd && app._vd.all) ? app._vd.all.length : null, mode: StorageService.mode, v: (document.getElementById('app-version')?.textContent || '').split(' ')[0] };
                 const L = this.entries(); L.push(e);
                 try { localStorage.setItem(this.KEY, JSON.stringify(L.slice(-this.MAX))); } catch (err) { /* full */ }
@@ -1132,8 +1141,8 @@
             static waitDone() { return new Promise(res => { if (!this.cur) return res(null); this._wait = res; }); }
             static text(list = this.entries()) {
                 const L = [`CyberView performance log · ${list[0]?.v || ''} · ${list[0]?.mode || ''} · ${list[list.length - 1]?.machines ?? '?'} machines · ${list[list.length - 1]?.findings ?? '?'} findings`,
-                    'when | what | total ms | server requests (n, slowest ms, server ms, KB) | stored-data reads / full copies | longest freeze ms'];
-                list.forEach(e => L.push(`${e.at.slice(11, 19)} | ${e.what} | ${e.ms}${e.cut ? ' (cut short)' : ''} | ${e.api}, ${e.apiMs}, ${e.srvMs}, ${e.kb} KB${e.slowest.length ? ' [' + e.slowest.map(r => `${r.u} ${r.ms}ms${r.srv ? '/srv ' + r.srv : ''} ${r.kb}KB`).join('; ') + ']' : ''} | ${e.reads}/${e.copies}${e.copyKeys.length ? ' (' + e.copyKeys.map(([k, n]) => k.replace('gov_', '') + ' ' + n).join(', ') + ')' : ''} | ${e.longest}`));
+                    'when | what | total ms | busy ms (longest) | still changing at the end | server requests (n, slowest ms, server ms, KB) | stored-data reads / full copies'];
+                list.forEach(e => L.push(`${e.at.slice(11, 19)} | ${e.what} | ${e.ms}${e.cut ? ' (cut short)' : ''} | ${e.busy ?? '-'} (${e.longest}) | ${(e.tail || []).map(([w, n]) => w + ' ×' + n).join(', ') || '-'} | ${e.api}, ${e.apiMs}, ${e.srvMs}, ${e.kb} KB${e.slowest.length ? ' [' + e.slowest.map(r => `${r.u} ${r.ms}ms${r.srv ? '/srv ' + r.srv : ''} ${r.kb}KB`).join('; ') + ']' : ''} | ${e.reads}/${e.copies}${e.copyKeys.length ? ' (' + e.copyKeys.map(([k, n]) => k.replace('gov_', '') + ' ' + n).join(', ') + ')' : ''}`));
                 return L.join('\n');
             }
         }
@@ -4465,7 +4474,7 @@
             }
 
             switchView(viewId) {
-                if (!(PerfLog.cur && PerfLog.cur.t0 === 0)) PerfLog.begin('page: ' + viewId);     // v4.25 performance log (when on)
+                { const c = PerfLog.cur; if (!(c && (c.t0 === 0 || (/^action:/.test(c.what) && performance.now() - c.t0 < 2000)))) PerfLog.begin('page: ' + viewId); }     // v4.25 performance log (an action's own redraw stays in its line)
                 document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
                 
                 const target = document.getElementById('view-' + viewId);
@@ -4548,6 +4557,7 @@
                 this._sorting = true; sorted.concat(rest).forEach(r => body.appendChild(r)); this._sorting = false;
             }
             sortClick(th) {
+                PerfLog.begin(`action: sort ${(th.closest('.view-section')?.id || '').replace('view-', '')} by ${(th.dataset.label || th.innerText).trim()}`);
                 const tb = th.closest('table'), col = [...th.parentNode.cells].indexOf(th), key = App.tableKey(tb), S = Prefs.get('sorts', {});
                 const cur = S[key], dir = cur && cur[0] === col ? -cur[1] : 1;
                 S[key] = [col, dir]; Prefs.set('sorts', S);
@@ -4630,6 +4640,7 @@
                     <select id="team-select" onchange="app.setTeam(this.value)" class="border-0 bg-transparent text-xs font-semibold py-0.5 pl-1 pr-6 text-right focus:ring-0" aria-label="Team">${opts.map(v => `<option value="${esc(v)}" ${v === t ? 'selected' : ''}>${esc(App.teamLabel(v))}</option>`).join('')}</select></label>`;
             }
             setTeam(v) {
+                PerfLog.begin('action: team → ' + v);
                 Prefs.set('team', v); this._cve = null;
                 ['reg-f-owner', 'review-filter-owner'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });     // back to the sidebar team
                 this.applyTeamSwitch();
@@ -4904,8 +4915,8 @@
                     <button onclick="app.perfCopy()" class="px-3 py-1 rounded border text-sm bg-slate-800 text-white">📋 Copy the log</button>
                     <button onclick="if (confirm('Clear the performance log in this browser?')) { PerfLog.clear(); app.renderPerfPanel(); }" class="px-3 py-1 rounded border text-sm bg-white">Clear</button></span></div>
                     <p class="text-xs text-gray-600">Times how long pages take in <strong>this browser</strong>: until the page stops changing, the server requests (and how long the server itself took), reads of stored data, and the longest freeze. Turn it on and use the portal as usual, or press <em>Run the standard check</em> (opens the main pages one after another, about a minute), then <em>Copy the log</em> and paste it to whoever is looking at the speed. Nothing is sent anywhere; it is kept in this browser.</p>
-                    ${L.length ? `<div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="min-w-full text-xs" data-nosort><thead class="bg-gray-50 text-gray-600 sticky top-0"><tr><th class="px-2 py-1 text-left">When</th><th class="px-2 py-1 text-left">What</th><th class="px-2 py-1 text-right">Total</th><th class="px-2 py-1 text-right">Server requests</th><th class="px-2 py-1 text-right">Slowest request</th><th class="px-2 py-1 text-right">Server time</th><th class="px-2 py-1 text-right">Data</th><th class="px-2 py-1 text-right">Reads / copies</th><th class="px-2 py-1 text-right">Longest freeze</th></tr></thead>
-                        <tbody class="divide-y">${L.map(e => `<tr class="${e.ms > 3000 ? 'bg-amber-50' : ''}"><td class="px-2 py-1 whitespace-nowrap">${esc(App.whenText(Date.parse(e.at)))}</td><td class="px-2 py-1">${esc(e.what)}</td><td class="px-2 py-1 text-right font-semibold">${e.ms > 3000 ? '⚠ ' : ''}${ms(e.ms)}${e.cut ? ' (cut short)' : ''}</td><td class="px-2 py-1 text-right">${e.api}</td><td class="px-2 py-1 text-right" title="${esc(e.slowest.map(r => r.u + ' ' + r.ms + ' ms').join('\n'))}">${e.apiMs ? ms(e.apiMs) + (e.slowest[0] ? ' · ' + esc(e.slowest[0].u) : '') : '-'}</td><td class="px-2 py-1 text-right">${e.srvMs ? ms(e.srvMs) : '-'}</td><td class="px-2 py-1 text-right">${e.kb ? fmtNum(e.kb) + ' KB' : '-'}</td><td class="px-2 py-1 text-right">${e.reads} / ${e.copies}</td><td class="px-2 py-1 text-right">${e.longest ? ms(e.longest) : '-'}</td></tr>`).join('')}</tbody></table></div>`
+                    ${L.length ? `<div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="min-w-full text-xs" data-nosort><thead class="bg-gray-50 text-gray-600 sticky top-0"><tr><th class="px-2 py-1 text-left">When</th><th class="px-2 py-1 text-left">What</th><th class="px-2 py-1 text-right">Total</th><th class="px-2 py-1 text-right">Server requests</th><th class="px-2 py-1 text-right">Slowest request</th><th class="px-2 py-1 text-right">Server time</th><th class="px-2 py-1 text-right">Data</th><th class="px-2 py-1 text-right">Reads / copies</th><th class="px-2 py-1 text-right">Busy (longest)</th><th class="px-2 py-1 text-left">Still changing</th></tr></thead>
+                        <tbody class="divide-y">${L.map(e => `<tr class="${e.ms > 3000 ? 'bg-amber-50' : ''}"><td class="px-2 py-1 whitespace-nowrap">${esc(App.whenText(Date.parse(e.at)))}</td><td class="px-2 py-1">${esc(e.what)}</td><td class="px-2 py-1 text-right font-semibold">${e.ms > 3000 ? '⚠ ' : ''}${ms(e.ms)}${e.cut ? ' (cut short)' : ''}</td><td class="px-2 py-1 text-right">${e.api}</td><td class="px-2 py-1 text-right" title="${esc(e.slowest.map(r => r.u + ' ' + r.ms + ' ms').join('\n'))}">${e.apiMs ? ms(e.apiMs) + (e.slowest[0] ? ' · ' + esc(e.slowest[0].u) : '') : '-'}</td><td class="px-2 py-1 text-right">${e.srvMs ? ms(e.srvMs) : '-'}</td><td class="px-2 py-1 text-right">${e.kb ? fmtNum(e.kb) + ' KB' : '-'}</td><td class="px-2 py-1 text-right">${e.reads} / ${e.copies}</td><td class="px-2 py-1 text-right">${e.busy ? ms(e.busy) : '-'}${e.longest ? ' (' + ms(e.longest) + ')' : ''}</td><td class="px-2 py-1 font-mono text-[10px]">${esc((e.tail || []).map(([w, n]) => w + ' ×' + n).join(', ') || '-')}</td></tr>`).join('')}</tbody></table></div>`
                         : `<p class="text-sm text-gray-500">${on ? 'Recording: open a few pages and they appear here.' : 'Nothing recorded yet.'}</p>`}`;
             }
             perfToggle() { PerfLog.setOn(!PerfLog.on()); this.renderPerfPanel(); StorageService.toast(PerfLog.on() ? 'Recording page timings in this browser' : 'Performance log stopped'); }
@@ -6486,6 +6497,7 @@
                     strip.innerHTML = on ? `<span>⚑ <strong>Showing risk-accepted machines and findings</strong> (flagged ⚑). Team status, targets and the forecast still leave them out; machine lists never include them.</span><button onclick="app.setShowAccepted(false)" class="ml-auto underline print-hide">Hide them</button>` : ''; }
             }
             setShowAccepted(v) {
+                PerfLog.begin('action: risk-accepted ' + (v ? 'shown' : 'hidden'));
                 Prefs.set('showAccepted', !!v);
                 this.applyAccepted();
                 this._vd = null; this.vulnData = null;
@@ -6495,6 +6507,7 @@
             accNote(h) { const el = document.getElementById('acc-note'); if (el) el.innerHTML = RiskView.note(h); }
 
             setViewMode(m) {
+                PerfLog.begin('action: ' + m + ' view');
                 Prefs.set('view', m === 'advanced' ? 'advanced' : 'simple');
                 this.applyViewMode();
                 const keep = ['dashboard', 'plan', 'cve', 'reports', 'eol', 'inspect'];
@@ -6904,6 +6917,7 @@
             }
 
             saveAssetEdit() {
+                PerfLog.begin('action: machine edit saved');
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 const idx = reg.findIndex(r => r.normalizedName === this.registerState.editingAsset);
                 if (idx > -1) {
@@ -7096,6 +7110,7 @@
             }
 
             executeBulkEdit() {
+                PerfLog.begin('action: bulk edit');
                 const ch = this.bulkChanges(), sel = this.registerState.selectedAssets;
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 let n = 0;

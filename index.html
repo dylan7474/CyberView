@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.20.1 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.21.0 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -321,7 +321,7 @@
 
                 <div class="bg-white rounded-lg shadow flex-1 overflow-hidden flex flex-col border border-gray-200">
                     <div class="overflow-auto flex-1">
-                        <table class="min-w-full text-left text-sm whitespace-nowrap">
+                        <table id="register-table" data-showall="app.registerShowMore(1e9)" class="min-w-full text-left text-sm whitespace-nowrap">
                             <thead class="bg-gray-100 text-gray-600 border-b sticky top-0 z-10">
                                 <tr>
                                     <th class="px-6 py-3 w-10 text-center"><input type="checkbox" id="reg-select-all" onchange="app.toggleAllRegister(this.checked)" class="rounded border-gray-300"></th>
@@ -737,7 +737,7 @@
                         </div>
                         <p id="eol-f-summary" class="text-xs text-gray-600 mb-2"></p>
                         <div class="overflow-x-auto">
-                        <table class="min-w-full text-sm text-left">
+                        <table id="eol-assets-table" data-showall="app.renderEOLAssets(true)" class="min-w-full text-sm text-left">
                             <thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2 font-semibold">Asset</th><th class="py-2 px-2 font-semibold">Team</th><th class="py-2 px-2 font-semibold text-center">Tier</th><th class="py-2 px-2 font-semibold">TruRisk</th><th class="py-2 px-2 font-semibold">Status</th><th class="py-2 px-2 font-semibold">Operating system</th><th class="py-2 px-2 font-semibold">Next action</th><th class="py-2 px-2 print-hide"></th></tr></thead>
                             <tbody id="eol-assets" class="divide-y"></tbody>
                         </table>
@@ -4272,6 +4272,7 @@
                 this.applyViewMode();
                 this.applyAccepted();
                 this.applyTeamSwitch();
+                this.initDecorate();
                 window.addEventListener('beforeprint', () => { if (this.currentView === 'eol' && this.eolCtx && !this._eolAll) { this.renderEOLAssets(true); this._eolPrintShort = true; } });
                 window.addEventListener('afterprint', () => { if (this._eolPrintShort) { this._eolPrintShort = false; this.renderEOLAssets(false); } });
                 OrgSettings.ensureSaved();          // v3.20: copy the built-in organisation values into the database once (administrators)
@@ -4325,6 +4326,117 @@
                 if (viewId === 'users') this.renderUsers();
                 if (viewId === 'backup') this.renderBackupPage();
                 if (viewId === 'history') this.renderHistory();
+            }
+
+            // ---------- Edit a machine from anywhere, sort any table (v4.21). One pass after every redraw (MutationObserver):
+            // every machine link gets a ✎ (editors), a right-click menu, and every table with headings sorts by a click.
+            static ICON_RE = /^[\s✖▲◐✓?⚠⟳✋⛔🔶⊘⏸↻⧗⚑●○−+±▾·]+/u;
+            static sortVal(td) {
+                if (!td) return { n: null, s: '' };
+                const raw = (td.dataset.sort ?? td.innerText ?? '').trim(), t = raw.replace(App.ICON_RE, '').trim();
+                let m;
+                if (!t || t === '-' || t === '–') return { n: null, s: '' };
+                if ((m = t.match(/^P([1-5])\b/))) return { n: +m[1], s: t };
+                if ((m = t.match(/^T([1-4])\b/)) || (m = t.match(/^Tier ([1-4])\b/))) return { n: +m[1], s: t };
+                if (/^just now/i.test(t)) return { n: -Date.now(), s: t };
+                if ((m = t.match(/^(\d+)\s*(min|h|d)\s*ago/i))) return { n: -(Date.now() - (+m[1]) * { min: 6e4, h: 36e5, d: 864e5 }[m[2].toLowerCase()]), s: t };
+                if (/^\d{4}-\d{2}-\d{2}/.test(t) || /^\d{1,2} [A-Z][a-z]{2}/.test(t) || /^[A-Z][a-z]{2},? \d{1,2} [A-Z][a-z]{2}/.test(t)) {
+                    let d = Date.parse(t.replace(/^[A-Z][a-z]{2},? /, '').replace(/,? (\d\d:\d\d)/, ' $1'));
+                    if (!/\d{4}/.test(t)) d = Date.parse(t.replace(/^[A-Z][a-z]{2},? /, '').replace(/^(\d{1,2} [A-Z][a-z]{2})/, '$1 ' + new Date().getFullYear()).replace(/,? (\d\d:\d\d)/, ' $1'));
+                    if (!isNaN(d)) return { n: d, s: t };
+                }
+                if ((m = t.replace(/,/g, '').match(/^[−-]?\d+(\.\d+)?/))) return { n: parseFloat(m[0].replace('−', '-')), s: t };
+                return { n: null, s: t.toLowerCase() };
+            }
+            static tableKey(tb) {
+                const v = tb.closest('.view-section')?.id || 'x', all = [...document.querySelectorAll('#' + v + ' table')].filter(App.sortable);
+                const heads = [...tb.querySelectorAll('thead th')].map(h => (h.dataset.label || h.innerText).replace(/[▲▼]/g, '').trim()).join('|');
+                return v + '|' + all.indexOf(tb) + '|' + heads.slice(0, 120);
+            }
+            static sortable(tb) { return !!tb.tHead && tb.tHead.rows.length && !tb.querySelector('thead th[onclick]') && !tb.closest('[data-nosort]') && tb.tBodies.length; }
+            sortTable(tb, col, dir) {
+                const body = tb.tBodies[0], n = tb.tHead.rows[0].cells.length;
+                const rows = [...body.rows], data = rows.filter(r => r.cells.length >= n - 1 && !r.querySelector('td[colspan]')), rest = rows.filter(r => !data.includes(r));
+                data.forEach((r, i) => { if (r.dataset.ord === undefined) r.dataset.ord = i; });
+                const val = new Map(data.map(r => [r, App.sortVal(r.cells[col])]));
+                // a column of mostly words (machine names, some of them IP addresses) sorts as text throughout
+                const vs = [...val.values()].filter(v => v.n !== null || v.s), numeric = vs.length && vs.filter(v => v.n !== null).length / vs.length >= 0.8;
+                if (!numeric) val.forEach((v, r) => { if (v.n !== null) val.set(r, { n: null, s: (r.cells[col]?.innerText || '').trim().toLowerCase() }); });
+                const sorted = data.slice().sort((a, b) => { const x = val.get(a), y = val.get(b);
+                    if (x.n !== null && y.n !== null) return (x.n - y.n) * dir || (a.dataset.ord - b.dataset.ord);
+                    if (x.n !== null) return -1; if (y.n !== null) return 1;           // numbers first, empty last
+                    if (!x.s && y.s) return 1; if (x.s && !y.s) return -1;
+                    return x.s.localeCompare(y.s) * dir || (a.dataset.ord - b.dataset.ord); });
+                if (sorted.every((r, i) => body.rows[i] === r)) return;
+                this._sorting = true; sorted.concat(rest).forEach(r => body.appendChild(r)); this._sorting = false;
+            }
+            sortClick(th) {
+                const tb = th.closest('table'), col = [...th.parentNode.cells].indexOf(th), key = App.tableKey(tb), S = Prefs.get('sorts', {});
+                const cur = S[key], dir = cur && cur[0] === col ? -cur[1] : 1;
+                S[key] = [col, dir]; Prefs.set('sorts', S);
+                if (tb.dataset.partial === '1' && tb.dataset.showall) { try { new Function('app', tb.dataset.showall)(this); } catch (e) { console.error('[sort] show all', e); } }
+                this.decorate();
+            }
+            // After every redraw: sortable headings (with ▲▼ on the sorted one), the remembered sort, ✎ on machine links
+            decorate() {
+                const view = document.querySelector('.view-section.active'); if (!view) return;
+                const S = Prefs.get('sorts', {});
+                view.querySelectorAll('table').forEach(tb => {
+                    if (!App.sortable(tb)) return;
+                    const key = App.tableKey(tb), cur = S[key];
+                    [...tb.tHead.rows[0].cells].forEach((th, i) => {
+                        if (th.querySelector('input,select,button') || !th.innerText.trim()) return;
+                        if (!th.dataset.label) { th.dataset.label = th.innerText.trim(); th.classList.add('cursor-pointer', 'select-none'); th.title = th.title || 'Click to sort'; th.addEventListener('click', () => this.sortClick(th)); }
+                        const on = cur && cur[0] === i, mark = on ? (cur[1] > 0 ? ' ▲' : ' ▼') : '';
+                        let sp = th.querySelector('.sort-mark'); if (!sp) { sp = document.createElement('span'); sp.className = 'sort-mark text-indigo-700'; th.appendChild(sp); }
+                        if (sp.textContent !== mark) sp.textContent = mark;
+                        th.setAttribute('aria-sort', on ? (cur[1] > 0 ? 'ascending' : 'descending') : 'none');
+                    });
+                    if (cur && cur[0] < tb.tHead.rows[0].cells.length) {
+                        if (tb.dataset.partial === '1' && tb.dataset.showall && !tb.dataset.expanding) { tb.dataset.expanding = '1'; try { new Function('app', tb.dataset.showall)(this); } catch (e) { /* keep the shown rows */ } return; }
+                        this.sortTable(tb, cur[0], cur[1]);
+                    }
+                });
+                // ✎ next to every machine that links to its page (not in the register, which has its own Edit)
+                if (view.id === 'view-register') return;
+                const reg = this._regNames && this._regNamesAt === StorageService.load(StorageService.KEYS.ASSET_REGISTER).length ? this._regNames
+                    : (this._regNames = new Set(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => r.normalizedName)), this._regNamesAt = this._regNames.size, this._regNames);
+                view.querySelectorAll('[data-n][onclick*="openAssetDetail"]:not([data-pen]), [data-n][onclick*="inspectAsset"]:not([data-pen]), [data-n][data-machine]:not([data-pen])').forEach(el => {
+                    el.dataset.pen = '1'; const n = el.dataset.n; if (!reg.has(n)) return;
+                    const pen = `<button type="button" class="m-edit write-only ml-1 px-1 rounded text-gray-400 hover:text-indigo-800 hover:bg-indigo-50 print-hide" data-asset="${esc(n)}" title="Edit this machine: team, service, tier, exposure, OS" aria-label="Edit ${esc(n)}" onclick="event.stopPropagation(); event.preventDefault(); app.editAsset(this.dataset.asset)">✎</button>`;
+                    if (el.tagName === 'TR') { const short = n.split('.')[0].toLowerCase(), cells = [...el.cells].filter(c => !c.querySelector('input'));
+                        const c = cells.find(td => td.innerText.toLowerCase().includes(short)) || cells[0]; if (!c) return;
+                        const first = c.firstElementChild && c.firstElementChild.tagName === 'DIV' ? c.firstElementChild : c; first.insertAdjacentHTML(first === c ? 'afterbegin' : 'beforeend', ''); (first === c ? c : first).insertAdjacentHTML('beforeend', pen); }
+                    else el.insertAdjacentHTML('afterend', pen);
+                });
+            }
+            initDecorate() {
+                const main = document.querySelector('main'); if (!main || this._mo) return;
+                let queued = false;
+                this._mo = new MutationObserver(() => { if (this._sorting || queued) return; queued = true; requestAnimationFrame(() => { queued = false; try { this.decorate(); } catch (e) { console.error('[decorate]', e); } }); });
+                this._mo.observe(main, { childList: true, subtree: true });
+                // Right-click on a machine: Open / Edit / Copy name
+                document.addEventListener('contextmenu', (e) => {
+                    const el = e.target.closest('main [data-n], main [data-asset]'); if (!el) return;
+                    const n = el.dataset.n || el.dataset.asset, r = StorageService.load(StorageService.KEYS.ASSET_REGISTER).find(x => x.normalizedName === n); if (!r) return;
+                    e.preventDefault(); this.machineMenu(r, e.clientX, e.clientY);
+                });
+                document.addEventListener('click', (e) => { if (!e.target.closest('#m-menu')) this.machineMenu(null); });
+                document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.machineMenu(null); });
+                window.addEventListener('scroll', () => this.machineMenu(null), true);
+            }
+            machineMenu(r, x, y) {
+                let m = document.getElementById('m-menu');
+                if (!r) { if (m) m.remove(); return; }
+                if (!m) { m = document.createElement('div'); m.id = 'm-menu'; m.setAttribute('role', 'menu'); document.body.appendChild(m); }
+                const canWrite = !this.me || this.me.role !== 'viewer', n = esc(r.normalizedName);
+                const item = (label, js, extra = '') => `<button role="menuitem" class="block w-full text-left px-3 py-1.5 hover:bg-indigo-50 ${extra}" data-n="${n}" onclick="app.machineMenu(null); ${js}">${label}</button>`;
+                m.className = 'fixed z-50 bg-white border border-slate-300 rounded-lg shadow-lg py-1 text-sm min-w-[220px]';
+                m.innerHTML = `<div class="px-3 py-1 text-xs text-gray-500 border-b">${esc(r.originalName || r.normalizedName)} · ${esc(r.owner || 'no team')}</div>`
+                    + item('Open its page', 'app.openAssetDetail(this.dataset.n)') + (canWrite ? item('✎ Edit team, service, tier…', 'app.editAsset(this.dataset.n)') : '')
+                    + item('📋 Copy name', `navigator.clipboard && navigator.clipboard.writeText(${JSON.stringify(r.originalName || r.normalizedName).replace(/"/g, '&quot;')}).then(() => StorageService.toast('Copied'))`);
+                m.style.left = Math.min(x, window.innerWidth - 240) + 'px'; m.style.top = Math.min(y, window.innerHeight - 140) + 'px';
+                m.querySelector('button')?.focus();
             }
 
             // ---------- One team choice (v4.17): the 👥 Team control in the sidebar. Every report and plan page follows it, and
@@ -5340,7 +5452,7 @@
                         <td class="px-3 py-2 text-xs whitespace-nowrap">${when}${g.overdue && k !== 'done' ? ` <strong>✖ ${fmtNum(g.overdue)} overdue</strong>` : ''}</td>
                         <td class="px-3 py-2 text-right"><button class="text-[10px] text-gray-700 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap" title="Download the names of these machines, one per line (an Ansible inventory)" data-k="${k}" data-q="${esc(g.qid)}" onclick="event.stopPropagation(); app.planList(this.dataset.k, this.dataset.q)">⬇ List</button></td></tr>`;
                 };
-                return `<table class="w-full text-sm"><thead class="bg-gray-100 text-gray-600 text-xs uppercase"><tr><th class="px-3 py-2 text-right">#</th><th class="px-3 py-2 text-left">Fix</th><th class="px-3 py-2">P</th><th class="px-3 py-2 text-right">Machines</th><th class="px-3 py-2 text-left">Why</th><th class="px-3 py-2 text-left">${k === 'will' ? 'Next patch run' : 'Due'}</th><th class="px-3 py-2"></th></tr></thead>
+                return `<table data-showall="app._planShow = { ...(app._planShow || {}), ${k}: true }; app.renderPlan()" data-partial="${shown.length < rows.length ? 1 : ''}" class="w-full text-sm"><thead class="bg-gray-100 text-gray-600 text-xs uppercase"><tr><th class="px-3 py-2 text-right">#</th><th class="px-3 py-2 text-left">Fix</th><th class="px-3 py-2">P</th><th class="px-3 py-2 text-right">Machines</th><th class="px-3 py-2 text-left">Why</th><th class="px-3 py-2 text-left">${k === 'will' ? 'Next patch run' : 'Due'}</th><th class="px-3 py-2"></th></tr></thead>
                     <tbody class="divide-y">${shown.map(tr).join('')}</tbody></table>
                     <div class="flex items-center justify-between px-4 py-2 border-t bg-gray-50 text-xs text-gray-600 rounded-b-lg"><span>${fmtNum(shown.length)} of ${fmtNum(rows.length)} fixes${rows.length > shown.length ? ` <button onclick="app._planShow = { ...(app._planShow || {}), ${k}: true }; app.renderPlan()" class="ml-2 text-blue-700 underline">Show all</button>` : ''}</span>
                     <button onclick="app.planList('${k}')" class="border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Every machine in this section, one name per line">⬇ Machine list for this section</button></div>`;
@@ -5886,7 +5998,7 @@
 
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">3. Assets <span class="text-sm font-normal text-gray-500">${S.filter === 'ALL' ? 'all' : esc(tiles.find(t => t[0] === S.filter)?.[1] || S.filter)} · ${fmtNum(list.length)}</span></h3>
                         <div class="flex flex-wrap items-center gap-3 mb-3 print-hide"><input type="search" id="ax-q" value="${esc(S.q)}" placeholder="Search asset, device, owner, OS" oninput="app.axState.q = this.value; app.axState.shown = 200; clearTimeout(app._axT); app._axT = setTimeout(() => app.renderAutomox(), 250)" class="border border-gray-300 rounded px-2 py-1 text-sm w-72">${S.filter !== 'ALL' ? '<button onclick="app.axFilter(\'ALL\')" class="text-xs text-blue-700 underline">Show all</button>' : ''}</div>
-                        <div class="overflow-x-auto"><table class="min-w-full text-sm text-left"><thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2">Asset</th><th class="py-2 px-2">Owner</th><th class="py-2 px-2">Automox</th><th class="py-2 px-2">Check-in</th><th class="py-2 px-2">Waiting patches</th><th class="py-2 px-2">Policies</th><th class="py-2 px-2 text-center">Reboot</th><th class="py-2 px-2 text-right" title="Qualys detections with an Automox patch waiting">Fixable</th><th class="py-2 px-2 print-hide">Tasks</th></tr></thead>
+                        <div class="overflow-x-auto"><table data-showall="app.axState.shown = 1e9; app.renderAutomox()" data-partial="${list.length > shown.length ? 1 : ''}" class="min-w-full text-sm text-left"><thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2">Asset</th><th class="py-2 px-2">Owner</th><th class="py-2 px-2">Automox</th><th class="py-2 px-2">Check-in</th><th class="py-2 px-2">Waiting patches</th><th class="py-2 px-2">Policies</th><th class="py-2 px-2 text-center">Reboot</th><th class="py-2 px-2 text-right" title="Qualys detections with an Automox patch waiting">Fixable</th><th class="py-2 px-2 print-hide">Tasks</th></tr></thead>
                         <tbody class="divide-y">${shown.map(row).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">No assets.</td></tr>'}
                         ${list.length > shown.length ? `<tr><td colspan="9" class="px-2 py-3 text-center bg-gray-50"><button onclick="app.axState.shown += 100; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show 100 more</button> · <button onclick="app.axState.shown = 1e9; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show all ${fmtNum(list.length)}</button> <span class="text-xs text-gray-500">(${fmtNum(list.length - shown.length)} more; show them all before printing)</span></td></tr>` : ''}</tbody></table></div></div>
 
@@ -6464,8 +6576,10 @@
             }
 
             editAsset(name) {
-                const r = StorageService.load(StorageService.KEYS.ASSET_REGISTER).find(x => x.normalizedName === name);
+                const all = StorageService.load(StorageService.KEYS.ASSET_REGISTER), low = String(name || '').toLowerCase();
+                const r = all.find(x => x.normalizedName === name) || all.find(x => String(x.originalName || '').toLowerCase() === low);
                 if(!r) return;
+                name = r.normalizedName; this._editOwner = r.owner;
                 this.registerState.editingAsset = name;
                 document.getElementById('edit-asset-name').textContent = name;
                 const set = (id, val, fallback) => { const el = document.getElementById(id); el.value = val || fallback; if (el.tagName === 'SELECT' && el.value !== (val || fallback)) el.value = fallback; };
@@ -6503,7 +6617,13 @@
                     else if (reg[idx].osOverrideCheck) delete reg[idx].osOverrideCheck;      // saved again = checked
                     this.invalidateVulnData();
                     StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
-                    this.renderRegister(); this.closeModals();
+                    this.closeModals();
+                    const r = reg[idx]; StorageService.toast(`Saved ${r.originalName || r.normalizedName}${r.owner !== this._editOwner ? ': team now ' + r.owner : ''}`);
+                    // v4.21: the page you edited from shows the change at once (the machine moves to its new team)
+                    this._status = null; this._cve = null; this.vulnData = null;
+                    if (this.currentView === 'register') this.renderRegister();
+                    else if (this.currentView === 'inspect') this.renderInspect();
+                    else this.switchView(this.currentView || 'dashboard');
                 }
             }
 
@@ -6537,6 +6657,7 @@
                 const sig = ['register-search', 'reg-f-field', 'reg-f-owner', 'reg-f-service', 'reg-f-env', 'reg-f-status', 'reg-f-exposure', 'reg-f-crit', 'register-filter-risk', 'reg-f-ax'].map(id => document.getElementById(id).value).join('\u0001');
                 if (sig !== this.registerState.sig) { this.registerState.sig = sig; this.registerState.shown = 200; }
                 const shown = Math.min(filtered.length, this.registerState.shown);
+                { const t = document.getElementById('register-table'); if (t) t.dataset.partial = shown < filtered.length ? '1' : ''; }     // v4.21 sorting
                 document.getElementById('reg-count').textContent = shown < filtered.length
                     ? `Showing the first ${fmtNum(shown)} of ${fmtNum(filtered.length)} matching (${fmtNum(all.length)} assets in total)`
                     : `Showing ${fmtNum(filtered.length)} of ${fmtNum(all.length)} assets`;
@@ -7181,6 +7302,7 @@
                 const list = this.eolFiltered();
                 const RIX = RemediationVerifier.index();
                 this._eolAll = showAll;
+                { const t = document.getElementById('eol-assets-table'); if (t) t.dataset.partial = !showAll && list.length > 25 ? '1' : ''; }
                 const shown = showAll ? list : list.slice(0, 25);      // v4.16: summary first; Show all for the rest (and always when printing)
                 $('eol-f-summary').innerHTML = `<strong>${fmtNum(list.length)} assets</strong> · ${esc(this.eolFilterText())}`;
                 const empty = `<tr><td colspan="8" class="px-2 py-4 text-center text-gray-500 italic">No assets match these filters.</td></tr>`;
@@ -8549,7 +8671,7 @@
                     const as = vulnSum.find(v => v.name === a.asset);
                     const trueRisk = a.scope === 'finding' ? (a.qids || []).length : (as ? (as.detections || 0) : 0);
 
-                    return `<tr class="cursor-pointer hover:bg-gray-50" onclick="app.openRiskDetail(this.dataset.id)" data-id="${esc(a.id)}">
+                    return `<tr class="cursor-pointer hover:bg-gray-50" onclick="app.openRiskDetail(this.dataset.id)" data-id="${esc(a.id)}" data-n="${esc(a.asset)}" data-machine="1">
                         <td class="px-6 py-3">
                             <div class="font-medium text-gray-800">${esc(a.asset)}</div>
                             <div class="text-[10px] text-gray-500 uppercase">${esc(a.service || '')}</div>

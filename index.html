@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.20.0 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.20.1 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -4789,7 +4789,13 @@
                 CveWatch.close(this, id, 'stopped by hand'); this.renderCve(true);
             }
             async cveWatchAgain(id) { await CveWatch.reopen(this, id); this.renderCve(true); }
-            cveOpen(id) { Prefs.set('cve', { ...Prefs.get('cve', {}), q: id }); this.cveSel = new Set(); this._cve = null; this.switchView('cve'); document.getElementById('cve-out')?.scrollIntoView({ block: 'start' }); }
+            cveOpen(id) {
+                const cur = Prefs.get('cve', {}), again = this.currentView === 'cve' && App.cveIds(cur.q).join(' ') === id;     // v4.21: a second click closes it
+                Prefs.set('cve', { ...cur, q: again ? '' : id }); this.cveSel = new Set(); this._cve = null; this._cveDelta = null;
+                const inp = document.getElementById('cve-input'); if (inp) inp.value = again ? '' : id;
+                this.switchView('cve');
+                if (!again) document.getElementById('cve-out')?.scrollIntoView({ block: 'start' });
+            }
             // The table of watched CVEs, for the sidebar team. Counts are official (accepted risk left out, like team status).
             async renderCveWatch() {
                 const el = document.getElementById('cve-watch'); if (!el) return;
@@ -4804,11 +4810,12 @@
                 this._cwRows = rows;
                 const n = (C, k) => C.list.filter(x => x.state.b === k).length;
                 const cls = { ok: 'text-green-900', a: 'text-amber-900 font-semibold', x: 'text-red-900 font-semibold' };
+                const openNow = App.cveIds(Prefs.get('cve', {}).q).join(' ');
                 const body = rows.map(({ p, C, st }) => {
                     const first = CveWatch.count((p.hist || [])[0], tm), now = C.list.length, d = first === null ? null : now - first;
-                    const title = C.qinfo[0]?.title || '';
-                    return `<tr class="align-top hover:bg-indigo-50 cursor-pointer" data-c="${esc(p.cve)}" onclick="app.cveOpen(this.dataset.c)">
-                        <td class="px-3 py-2"><div class="font-mono font-semibold text-indigo-900">${esc(p.cve)}${kev && kev.get(p.cve) ? ' <span class="text-red-800 text-xs">⚑ KEV</span>' : ''}</div><div class="text-[11px] text-gray-600 max-w-xs truncate" title="${esc(title)}">${esc(title || 'no Qualys check in our data yet')}</div>${p.note ? `<div class="text-[11px] text-gray-500">${esc(p.note)}</div>` : ''}</td>
+                    const title = C.qinfo[0]?.title || '', sel = openNow === p.cve;
+                    return `<tr class="align-top cursor-pointer ${sel ? 'bg-indigo-100 outline outline-2 outline-indigo-500' : 'hover:bg-indigo-50'}" data-c="${esc(p.cve)}" onclick="app.cveOpen(this.dataset.c)" title="${sel ? 'Shown below: click again to close it' : 'Click to show it below'}" aria-selected="${sel}">
+                        <td class="px-3 py-2"><div class="font-mono font-semibold text-indigo-900">${sel ? '▾ ' : ''}${esc(p.cve)}${kev && kev.get(p.cve) ? ' <span class="text-red-800 text-xs">⚑ KEV</span>' : ''}</div><div class="text-[11px] text-gray-600 max-w-xs truncate" title="${esc(title)}">${esc(title || 'no Qualys check in our data yet')}</div>${p.note ? `<div class="text-[11px] text-gray-500">${esc(p.note)}</div>` : ''}</td>
                         <td class="px-3 py-2 text-right"><span class="text-lg font-bold">${fmtNum(now)}</span><div class="text-[11px] text-gray-500">machines</div></td>
                         <td class="px-3 py-2 text-right whitespace-nowrap">${d === null ? '' : d < 0 ? `<strong class="text-green-900">−${fmtNum(-d)}</strong>` : d > 0 ? `<strong class="text-red-900">+${fmtNum(d)}</strong>` : '±0'}<div class="text-[11px] text-gray-500">since ${esc(D(p.at))}</div></td>
                         <td class="px-3 py-2 text-xs whitespace-nowrap">${C.ax ? `⟳ ${fmtNum(n(C, 'will'))} will patch<br>⚠ ${fmtNum(n(C, 'blocked'))} blocked · ✋ ${fmtNum(n(C, 'manual'))} manual` : '<span class="text-gray-500">no Automox data</span>'}</td>
@@ -4819,7 +4826,7 @@
                     <div class="bg-indigo-50 px-4 py-2 flex flex-wrap justify-between items-center gap-2"><h3 class="font-bold text-indigo-950">📌 Watched CVEs <span class="font-normal text-sm">· ${esc(App.teamLabel(tm))} · ${fmtNum(pins.length)}</span></h3>
                         <span class="flex gap-2 print-hide">${Demo.api() && pins.length ? `<button id="cve-refresh-all" onclick="app.cveRefreshAll()" class="write-only bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs disabled:opacity-50" title="Ask Qualys about every watched CVE now (at most 20), then Automox for their machines">⟳ Refresh all pinned</button>` : ''}${pins.length ? `<button onclick="app.cveWatchCopy()" class="bg-slate-800 text-white px-3 py-1 rounded text-xs">📋 Copy update for the cyber team</button>` : ''}</span></div>
                     ${pins.length ? `<div class="overflow-x-auto"><table class="min-w-full text-sm bg-white"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-3 py-2 text-left">CVE</th><th class="px-3 py-2 text-right">Open now</th><th class="px-3 py-2 text-right">Change</th><th class="px-3 py-2 text-left">Automox</th><th class="px-3 py-2 text-left">Target</th><th class="px-3 py-2 text-left">Trend</th></tr></thead><tbody class="divide-y">${body}</tbody></table></div>
-                        <p class="px-4 py-1.5 text-[11px] text-gray-500 bg-white border-t">Counts leave out risk-accepted machines and findings (like team status). A point is added after every Qualys sync and every Refresh; a CVE at 0 for ${CveWatch.CLEAR_DAYS} days closes itself. Click a row for the full lookup.</p>` : '<p class="px-4 py-3 text-sm text-gray-600 bg-white">Nothing watched right now.</p>'}
+                        <p class="px-4 py-1.5 text-[11px] text-gray-500 bg-white border-t">Counts leave out risk-accepted machines and findings (like team status). A point is added after every Qualys sync and every Refresh; a CVE at 0 for ${CveWatch.CLEAR_DAYS} days closes itself. Click a row for the full lookup below; click it again to close it.</p>` : '<p class="px-4 py-3 text-sm text-gray-600 bg-white">Nothing watched right now.</p>'}
                     ${closed.length ? `<details class="bg-white border-t px-4 py-2 text-xs"><summary class="cursor-pointer font-semibold">Closed (${fmtNum(closed.length)})</summary><table class="mt-1 min-w-full"><tbody class="divide-y">${closed.slice(0, 50).map(p => `<tr><td class="py-1 pr-3 font-mono">${esc(p.cve)}</td><td class="pr-3">${esc(D(p.at))} → ${esc(D(p.closedAt))}</td><td class="pr-3">${esc(p.closeWhy || '')}${p.closedBy && p.closedBy !== 'automatic' ? ' (' + esc(p.closedBy) + ')' : ''}</td><td class="pr-3 font-mono">${esc(CveWatch.trend(p, 'ALL', 4))}</td><td class="text-right"><button data-c="${esc(p.cve)}" onclick="app.cveWatchAgain(this.dataset.c)" class="write-only underline text-indigo-800">Watch again</button></td></tr>`).join('')}</tbody></table></details>` : ''}</div>`;
             }
             cveWatchText(rows, tm) {
@@ -5069,6 +5076,7 @@
                 this.renderCveWatch();
                 const asOf = (this.loadVulnMeta().imports || []).slice(-1)[0];
                 $('cve-asof').textContent = asOf ? `Qualys data as of ${new Date(asOf.at || asOf.date || Date.now()).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
+                if (!ids.length && CveWatch.open().length) { this.accNote(null); this._cve = null; out.innerHTML = '<p class="text-sm text-gray-500">Click a watched CVE above, or type CVE numbers and press <strong>Look up</strong>.</p>'; return; }
                 if (!ids.length) {
                     this.accNote(null); this._cve = null;
                     out.innerHTML = `<div class="text-sm text-gray-600 space-y-2"><p>Type or paste CVE numbers (any text works: the CVE numbers are picked out of it) and press <strong>Look up</strong>.</p>

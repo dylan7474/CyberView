@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.24.1 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.25.0 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1082,6 +1082,62 @@
         // SINGLE INSTANCE CLASSES
         // ==========================================
 
+        // =================== Performance log (v4.25) ===================
+        // Off unless switched on in Organisation setup (per browser). Each page change (and a CVE look-up) becomes one entry: the
+        // time until the page stopped changing, the server requests in that time (duration, size, and the server's own time from its
+        // Server-Timing header), how often stored data was read and how many of those were full copies, and the longest freeze.
+        class PerfLog {
+            static KEY = 'cyberview.perflog.v1';
+            static MAX = 300;
+            static cur = null;
+            static on() { try { return localStorage.getItem(this.KEY + '.on') === '1'; } catch (e) { return false; } }
+            static setOn(v) { try { localStorage.setItem(this.KEY + '.on', v ? '1' : '0'); } catch (e) { /* private window */ } }
+            static entries() { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch (e) { return []; } }
+            static clear() { try { localStorage.removeItem(this.KEY); } catch (e) { /* ignore */ } }
+            static read(key, copy) { const c = this.cur; if (!c) return; c.reads++; if (copy) { c.copies++; c.copyKeys[key] = (c.copyKeys[key] || 0) + 1; } }
+            static install() {
+                if (this._installed) return; this._installed = true;
+                try { performance.setResourceTimingBufferSize(2000); } catch (e) { /* old browser */ }
+                try { new PerformanceObserver(list => { const c = this.cur; if (!c) return; list.getEntries().forEach(e => { c.longTasks++; c.blocked += e.duration; c.longest = Math.max(c.longest, e.duration); }); }).observe({ entryTypes: ['longtask'] }); } catch (e) { /* not supported */ }
+            }
+            // start an entry; it ends when the page has not changed for 800 ms (at most 90 s)
+            static begin(what) {
+                if (!this.on()) return;
+                this.install();
+                if (this.cur) this.finish(true);
+                const c = this.cur = { what, at: new Date().toISOString(), t0: performance.now(), last: performance.now(), reads: 0, copies: 0, copyKeys: {}, longTasks: 0, blocked: 0, longest: 0 };
+                const main = document.querySelector('main');
+                c.mo = new MutationObserver(() => { c.last = performance.now(); }); if (main) c.mo.observe(main, { childList: true, subtree: true, characterData: true });
+                const tick = () => { if (this.cur !== c) return; const now = performance.now(); if (now - c.last > 800 || now - c.t0 > 90000) this.finish(false); else c.timer = setTimeout(tick, 200); };
+                c.timer = setTimeout(tick, 300);
+            }
+            static finish(cut) {
+                const c = this.cur; if (!c) return; this.cur = null;
+                clearTimeout(c.timer); c.mo && c.mo.disconnect();
+                const end = cut ? performance.now() : c.last;
+                const api = performance.getEntriesByType('resource').filter(r => r.startTime >= c.t0 - 5 && r.startTime <= end && /\/api\//.test(r.name));
+                const srv = (r) => Math.round((r.serverTiming || []).reduce((a, x) => a + (x.duration || 0), 0));
+                const reqs = api.map(r => ({ u: r.name.replace(/^.*?\/api\//, 'api/').split('?')[0], ms: Math.round(r.duration), srv: srv(r), kb: Math.round((r.encodedBodySize || r.transferSize || 0) / 1024) }));
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || [];
+                const e = { at: c.at, what: c.what, ms: Math.round(end - c.t0), cut: !!cut, api: reqs.length, apiMs: reqs.reduce((a, r) => Math.max(a, r.ms), 0), srvMs: reqs.reduce((a, r) => a + r.srv, 0),
+                    kb: reqs.reduce((a, r) => a + r.kb, 0), slowest: reqs.sort((a, b) => b.ms - a.ms).slice(0, 3), reads: c.reads, copies: c.copies,
+                    copyKeys: Object.entries(c.copyKeys).sort((a, b) => b[1] - a[1]).slice(0, 4), frozen: Math.round(c.blocked), longest: Math.round(c.longest), machines: reg.length,
+                    findings: (window.app && app._vd && app._vd.all) ? app._vd.all.length : null, mode: StorageService.mode, v: (document.getElementById('app-version')?.textContent || '').split(' ')[0] };
+                const L = this.entries(); L.push(e);
+                try { localStorage.setItem(this.KEY, JSON.stringify(L.slice(-this.MAX))); } catch (err) { /* full */ }
+                try { performance.clearResourceTimings(); } catch (err) { /* ignore */ }
+                if (window.app && app.currentView === 'org') setTimeout(() => app.renderPerfPanel && app.renderPerfPanel(), 0);
+                if (this._wait) { const w = this._wait; this._wait = null; w(e); }
+            }
+            static waitDone() { return new Promise(res => { if (!this.cur) return res(null); this._wait = res; }); }
+            static text(list = this.entries()) {
+                const L = [`CyberView performance log · ${list[0]?.v || ''} · ${list[0]?.mode || ''} · ${list[list.length - 1]?.machines ?? '?'} machines · ${list[list.length - 1]?.findings ?? '?'} findings`,
+                    'when | what | total ms | server requests (n, slowest ms, server ms, KB) | stored-data reads / full copies | longest freeze ms'];
+                list.forEach(e => L.push(`${e.at.slice(11, 19)} | ${e.what} | ${e.ms}${e.cut ? ' (cut short)' : ''} | ${e.api}, ${e.apiMs}, ${e.srvMs}, ${e.kb} KB${e.slowest.length ? ' [' + e.slowest.map(r => `${r.u} ${r.ms}ms${r.srv ? '/srv ' + r.srv : ''} ${r.kb}KB`).join('; ') + ']' : ''} | ${e.reads}/${e.copies}${e.copyKeys.length ? ' (' + e.copyKeys.map(([k, n]) => k.replace('gov_', '') + ' ' + n).join(', ') + ')' : ''} | ${e.longest}`));
+                return L.join('\n');
+            }
+        }
+
         class StorageService {
             static KEYS = {
                 ASSET_REGISTER: 'gov_asset_register',
@@ -1152,6 +1208,7 @@
                 Object.values(this.KEYS).forEach(k => {
                     if (st[k]) { this._cache[k] = st[k].data; this._rev[k] = st[k].revision; }
                 });
+                this.rev++;
                 this.mode = 'server';
                 window.addEventListener('beforeunload', (e) => {
                     if (this._dirty.size || this._removed.size || this._flushing) { e.preventDefault(); e.returnValue = ''; }
@@ -1168,12 +1225,31 @@
 
             static ns = '';      // local mode: the demo keeps its data under its own names (Demo.NS), apart from anything else in this browser
             static load(key) {
+                PerfLog.read(key, true);
                 if (this.mode === 'server') { const v = this._cache[key]; return v === undefined ? [] : structuredClone(v); }
                 const data = localStorage.getItem(this.ns + key);
                 return data ? JSON.parse(data) : [];
             }
+            // v4.25: read WITHOUT a copy, for code that only looks. The same object until the key is saved again, so callers must
+            // never change it (load() for that). ?strict freezes it so a change throws (the tests use it).
+            static rev = 0;
+            static _peek = {};
+            static peek(key) {
+                PerfLog.read(key, false);
+                const c = this._peek[key];
+                if (c && c.rev === this.rev) return c.v;
+                let v;
+                if (this.mode === 'server') { v = this._cache[key]; if (v === undefined) v = []; }
+                else { const d = localStorage.getItem(this.ns + key); v = d ? JSON.parse(d) : []; }
+                if (this.STRICT) v = this.deepFreeze(structuredClone(v));
+                this._peek[key] = { rev: this.rev, v };
+                return v;
+            }
+            static STRICT = /[?&]strict\b/.test(location.search);
+            static deepFreeze(o) { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); Object.values(o).forEach(x => this.deepFreeze(x)); } return o; }
 
             static save(key, data) {
+                this.rev++;      // v4.25: peek() copies are stale now
                 if (this.mode === 'server' && this.PER_RECORD.has(key)) { this._cache[key] = structuredClone(data); return; }
                 if (this.mode === 'server') {
                     if (this.me && this.me.role === 'viewer') { this.toast('Read-only account: that change was not saved'); return; }
@@ -1189,6 +1265,7 @@
             }
 
             static remove(key) {
+                this.rev++;
                 if (this.mode === 'server') {
                     delete this._cache[key];
                     this._dirty.delete(key);
@@ -1366,7 +1443,7 @@
                 const o = this.stored(), B = this.BUILTIN;
                 const S = o ? { ...B, ...o } : { ...B };
                 // a team already used in the register always stays selectable, so no asset loses its owner
-                const used = new Set((StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).map(r => r.owner).filter(t => t && t !== 'Unknown' && t !== 'Unrecognised'));
+                const used = new Set((StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || []).map(r => r.owner).filter(t => t && t !== 'Unknown' && t !== 'Unrecognised'));
                 const teams = [...S.teams]; used.forEach(t => { if (!teams.includes(t)) teams.push(t); });
                 S.allTeams = teams;
                 S._compiled = (S.ownerRules || []).map(r => ({ ...r, test: this.matcher(r) }));
@@ -1394,15 +1471,18 @@
             // the register (spelt exactly as stored) and every service the rules name. Nothing on a machine is changed by it.
             static NO_SVC = ['', 'Unclassified', 'Unknown'];
             static serviceSeed() {
+                const key = StorageService.rev + '|' + (StorageService._orgRev || 0);      // v4.25: once per data change (was once per call: 2,000+ register copies on Data Health)
+                if (this._seed && this._seed.key === key) return this._seed.list;
                 const S = this.get(), out = new Set();
                 (S.serviceRules || []).forEach(r => r.service && out.add(String(r.service).trim()));
                 (S.serviceOwners || []).forEach(r => r.service && out.add(String(r.service).trim()));
-                (StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).forEach(r => { const v = String(r.service || '').trim(); if (!this.NO_SVC.includes(v)) out.add(v); });
-                return [...out].filter(Boolean).sort((a, b) => a.localeCompare(b));
+                (StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || []).forEach(r => { const v = String(r.service || '').trim(); if (!this.NO_SVC.includes(v)) out.add(v); });
+                const list = [...out].filter(Boolean).sort((a, b) => a.localeCompare(b));
+                this._seed = { key, list }; return list;
             }
             static services() { const S = this.get(); return Array.isArray(S.services) && S.services.length ? S.services : this.serviceSeed(); }
             static servicesSaved() { const S = this.stored(); return !!(S && Array.isArray(S.services) && S.services.length); }
-            static inList(v) { return this.NO_SVC.includes(String(v || '').trim()) || this.services().includes(String(v || '').trim()); }
+            static inList(v) { const L = this.services(); if (this._inSetFor !== L) { this._inSetFor = L; this._inSet = new Set(L); } const t = String(v || '').trim(); return this.NO_SVC.includes(t) || this._inSet.has(t); }
             // a dropdown of the list; the machine's own value stays (marked) when it is not on the list, so nothing is lost
             static serviceOptions(cur, { blank = null, admin = false } = {}) {
                 const L = this.services(), c = String(cur ?? '').trim(), o = (v, l) => `<option value="${esc(v)}">${esc(l)}</option>`;
@@ -1413,7 +1493,7 @@
             // Data but no organisation setup (a database or backup from before v3.20): matching machine names with the wrong
             // domain suffixes would create duplicate assets, so imports and syncs wait until the setup is saved or restored.
             static needsSetup() {
-                return !this.stored() && ((StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).length > 0 || (StorageService.load(StorageService.KEYS.REVIEW_QUEUE) || []).length > 0);
+                return !this.stored() && ((StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || []).length > 0 || (StorageService.peek(StorageService.KEYS.REVIEW_QUEUE) || []).length > 0);
             }
             static blocked(what) {
                 if (!this.needsSetup()) return false;
@@ -2029,9 +2109,9 @@
                 const PB = await app.planBuckets('ALL', 'ALL', true);      // official: never risk-accepted
                 if (!PB || !PB.policiesRead) return null;            // no promises without Automox's schedules
                 const F = this.load(), now = this.now(), day = 864e5, vd = PB.vd;
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 const open = new Set(vd.dets.map(d => d.asset + '|' + d.qid)), excepted = new Set((vd.excepted || []).map(d => d.asset + '|' + d.qid));
-                const sd = StorageService.load(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
+                const sd = StorageService.peek(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
                 const why = new Map(); ['manual', 'blocked', 'will'].forEach(b => PB.B[b].forEach(d => why.set(d.asset + '|' + d.qid, b === 'will' ? 'Automox still has it waiting' : d._why)));
                 const tally = (w, t, kept) => { let r = F.results.find(x => x.w === w && x.t === t); if (!r) F.results.push(r = { w, t, k: 0, m: 0 }); if (kept) r.k++; else r.m++; };
                 let kept = 0, missed = 0, dropped = 0;
@@ -2133,7 +2213,7 @@
                 if (!D || !(D.devices || []).length) return null;                // no Automox data: nothing to compare
                 const m = AutomoxService.match(), out = [], exO = StatusEngine.exIndex(), show = RiskView.on();
                 this._osHidden = { machines: 0, findings: 0, expiring: 0 };
-                StorageService.load(StorageService.KEYS.ASSET_REGISTER).forEach(r => {
+                StorageService.peek(StorageService.KEYS.ASSET_REGISTER).forEach(r => {
                     if (r.unrecognised) return;
                     const acc = RiskView.machine(r, exO);
                     const x = m.byAsset.get(r.normalizedName); if (!x || !x.dev) return;
@@ -2167,7 +2247,7 @@
             // Machines accepted as a whole, by name.
             static machineSet(ex) {
                 ex = ex || StatusEngine.exIndex();
-                return new Set(StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => this.machine(r, ex)).map(r => r.normalizedName));
+                return new Set(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => this.machine(r, ex)).map(r => r.normalizedName));
             }
             static expiring(a) { if (!a || !a.expDate) return false; const d = Math.floor((Date.parse(a.expDate) - Date.parse(this.today())) / 864e5); return d >= 0 && d <= this.SOON; }
             static flag(a, small = false) {
@@ -2191,7 +2271,7 @@
             // Count what a machine-level page leaves out, for names in scope.
             static machineHidden(names, ex) {
                 ex = ex || StatusEngine.exIndex();
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 let machines = 0, expiring = 0;
                 names.forEach(nm => { const a = this.machine(reg.get(nm), ex); if (a) { machines++; if (this.expiring(a)) expiring++; } });
                 return { machines, findings: 0, expiring };
@@ -2646,7 +2726,7 @@
             // Adds p (1-4), due (ms), backlog and overdue to the open findings of getVulnData().
             static annotate(vd) {
                 const S = this.settings(), sla = this.sla(), now = Date.now();
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 for (const d of [...vd.dets, ...(vd.excepted || [])]) {
                     const r = reg.get(d.asset);
                     d.p = this.priority(this.findingTier(d, S), r, S);
@@ -2669,7 +2749,7 @@
             // In date = status Risk Accepted and expiry not passed. At expiry the findings count again by themselves.
             static exIndex() {
                 const today = new Date().toISOString().slice(0, 10), by = new Map();
-                for (const a of (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || [])) {
+                for (const a of (StorageService.peek(StorageService.KEYS.RISK_ACCEPTANCES) || [])) {
                     if (a.status !== 'Risk Accepted' || !a.asset) continue;
                     let e = by.get(a.asset); if (!e) by.set(a.asset, e = { whole: null, qids: new Map(), expired: [], review: [] });
                     if (a.expDate && a.expDate < today) { e.expired.push(a); continue; }
@@ -3854,7 +3934,7 @@
             static RANK = { 'linked by hand': 0, 'name': 1, 'short name': 2, 'IP only': 3 };
             static match() {
                 const D = this.data; if (!D) return null;
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
                 const sig = reg.length + '|' + JSON.stringify(this.links()) + '|' + (D.meta?.at || '');
                 if (this._m && this._m.sig === sig) return this._m;
                 const byName = new Map(), byShort = new Map(), byIp = new Map();
@@ -4300,7 +4380,7 @@
                 const results = ReconciliationEngine.run(transformed);
                 // Remediation: OS / hardware tasks for assets in this export.
                 const names = new Set(transformed.map(a => a.normalizedName));
-                const regMap = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const regMap = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 RemediationVerifier.fromAssetImport({ label: 'asset export ' + new Date().toLocaleDateString('en-GB'), names, reg: regMap })
                     .then(rs => { const txt = RemediationVerifier.summaryText(rs); this.app.lastRemediationCheck = rs; if (txt) StorageService.toast(txt); const el = document.getElementById('import-rem-result'); if (el) el.textContent = txt; })
                     .catch(e => console.error('[Remediation] check after asset import failed', e));
@@ -4385,6 +4465,7 @@
             }
 
             switchView(viewId) {
+                if (!(PerfLog.cur && PerfLog.cur.t0 === 0)) PerfLog.begin('page: ' + viewId);     // v4.25 performance log (when on)
                 document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
                 
                 const target = document.getElementById('view-' + viewId);
@@ -4495,8 +4576,8 @@
                 });
                 // ✎ next to every machine that links to its page (not in the register, which has its own Edit)
                 if (view.id === 'view-register') return;
-                const reg = this._regNames && this._regNamesAt === StorageService.load(StorageService.KEYS.ASSET_REGISTER).length ? this._regNames
-                    : (this._regNames = new Set(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => r.normalizedName)), this._regNamesAt = this._regNames.size, this._regNames);
+                const reg = this._regNames && this._regNamesAt === StorageService.peek(StorageService.KEYS.ASSET_REGISTER).length ? this._regNames
+                    : (this._regNames = new Set(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => r.normalizedName)), this._regNamesAt = this._regNames.size, this._regNames);
                 view.querySelectorAll('[data-n][onclick*="openAssetDetail"]:not([data-pen]), [data-n][onclick*="inspectAsset"]:not([data-pen]), [data-n][data-machine]:not([data-pen])').forEach(el => {
                     el.dataset.pen = '1'; const n = el.dataset.n; if (!reg.has(n)) return;
                     const pen = `<button type="button" class="m-edit write-only ml-1 px-1 rounded text-gray-400 hover:text-indigo-800 hover:bg-indigo-50 print-hide" data-asset="${esc(n)}" title="Edit this machine: team, service, tier, exposure, OS" aria-label="Edit ${esc(n)}" onclick="event.stopPropagation(); event.preventDefault(); app.editAsset(this.dataset.asset)">✎</button>`;
@@ -4514,7 +4595,7 @@
                 // Right-click on a machine: Open / Edit / Copy name
                 document.addEventListener('contextmenu', (e) => {
                     const el = e.target.closest('main [data-n], main [data-asset]'); if (!el) return;
-                    const n = el.dataset.n || el.dataset.asset, r = StorageService.load(StorageService.KEYS.ASSET_REGISTER).find(x => x.normalizedName === n); if (!r) return;
+                    const n = el.dataset.n || el.dataset.asset, r = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).find(x => x.normalizedName === n); if (!r) return;
                     e.preventDefault(); this.machineMenu(r, e.clientX, e.clientY);
                 });
                 document.addEventListener('click', (e) => { if (!e.target.closest('#m-menu')) this.machineMenu(null); });
@@ -4573,8 +4654,8 @@
 
             // ---------- Status (phase B): every source joined into one status per asset and per team.
             async statusData() {
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
-                const own = StorageService.load(StorageService.KEYS.EOL_DATES) || [];
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
+                const own = StorageService.peek(StorageService.KEYS.EOL_DATES) || [];
                 const products = reg.map(r => EolDates.match(r.os)?.product).filter(Boolean);
                 const [vd, dates] = await Promise.all([this.getVulnData(), EolDates.load(products).catch(() => ({ data: {}, failed: products })), RemediationService.refreshQuiet()]);
                 let axOk = false;
@@ -4587,7 +4668,7 @@
                     return cache.get(k);
                 };
                 const allBy = new Set(vd.all.map(d => d.asset));
-                const sd = StorageService.load(StorageService.KEYS.SCAN_DATES);
+                const sd = StorageService.peek(StorageService.KEYS.SCAN_DATES);
                 const res = StatusEngine.assess({ reg, vd: { ...vd, allBy }, life, scans: (sd && !Array.isArray(sd)) ? sd : {}, axCats: m ? (n) => this.axCats(n, m) : null,
                     tasks: RemediationService.list(), history: this.statusHistory() });
                 res.asOf = this.dataAsOf(reg, dates);
@@ -4709,7 +4790,7 @@
                 StorageService.save(StorageService.KEYS.STATUS_HISTORY, [...list, snap].slice(-400));
                 return snap;
             }
-            statusHistory() { const h = StorageService.load(StorageService.KEYS.STATUS_HISTORY); return Array.isArray(h) ? h : []; }
+            statusHistory() { const h = StorageService.peek(StorageService.KEYS.STATUS_HISTORY); return Array.isArray(h) ? h : []; }
             // Small single-axis line chart (inline SVG). series: [{ name, pts: [{t, v}], dash, color }]; hover titles on the points.
             lineChartSVG({ series, yMax, fmt = (v) => fmtNum(v), title }) {
                 const W = 620, H = 200, L = 48, R = 110, T = 12, B = 28;
@@ -4812,6 +4893,46 @@
                 return { out, bad };
             }
 
+            // ---------- Performance log panel (v4.25), in Organisation setup. Kept in this browser only.
+            renderPerfPanel() {
+                const el = document.getElementById('perf-panel'); if (!el) return;
+                const on = PerfLog.on(), L = PerfLog.entries().slice(-40).reverse(), run = !!this._perfRun;
+                const ms = (n) => n >= 1000 ? (n / 1000).toFixed(1) + ' s' : n + ' ms';
+                el.innerHTML = `<div class="flex flex-wrap justify-between items-center gap-2"><h4 class="font-bold">⏱ Performance log</h4>
+                    <span class="flex flex-wrap gap-2"><button onclick="app.perfToggle()" role="switch" aria-checked="${on}" class="px-3 py-1 rounded border text-sm ${on ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-white'}">${on ? '● Recording' : '○ Not recording'}</button>
+                    <button onclick="app.perfRunAll()" ${run ? 'disabled' : ''} class="px-3 py-1 rounded border text-sm bg-white hover:bg-gray-50 disabled:opacity-50">${run ? '⟳ ' + esc(this._perfRun) : '▶ Run the standard check'}</button>
+                    <button onclick="app.perfCopy()" class="px-3 py-1 rounded border text-sm bg-slate-800 text-white">📋 Copy the log</button>
+                    <button onclick="if (confirm('Clear the performance log in this browser?')) { PerfLog.clear(); app.renderPerfPanel(); }" class="px-3 py-1 rounded border text-sm bg-white">Clear</button></span></div>
+                    <p class="text-xs text-gray-600">Times how long pages take in <strong>this browser</strong>: until the page stops changing, the server requests (and how long the server itself took), reads of stored data, and the longest freeze. Turn it on and use the portal as usual, or press <em>Run the standard check</em> (opens the main pages one after another, about a minute), then <em>Copy the log</em> and paste it to whoever is looking at the speed. Nothing is sent anywhere; it is kept in this browser.</p>
+                    ${L.length ? `<div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="min-w-full text-xs" data-nosort><thead class="bg-gray-50 text-gray-600 sticky top-0"><tr><th class="px-2 py-1 text-left">When</th><th class="px-2 py-1 text-left">What</th><th class="px-2 py-1 text-right">Total</th><th class="px-2 py-1 text-right">Server requests</th><th class="px-2 py-1 text-right">Slowest request</th><th class="px-2 py-1 text-right">Server time</th><th class="px-2 py-1 text-right">Data</th><th class="px-2 py-1 text-right">Reads / copies</th><th class="px-2 py-1 text-right">Longest freeze</th></tr></thead>
+                        <tbody class="divide-y">${L.map(e => `<tr class="${e.ms > 3000 ? 'bg-amber-50' : ''}"><td class="px-2 py-1 whitespace-nowrap">${esc(App.whenText(Date.parse(e.at)))}</td><td class="px-2 py-1">${esc(e.what)}</td><td class="px-2 py-1 text-right font-semibold">${e.ms > 3000 ? '⚠ ' : ''}${ms(e.ms)}${e.cut ? ' (cut short)' : ''}</td><td class="px-2 py-1 text-right">${e.api}</td><td class="px-2 py-1 text-right" title="${esc(e.slowest.map(r => r.u + ' ' + r.ms + ' ms').join('\n'))}">${e.apiMs ? ms(e.apiMs) + (e.slowest[0] ? ' · ' + esc(e.slowest[0].u) : '') : '-'}</td><td class="px-2 py-1 text-right">${e.srvMs ? ms(e.srvMs) : '-'}</td><td class="px-2 py-1 text-right">${e.kb ? fmtNum(e.kb) + ' KB' : '-'}</td><td class="px-2 py-1 text-right">${e.reads} / ${e.copies}</td><td class="px-2 py-1 text-right">${e.longest ? ms(e.longest) : '-'}</td></tr>`).join('')}</tbody></table></div>`
+                        : `<p class="text-sm text-gray-500">${on ? 'Recording: open a few pages and they appear here.' : 'Nothing recorded yet.'}</p>`}`;
+            }
+            perfToggle() { PerfLog.setOn(!PerfLog.on()); this.renderPerfPanel(); StorageService.toast(PerfLog.on() ? 'Recording page timings in this browser' : 'Performance log stopped'); }
+            perfCopy() {
+                const t = PerfLog.text(); if (!PerfLog.entries().length) { StorageService.toast('The log is empty'); return; }
+                const done = () => StorageService.toast('Log copied: paste it into your message');
+                if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, () => prompt('Copy the log:', t)); else prompt('Copy the log:', t);
+            }
+            // ▶ Run the standard check: the main pages one after another (each measured), plus a CVE look-up, then back here
+            async perfRunAll() {
+                if (this._perfRun) return;
+                if (!PerfLog.on()) PerfLog.setOn(true);
+                const pages = ['dashboard', 'vuln', 'plan', 'cve', 'status', 'reports', 'eol', 'automox', 'register', 'review', 'risk-accept', 'health'];
+                for (const [i, v] of pages.entries()) {
+                    this._perfRun = `${i + 1} of ${pages.length + 1}: ${v}`;
+                    this.switchView(v); await PerfLog.waitDone();
+                }
+                const cves = CveWatch.open().map(p => p.cve)[0] || 'CVE-2024-6387';
+                this._perfRun = `${pages.length + 1} of ${pages.length + 1}: CVE look-up`;
+                Prefs.set('cve', { ...Prefs.get('cve', {}), q: cves }); this.cveSel = new Set(); this._cve = null;
+                const inp = document.getElementById('cve-input'); if (inp) inp.value = cves;
+                this.cveGo(); await PerfLog.waitDone();
+                this._perfRun = null;
+                this.switchView('org'); await PerfLog.waitDone();
+                document.getElementById('perf-panel')?.scrollIntoView({ block: 'start' });
+                StorageService.toast('Standard check done: press Copy the log');
+            }
             orgServicesHTML(reg, dis, ta) {
                 const L = OrgSettings.services(), saved = OrgSettings.servicesSaved(), cnt = new Map();
                 reg.forEach(r => { const v = String(r.service || '').trim() || 'Unclassified'; cnt.set(v, (cnt.get(v) || 0) + 1); });
@@ -4829,11 +4950,12 @@
                 </div>`;
             }
             renderOrgSetup() {
+                setTimeout(() => this.renderPerfPanel(), 0);
                 const S = OrgSettings.get(), stored = OrgSettings.stored();
                 const admin = !this.me || this.me.role === 'admin';
                 const dis = admin ? '' : 'disabled';
                 const ta = (id, v, rows = 6) => `<textarea id="${id}" rows="${rows}" class="w-full border rounded px-2 py-1 font-mono text-xs" ${dis}>${esc(v)}</textarea>`;
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER) || [];
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || [];
                 const count = (t) => reg.filter(r => r.owner === t).length;
                 document.getElementById('org-body').innerHTML = `
                     <div class="${stored ? 'bg-white' : 'bg-amber-50 border-amber-300'} border rounded p-3 text-sm">${stored
@@ -4849,6 +4971,7 @@
                         </div>
                     </div>
                     ${this.orgServicesHTML(reg, dis, ta)}
+                    <div id="perf-panel" class="bg-white border rounded p-4 space-y-3"></div>
                     <div class="bg-white border rounded p-4 space-y-2"><h4 class="font-bold">Tiers (how important a machine is)</h4>
                         <p class="text-xs text-gray-600"><strong>HA side A / B</strong> (v4.23): every tier has two sides, the two halves of a high-availability pair, so you can patch side A one day and side B the next if A went well. The side is for scheduling only: priorities use the tier. Set it with the tier (Tier 1A, 1B…); machine lists can be downloaded per side.</p>
                         <p class="text-xs text-gray-600">Your own names and meanings for the three tiers. People set the tier of each machine in the Asset Register (Edit or bulk edit), like its owner. Tier 1 is the most important; a machine with no tier counts as Tier 2. The starting words follow the NCSC's guidance on critical assets and the systems they rely on.</p>
@@ -5034,6 +5157,7 @@
                 return `<p class="text-sm font-semibold text-slate-800 mt-1">🩹 ${esc(t)}${at}</p>`;
             }
             cveGo() {
+                PerfLog.begin('CVE look-up');
                 const $ = (id) => document.getElementById(id);
                 this.cveSel = new Set();
                 const ids = App.cveIds($('cve-input').value);
@@ -5197,6 +5321,7 @@
             }
             async cveRefresh() {
                 const C = this._cve; if (!C || !C.ids.length) return;
+                PerfLog.begin('CVE refresh from Qualys');
                 if (!Demo.api()) { StorageService.toast('Refreshing needs the CyberView server'); return; }
                 if (OrgSettings.needsSetup && OrgSettings.needsSetup()) { OrgSettings.blocked('refreshing the CVE'); return; }
                 const btn = document.getElementById('cve-refresh-btn'); if (btn) { btn.disabled = true; btn.textContent = '⟳ Asking Qualys…'; }
@@ -5226,7 +5351,7 @@
 
             cveDeltaHTML(C) {
                 const D = this._cveDelta; if (!D || D.ids !== C.ids.join(',')) return '';
-                const W = App.whenText, reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const W = App.whenText, reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 const nm = (a) => esc(reg.get(a)?.originalName || a), list = (a) => a.slice(0, 12).map(nm).join(', ') + (a.length > 12 ? ` +${a.length - 12} more` : '');
                 const ax = D.ax === 'done' ? '✓ Automox refreshed too' : D.ax === 'running' ? '⟳ Automox is refreshing these machines…' : `Automox: ${esc(D.ax)}`;
                 return `<div class="border-2 border-blue-300 bg-blue-50 text-blue-950 rounded-lg p-3 text-sm space-y-1">
@@ -5251,7 +5376,7 @@
             async cveData(ids, team, official = false) {
                 const vd = await this.getVulnData();
                 const S = StatusEngine.settings(), end = Demo.now() + (+S.patchPlanDays || 7) * 864e5;
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), regMap = new Map(reg.map(r => [r.normalizedName, r]));
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), regMap = new Map(reg.map(r => [r.normalizedName, r]));
                 const want = new Set(ids), idOf = (c) => String(typeof c === 'string' ? c : (c && c.id) || '').toUpperCase();
                 // The Qualys checks naming the CVE: from the KnowledgeBase entry, and from any finding that lists it
                 const qidHits = new Map();
@@ -5314,7 +5439,7 @@
                 const fixed = new Set();
                 (vd.all || []).forEach(d => { if (!RemediationVerifier.ACTIVE(d.status) && qidHits.has(String(d.qid)) && !rows.has(d.asset) && inScope(regMap.get(d.asset))) fixed.add(d.asset); });
                 // Machines in scope that could have it without it showing: not scanned for a while, or never
-                const sd = StorageService.load(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
+                const sd = StorageService.peek(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
                 let stale = 0, never = 0;
                 reg.filter(r => inScope(r) && !r.unrecognised).forEach(r => {
                     if (!show && RiskView.machine(r, vd.ex)) return;
@@ -5672,7 +5797,7 @@
                 const sel = (k, v) => `<select data-k="${k}" class="sr-in border-gray-300 rounded text-sm" ${dis}>${[1, 2, 3, 4].map(p => `<option value="${p}" ${+v === p ? 'selected' : ''}>P${p}</option>`).join('')}</select>`;
                 const matrix = `<table class="text-sm border"><thead class="bg-gray-50"><tr><th class="px-3 py-1 text-left">Finding tier \\ Asset tier</th><th class="px-3 py-1">Tier 1</th><th class="px-3 py-1">Tier 2 / not set</th><th class="px-3 py-1">Tier 3</th></tr></thead>
                     <tbody>${[1, 2, 3, 4].map(f => `<tr class="border-t"><td class="px-3 py-1">${FT[f]}</td>${[0, 1, 2].map(i => `<td class="px-3 py-1 text-center">${sel(`m.${f}.${i}`, S.matrix[f][i])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => !r.unrecognised);
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => !r.unrecognised);
                 const noTier = reg.filter(r => !StatusEngine.tierOf(r)), noExp = reg.filter(r => !r.exposure || r.exposure === 'Unknown');
                 const oldCrit = reg.filter(r => r.criticality && r.criticality !== 'Medium' && !StatusEngine.tierOf(r));
                 const pct = (n) => reg.length ? Math.round(n * 100 / reg.length) + '%' : '-';
@@ -5979,7 +6104,7 @@
                 const ctx = this.newVulnCtx();
                 const kb = new Map((pkg.qids || []).map(q => [String(q.qid), q]));
                 // If Qualys gave no scores this time (the asset search failed), keep the ones we had rather than zeroing them.
-                const prevSum = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
+                const prevSum = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
                 const now = Date.now(), day = 864e5;
                 let hosts = 0, hi = 0;
                 const scans = new Map();                                // asset -> last Qualys VM scan (for the scan coverage check)
@@ -6082,7 +6207,7 @@
 
                 const qEl = document.getElementById('ax-q'), hadFocus = !!qEl && document.activeElement === qEl, caret = qEl ? qEl.selectionStart : 0;
                 const m = AutomoxService.match(), scope = document.getElementById('ax-scope').value;
-                let reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => scope === 'ALL' || (r.owner || 'Unknown') === scope);
+                let reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => scope === 'ALL' || (r.owner || 'Unknown') === scope);
                 { const exA = StatusEngine.exIndex(); this.accNote(RiskView.machineHidden(reg.map(r => r.normalizedName), exA));      // v4.13 Risk-accepted switch
                   if (!RiskView.on()) { const acc = RiskView.machineSet(exA); reg = reg.filter(r => !acc.has(r.normalizedName)); } }
                 S.scope = scope;   // a fix opened from here shows this team's assets (v3.18.3)
@@ -6151,7 +6276,7 @@
                 };
 
                 const amb = m.ambiguous.filter(a => cats.has(a));
-                const regNames = StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => r.normalizedName).sort();
+                const regNames = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => r.normalizedName).sort();
                 const extra = m.extra.slice().sort((a, b) => a.name.localeCompare(b.name));
                 const canWrite = !this.me || this.me.role !== 'viewer';
                 const tierOpts = [['1', 'P1'], ['2', 'P1–P2'], ['3', 'P1–P3'], ['4', 'All priorities']].map(([v, l]) => `<option value="${v}" ${S.tier === v ? 'selected' : ''}>${l}</option>`).join('');
@@ -6197,7 +6322,7 @@
             }
             axLinkDevice(devId, asset) {
                 asset = String(asset || '').trim(); if (!asset) return;
-                if (!StorageService.load(StorageService.KEYS.ASSET_REGISTER).some(r => r.normalizedName === asset)) { StorageService.toast(`No asset called ${asset} in the register`); return; }
+                if (!StorageService.peek(StorageService.KEYS.ASSET_REGISTER).some(r => r.normalizedName === asset)) { StorageService.toast(`No asset called ${asset} in the register`); return; }
                 this.axLink(asset, devId);
             }
             async axSync(followUp = false, extraIds = []) {
@@ -6379,7 +6504,7 @@
             // The Simple view's Dashboard panels (team status is the existing panel above them).
             async renderDashSimple() {
                 const el = document.getElementById('dash-simple'); if (!el) return;      // both views since v4.15
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER) || [];
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || [];
                 if (StorageService.mode !== 'server' && !Demo.ON && !reg.length) { el.innerHTML = Demo.welcomeHTML(); return; }
                 const card = (title, body, link, linkText) => `<div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">${title}</h3>${link ? `<a href="#" onclick="app.switchView('${link}'); return false;" class="text-sm text-blue-700 underline whitespace-nowrap">${linkText} →</a>` : ''}</div>${body}</div>`;
                 const row = (sym, label, value, sub = '') => `<div class="flex justify-between items-baseline gap-3 border rounded-lg px-3 py-2"><span>${sym} ${label}${sub ? ` <span class="text-xs text-gray-500">${sub}</span>` : ''}</span><span class="font-semibold text-right text-sm">${value}</span></div>`;
@@ -6416,7 +6541,7 @@
             }
 
             renderDashboard() {
-                const register = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
+                const register = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
                 this.renderDashSimple();
                 this.renderDashStatus();
                 const drawRem = () => { const el = document.getElementById('dash-remediation'); if (el) el.innerHTML = RemediationStats.html(RemediationStats.compute(RemediationService.list(), App.team())); };
@@ -6432,7 +6557,7 @@
                 const known = reg.filter(r => !r.unrecognised && mine(r)), queue = ReviewQueueService.getQueue().filter(x => (x.status === 'PENDING' || x.status === 'IN_REVIEW') && (tm === 'ALL' || x.suggestedOwner === tm)).length;
                 const noTeam = reg.filter(r => StatusEngine.teamOf(r) === 'Unassigned').length, noTier = known.filter(r => !StatusEngine.tierOf(r)).length, noSvc = known.filter(r => !r.service || r.service === 'Unclassified').length;
                 const ownerOf = new Map(reg.map(r => [r.normalizedName, r.owner]));
-                const ras = (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => (a.status === 'Risk Accepted' || a.status === 'Open') && (tm === 'ALL' || (ownerOf.get(a.asset) || a.owner) === tm));
+                const ras = (StorageService.peek(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => (a.status === 'Risk Accepted' || a.status === 'Open') && (tm === 'ALL' || (ownerOf.get(a.asset) || a.owner) === tm));
                 const now = Date.now(), exp = (a) => StatusEngine.time(a.expDate);
                 const expired = ras.filter(a => exp(a) && exp(a) < now).length, soon = ras.filter(a => exp(a) >= now && exp(a) - now <= 30 * 864e5).length;
                 const row = (sym, label, n, view, ok) => `<a href="#" onclick="app.switchView('${view}'); return false;" class="flex justify-between items-baseline gap-3 border rounded-lg px-3 py-2 hover:bg-blue-50"><span>${n ? sym : '✓'} ${label}</span><span class="font-semibold ${n && !ok ? '' : 'text-gray-500'}">${fmtNum(n)}</span></a>`;
@@ -6753,7 +6878,7 @@
             }
 
             editAsset(name) {
-                const all = StorageService.load(StorageService.KEYS.ASSET_REGISTER), low = String(name || '').toLowerCase();
+                const all = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), low = String(name || '').toLowerCase();
                 const r = all.find(x => x.normalizedName === name) || all.find(x => String(x.originalName || '').toLowerCase() === low);
                 if(!r) return;
                 name = r.normalizedName; this._editOwner = r.owner;
@@ -6767,7 +6892,7 @@
                 set('edit-asset-exposure', r.exposure, 'Unknown');
                 document.getElementById('edit-asset-criticality').value = StatusEngine.tierCode(r) || '0';
                 document.getElementById('edit-asset-patchna').checked = !!r.patchNA;
-                { const h = StatusEngine.acsHint(r, (StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).find(x => x.name === r.normalizedName));
+                { const h = StatusEngine.acsHint(r, (StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).find(x => x.name === r.normalizedName));
                   document.getElementById('edit-asset-tier-note').innerHTML = (r.tierBy || r.tierAt ? `Set${r.tierBy ? ' by ' + esc(r.tierBy) : ''}${r.tierAt ? ' on ' + esc(String(r.tierAt).slice(0, 10)) : ''}. ` : '')
                       + `Qualys criticality: ${h || 'none'} (a hint only: it follows Qualys tags).${r.criticality && r.criticality !== 'Medium' ? ` Old criticality: <strong>${esc(r.criticality)}</strong>.` : ''}`; }
                 document.getElementById('edit-asset-os').value = r.os || '';
@@ -6827,9 +6952,9 @@
 
             renderRegister() {
                 this.populateRegisterServices();
-                this._regSums = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
+                this._regSums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
                 const filtered = this.getRegisterFilteredAssets();
-                const all = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
+                const all = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
                 const tbody = document.getElementById('register-tbody');
                 // A new search or filter starts again at the first page; "show more" raises the limit.
                 const sig = ['register-search', 'reg-f-field', 'reg-f-owner', 'reg-f-service', 'reg-f-env', 'reg-f-status', 'reg-f-exposure', 'reg-f-crit', 'register-filter-risk', 'reg-f-ax'].map(id => document.getElementById(id).value).join('\u0001');
@@ -6901,7 +7026,7 @@
                         return [];
                     }
                 }
-                return StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => {
+                return StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => {
                     if (axm && !this.axCats(r.normalizedName, axm).has(f.ax)) return false;
                     if (f.owner !== 'ALL' && (r.owner || 'Unknown') !== f.owner) return false;
                     if (f.service !== 'ALL' && (r.service || 'Unclassified') !== f.service) return false;
@@ -6923,7 +7048,7 @@
             // The service filter lists whatever services the register really contains.
             populateRegisterServices() {
                 const sel = document.getElementById('reg-f-service');
-                const used = [...new Set(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => r.service || 'Unclassified'))];
+                const used = [...new Set(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => r.service || 'Unclassified'))];
                 const L = OrgSettings.services(), extra = used.filter(x => !L.includes(x) && x !== 'Unclassified').sort((a, b) => a.localeCompare(b));
                 const services = [...L, 'Unclassified', ...extra];     // v4.24: the list's order, then values not in the list
                 const key = services.join('|') + '#' + this.isAdmin();
@@ -6947,7 +7072,7 @@
 
             updateBulkBar(filtered) {
                 const sel = this.registerState.selectedAssets, bar = document.getElementById('reg-bulk');
-                const exists = new Set(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => r.normalizedName));
+                const exists = new Set(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => r.normalizedName));
                 [...sel].forEach(n => { if (!exists.has(n)) sel.delete(n); });
                 bar.classList.toggle('hidden', sel.size === 0);
                 const shown = new Set(filtered.map(r => r.normalizedName));
@@ -7010,7 +7135,7 @@
             // button, the coverage banners (moved from the dashboard), and the register's gaps.
             async renderHealth() {
                 const $ = (id) => document.getElementById(id);
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
                 $('dash-coverage').innerHTML = (StorageService.mode !== 'server' && !Demo.ON && !reg.length) ? Demo.welcomeHTML() : this.coverageHTML(App.team());
                 this.renderDashAutomox();
                 this.renderHealthGaps(reg);
@@ -7064,7 +7189,7 @@
                 } else rows.push({ name: 'Red Hat Security Data', how: "Red Hat's public API, asked by this browser when a CVE is looked up", last: 0, next: 0, sched: 'when looked up', result: `${fmtNum(RedHat.cache.size)} CVEs asked this session`, warn: false });
                 // Register (asset export) and the live records
                 const seen = reg0 => reg0.filter(r => !r.unrecognised).map(r => StatusEngine.time(r.lastSeen)).filter(Boolean);
-                const sr = seen(StorageService.load(StorageService.KEYS.ASSET_REGISTER));
+                const sr = seen(StorageService.peek(StorageService.KEYS.ASSET_REGISTER));
                 rows.push({ name: 'Asset register', how: 'Qualys asset export, plus the Review Queue and your edits', last: sr.length ? Math.max(...sr) : 0, next: 0, sched: 'with each Qualys sync or asset import', result: sr.length ? '✓ machines last seen ' + W(Math.max(...sr)) : 'no machines yet', warn: !sr.length, link: ['review', 'Review Queue'] });
                 const S = StatusEngine.settings();
                 const ageTxt = (t) => { if (!t) return 'never'; const d = (now - t) / 864e5; return d < 1 / 24 ? 'just now' : d < 1 ? Math.round(d * 24) + ' h ago' : Math.round(d) + ' d ago'; };
@@ -7087,7 +7212,7 @@
                 }
                 else if (k === 'eol') {
                     StorageService.toast('Fetching end-of-life dates…');
-                    const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), products = [...new Set(reg.map(r => EolDates.match(r.os)?.product).filter(Boolean))];
+                    const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), products = [...new Set(reg.map(r => EolDates.match(r.os)?.product).filter(Boolean))];
                     try { await EolDates.load(products, true); StorageService.toast('End-of-life dates fetched'); } catch (e) { StorageService.toast('Could not fetch the dates: ' + e.message); }
                     this._eolLoaded = false;
                 }
@@ -7182,7 +7307,7 @@
                     this.invalidateVulnData();
                     const vd = await this.getVulnData();
                     const info = new Map(old.map(s => [s.name, { assetId: s.assetId, truRisk: s.truRisk, criticality: s.criticality }]));
-                    const regBy = {}; StorageService.load(StorageService.KEYS.ASSET_REGISTER).forEach(r => { regBy[r.normalizedName] = r; });
+                    const regBy = {}; StorageService.peek(StorageService.KEYS.ASSET_REGISTER).forEach(r => { regBy[r.normalizedName] = r; });
                     const fresh = new Map(this.buildAssetSummaries(vd.all, vd.qmap, info, regBy).map(s => [s.name, s]));
                     StorageService.save(StorageService.KEYS.VULN_ASSET_SUMMARY, old.map(s => fresh.get(s.name) || s));
                     StorageService.save(StorageService.KEYS.VULN_META, { ...this.loadVulnMeta(), openOnly: true });
@@ -7240,9 +7365,9 @@
             // The old riskStatus filter is gone; hidden = what the switch leaves out within the other filters.
             async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false } = {}) {
                 const vd = await this.getVulnData();
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
                 const regMap = new Map(reg.map(r => [r.normalizedName, r]));
-                const sums = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => [s.name, s]));
+                const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => [s.name, s]));
                 const show = !official && RiskView.on();
                 const teamScope = reg.filter(r => (owner === 'ALL' || r.owner === owner) && (exposure === 'ALL' || (r.exposure || 'Unknown') === exposure));
                 const accM = new Map(teamScope.map(r => [r.normalizedName, RiskView.machine(r, vd.ex)]).filter(x => x[1]));
@@ -7309,7 +7434,7 @@
                 $('eol-date').textContent = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric', day: 'numeric' });
 
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => scope === 'ALL' || r.owner === scope);
-                const own = StorageService.load(StorageService.KEYS.EOL_DATES) || [];
+                const own = StorageService.peek(StorageService.KEYS.EOL_DATES) || [];
                 const products = reg.map(r => EolDates.match(r.os)?.product).filter(Boolean);
                 if (refetch || !this._eolLoaded || EolDates.needsFetch(products)) $('eol-notice').innerHTML = '<div class="rounded-lg border p-4 text-sm bg-gray-50 text-gray-600">Looking up end-of-life dates on endoflife.date…</div>';
                 const seq = this._eolSeq = (this._eolSeq || 0) + 1;      // a slower earlier render must not paint over this one
@@ -7321,7 +7446,7 @@
                   if (!RiskView.on()) { const acc = RiskView.machineSet(vd.ex); for (let i = reg.length - 1; i >= 0; i--) if (acc.has(reg[i].normalizedName)) reg.splice(i, 1); } }
 
                 const known = reg.filter(r => !r.unrecognised);
-                const sums = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
+                const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
                 const names = new Set(reg.map(r => r.normalizedName));
                 const empty = (c, m) => `<tr><td colspan="${c}" class="px-2 py-4 text-center text-gray-500 italic">${m}</td></tr>`;
                 const crit = (r) => (sums.get(r.normalizedName)?.criticality) || r.qualysCriticality || 0;
@@ -7410,13 +7535,13 @@
                     : empty(4, seen.length ? 'No hardware out of sale or support in this scope.' : 'No lifecycle data imported yet.');
 
                 // Assets: kept so the filters can redraw the list without fetching again.
-                const ras = new Map((StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => a.status === 'Risk Accepted').map(a => [a.asset, a]));
+                const ras = new Map((StorageService.peek(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => a.status === 'Risk Accepted').map(a => [a.asset, a]));
                 rows.forEach(x => { x.issues = this.eolIssues(x, vd); x.ra = ras.get(x.r.normalizedName) || null; });
                 this.eolCtx = { rows, scope, vd };
                 this.renderEOLAssets(showAll);
 
                 // Section 6: own table + releases with no date
-                const allReg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
+                const allReg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
                 const used = (e) => allReg.filter(r => String(r.os || '').toLowerCase().includes(String(e.match).toLowerCase())).length;
                 $('eol-own').innerHTML = own.length ? own.map((e, i) => `<tr><td class="px-2 py-2 font-mono text-xs">${esc(e.match)}</td><td class="px-2 py-2">${esc(EolDates.fmt(e.secEnd))} ${EolDates.badge(EolDates.bucketFor(e.secEnd || null, ''))}</td><td class="px-2 py-2 text-xs">${esc(EolDates.fmt(e.mainEnd))}</td><td class="px-2 py-2 text-xs text-gray-600">${esc(e.note || '')}${e.by ? `<div class="text-[10px] text-gray-400">${esc(e.by)}, ${esc(new Date(e.at).toLocaleDateString('en-GB'))}</div>` : ''}</td><td class="px-2 py-2 text-right font-mono">${fmtNum(used(e))}</td><td class="px-2 py-2 text-right"><button class="write-only text-xs text-blue-700 underline mr-2" data-i="${i}" onclick="app.eolEditOwn(+this.dataset.i)">Edit</button><button class="write-only text-xs text-red-700 underline" data-i="${i}" onclick="app.eolDeleteOwn(+this.dataset.i)">Delete</button></td></tr>`).join('')
                     : empty(6, 'No dates of your own yet.');
@@ -7701,8 +7826,8 @@
                 const $ = (id) => document.getElementById(id);
                 try { await RemediationService.refresh(); } catch (e) { /* use what we have */ }
                 const people = await RemediationService.people();
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
-                const sums = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
                 const tracked = spec.source?.key ? RemediationService.trackedAssets(spec.source.kind, spec.source.key) : new Map();
                 const assets = [...new Set(spec.assets || [])].map(n => { const r = reg.get(n) || {}; return { name: n, owner: r.owner || 'Unknown', crit: sums.get(n)?.criticality || r.qualysCriticality || 0, tracked: tracked.get(n) || '' }; })
                     .sort((a, b) => (a.tracked ? 1 : 0) - (b.tracked ? 1 : 0) || a.owner.localeCompare(b.owner) || b.crit - a.crit || a.name.localeCompare(b.name));
@@ -7757,7 +7882,7 @@
                 const t = RemediationService.get(id);
                 if (!t) return;
                 const people = await RemediationService.people();
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 this.taskCtx = { mode: 'edit', id, rev: t.rev };
                 const typeLabel = { vuln: 'Vulnerability', eol: 'End of life', other: 'Other' }[t.type] || t.type;
                 $('task-sub').textContent = `${t.id} · ${typeLabel}${t.source?.label ? ' · ' + t.source.label : ''}`;
@@ -7822,7 +7947,7 @@
                         if (!title) throw new Error('Give the task a title.');
                         let picked;
                         if (ctx.spec.source?.kind === 'manual') {
-                            const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                            const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                             const names = $('tk-manual-assets').value.split(/[\n,]+/).map(x => AssetIdentityService.normalize(x.trim())).filter(x => x && x !== 'unknown-asset');
                             const unknown = names.filter(n => !reg.has(n));
                             if (unknown.length) throw new Error('Not in the register: ' + unknown.slice(0, 5).join(', ') + (unknown.length > 5 ? '…' : ''));
@@ -7987,7 +8112,7 @@
                 $('eol-own-match').scrollIntoView({ block: 'center' }); $('eol-own-sec').focus();
             }
             eolEditOwn(i) {
-                const e = (StorageService.load(StorageService.KEYS.EOL_DATES) || [])[i]; if (!e) return;
+                const e = (StorageService.peek(StorageService.KEYS.EOL_DATES) || [])[i]; if (!e) return;
                 const $ = (id) => document.getElementById(id);
                 $('eol-own-match').value = e.match; $('eol-own-sec').value = e.secEnd || ''; $('eol-own-main').value = e.mainEnd || ''; $('eol-own-note').value = e.note || '';
                 $('eol-own-match').scrollIntoView({ block: 'center' }); $('eol-own-sec').focus();
@@ -8016,10 +8141,10 @@
 
             coverageHTML(scope = 'ALL') {
                 const exC = StatusEngine.exIndex();
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER)
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER)
                     .filter(r => !r.unrecognised && (scope === 'ALL' || r.owner === scope) && (RiskView.on() || !RiskView.machine(r, exC)));
-                const unrecCount = StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => r.unrecognised).length;
-                const sums = StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || [];
+                const unrecCount = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => r.unrecognised).length;
+                const sums = StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || [];
                 const have = new Set(sums.map(s => s.name));
                 const meta = this.loadVulnMeta();
                 const box = (cls, inner) => `<div class="rounded-lg border p-4 text-sm ${cls}">${inner}</div>`;
@@ -8073,7 +8198,7 @@
                     matched: new Set(), skipped: new Set(), unrec: new Map(), rejectedRows: 0,
                     rejectedNames: new Set(this.loadVulnMeta().rejected || [])
                 };
-                StorageService.load(StorageService.KEYS.ASSET_REGISTER).forEach(r => { if (r.assetId) ctx.regByAssetId[r.assetId] = r; ctx.regByNormName[r.normalizedName] = r; });
+                StorageService.peek(StorageService.KEYS.ASSET_REGISTER).forEach(r => { if (r.assetId) ctx.regByAssetId[r.assetId] = r; ctx.regByNormName[r.normalizedName] = r; });
                 return ctx;
             }
 
@@ -8342,9 +8467,9 @@
                 const exC = StatusEngine.exIndex();
                 const meta = this.loadVulnMeta();
                 if (!meta.imports.length) return this.coverageHTML(scope);
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER)
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER)
                     .filter(r => (scope === 'ALL' || r.owner === scope) && (RiskView.on() || !RiskView.machine(r, exC)));
-                const have = new Set((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => s.name));
+                const have = new Set((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => s.name));
                 const n = reg.filter(r => have.has(r.normalizedName)).length;
                 const pct = reg.length ? Math.round(n / reg.length * 100) : 0;
                 const truncated = meta.imports.some(i => i.truncated && !i.superseded);
@@ -8471,7 +8596,7 @@
             // else the register name; one per line, no header, sorted, no duplicates.
             // Machine lists for Ansible never contain risk-accepted machines (v4.13): they are often accepted because patching breaks them.
             static hostNames(assets) {
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 const acc = RiskView.machineSet(), all = [...new Set(assets)], keep = all.filter(a => !acc.has(a));
                 App._leftOut = all.length - keep.length;
                 const nm = (a) => { const r = reg.get(a) || {}; return String(r.originalName || a).trim(); }, sort = (l) => [...new Set(l.filter(Boolean))].sort((x, y) => x.localeCompare(y));
@@ -8532,7 +8657,7 @@
             // A fix's page (v4.22): what Red Hat says about its CVEs, when it is a Red Hat check or affects RHEL machines
             async inspRedHat(q, list) {
                 const el = document.getElementById('insp-rh'); if (!el || !q) return;
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 const rhel = (list || []).map(d => reg.get(d.asset)).filter(r => r && RedHat.major(r.os || r.qualysOs));
                 if (!/Red Hat|RHSA|RHEL/i.test(q.title || '') && !rhel.length) return;
                 const ids = (q.cves || []).map(c => typeof c === 'string' ? c : c.id).filter(Boolean).slice(0, 8); if (!ids.length) return;
@@ -8710,7 +8835,7 @@
 
                 $('rpt-coverage').innerHTML = this.coverageHTML(scope);
                 this.cveWatchBlockHTML(scope, false).then(h => { if (stale()) return; $('rpt-watch').innerHTML = h; $('rpt-watch-wrap').classList.toggle('hidden', !h); }).catch(e => console.error('[Watched CVEs]', e));
-                $('rpt-asof').innerHTML = this.asOfHTML(this.dataAsOf(StorageService.load(StorageService.KEYS.ASSET_REGISTER), null));
+                $('rpt-asof').innerHTML = this.asOfHTML(this.dataAsOf(StorageService.peek(StorageService.KEYS.ASSET_REGISTER), null));
                 await RemediationService.refreshQuiet();
                 if (stale()) return;
                 const remSt = RemediationStats.compute(RemediationService.list(), scope);
@@ -8784,7 +8909,7 @@
 
                 // 5. Data gaps
                 const reg = inScope.filter(r => !r.unrecognised);
-                const scans = StorageService.load(StorageService.KEYS.SCAN_DATES), scanOk = Date.now() - (S.scanOkDays || 14) * 864e5;
+                const scans = StorageService.peek(StorageService.KEYS.SCAN_DATES), scanOk = Date.now() - (S.scanOkDays || 14) * 864e5;
                 const gaps = [
                     ['No owner', scope === 'ALL' ? reg.filter(r => !r.owner || r.owner === 'Unknown').length : null, 'assign in the Review Queue or Asset Register'],
                     ['No service', reg.filter(r => !r.service || r.service === 'Unclassified').length, 'set in the Asset Register'],
@@ -8824,9 +8949,9 @@
 
             // Everything recorded for one acceptance: reason, compensating control, approver and dates.
             openRiskDetail(id) {
-                const a = (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).find(x => x.id === id);
+                const a = (StorageService.peek(StorageService.KEYS.RISK_ACCEPTANCES) || []).find(x => x.id === id);
                 if (!a) return;
-                const sum = (StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).find(v => v.name === a.asset);
+                const sum = (StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).find(v => v.name === a.asset);
                 const day = (d) => d ? esc(d) : '<span class="text-gray-400">not recorded</span>';
                 const block = (label, text) => `<div><div class="text-xs font-semibold text-gray-500 uppercase mb-1">${label}</div><div class="bg-gray-50 border rounded p-3 whitespace-pre-wrap break-words">${text ? esc(text) : '<span class="text-gray-400">not recorded</span>'}</div></div>`;
                 const cell = (label, val) => `<div><div class="text-xs font-semibold text-gray-500 uppercase mb-1">${label}</div><div>${val}</div></div>`;
@@ -8843,8 +8968,8 @@
             }
 
             renderRiskAcceptances() {
-                const tmRA = App.team(), regRA = new Map((StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).map(r => [r.normalizedName, r])), ownerRA = new Map([...regRA].map(([k, r]) => [k, r.owner]));
-                const acceptances = (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => tmRA === 'ALL' || (ownerRA.get(a.asset) || a.owner) === tmRA);     // v4.19: the sidebar team
+                const tmRA = App.team(), regRA = new Map((StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || []).map(r => [r.normalizedName, r])), ownerRA = new Map([...regRA].map(([k, r]) => [k, r.owner]));
+                const acceptances = (StorageService.peek(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => tmRA === 'ALL' || (ownerRA.get(a.asset) || a.owner) === tmRA);     // v4.19: the sidebar team
                 const formatNum = (n) => Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
                 
                 let acceptedRisk = 0;
@@ -8854,7 +8979,7 @@
                 const now = new Date();
                 const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
                 
-                const vulnSum = StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || [];
+                const vulnSum = StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || [];
 
                 acceptances.forEach(a => {
                     if (a.status === 'Risk Accepted' || a.status === 'Open') {
@@ -9029,10 +9154,10 @@
 
             async renderInspectAsset(name) {
                 const vd = await this.getVulnData();
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER).find(r => r.normalizedName === name);
+                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).find(r => r.normalizedName === name);
                 const body = document.getElementById('inspect-body');
                 if (!reg) { body.innerHTML = '<p class="p-6 text-gray-600">This asset is not in the register.</p>'; return; }
-                const sum = (StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).find(s => s.name === name) || {};
+                const sum = (StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).find(s => s.name === name) || {};
                 const all = vd.byAsset.get(name) || [];
                 const st = PriorityEngine.blank();
                 all.forEach(d => PriorityEngine.accumulate(st, d));
@@ -9162,8 +9287,8 @@
                 const list = scope ? (await this.scopedData(scope)).dets.filter(d => String(d.qid) === qid) : (vd.byQid.get(qid) || []);
                 const allN = new Set((vd.byQid.get(qid) || []).map(d => d.asset)).size;
                 if (!q) { body.innerHTML = '<p class="p-6 text-gray-600">This vulnerability is not in the imported data.</p>'; return; }
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
-                const sums = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => [s.name, s]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => [s.name, s]));
                 const tier = list.length ? Math.min(...list.map(d => d.tier)) : 4;
                 const maxQvs = Math.max(0, ...list.map(d => d.qvs));
                 const oldest = Math.max(0, ...list.map(d => d.age));
@@ -9267,7 +9392,7 @@ Finish with a "Verify" section saying how to confirm in Qualys (agent check-in o
                         const q = vd.qmap.get(qid) || {};
                         if (q.cves && q.cves[0]) items.push({ cve: q.cves[0].id, q });
                     });
-                    if (kind === 'asset') os = (StorageService.load(StorageService.KEYS.ASSET_REGISTER).find(r => r.normalizedName === id) || {}).os || '';
+                    if (kind === 'asset') os = (StorageService.peek(StorageService.KEYS.ASSET_REGISTER).find(r => r.normalizedName === id) || {}).os || '';
                 }
                 return { items, os };
             }
@@ -9317,8 +9442,8 @@ Finish with a "Verify" section saying how to confirm in Qualys (agent check-in o
                 const vd = await this.getVulnData();
                 const s = AIService.load();
                 const anon = new Anonymiser(s.anonymise && !onDevice); // nothing leaves the browser on-device, so real names are fine
-                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
-                const sums = new Map((StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
                 const meta = this.loadVulnMeta();
                 const caveat = meta.truncated ? 'Data caveat: the Qualys export was truncated, so the list may be incomplete.\n' : '';
                 const LIM = [
@@ -9726,6 +9851,7 @@ Finish with a "Verify" section saying how to confirm in Qualys (agent check-in o
         window.onload = async () => {
             if (window.app) return;
             Demo.boot();
+            PerfLog.begin('first load (start-up)'); if (PerfLog.cur) PerfLog.cur.t0 = 0;     // v4.25: from the moment the page was asked for
             try { await StorageService.init(); }
             catch (e) {
                 console.error('[Start]', e);

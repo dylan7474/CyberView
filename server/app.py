@@ -25,7 +25,7 @@ import eol
 import redhat
 import qualys
 
-VERSION = "4.24.1"
+VERSION = "4.25.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -281,6 +281,16 @@ def current_user(request: Request):
 
 def login_page():
     return FileResponse(STATIC_DIR / "login.html", headers={"Cache-Control": "no-store"})
+
+
+@app.middleware("http")
+async def server_timing(request: Request, call_next):
+    """v4.25: every API answer says how long the server took (Server-Timing), for the page's performance log."""
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - t0) * 1000:.1f}"
+    return response
 
 
 @app.middleware("http")

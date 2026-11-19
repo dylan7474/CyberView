@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.22.2 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.23.0 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -328,6 +328,7 @@
                                     <th class="px-6 py-3">Machine</th>
                                     <th class="px-6 py-3">Team</th>
                                     <th class="px-6 py-3">Service</th>
+                                    <th class="px-6 py-3">OS</th>
                                     <th class="px-6 py-3">Env</th>
                                     <th class="px-6 py-3">Status</th>
                                     <th class="px-6 py-3">Exposure</th>
@@ -596,7 +597,7 @@
                     <div class="mb-8">
                         <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">2. Machines to fix first <span class="text-xs font-normal text-gray-400">overdue P1/P2 first, then the most P1, the most P2, Internet facing and Tier 1</span></h3>
                         <table class="min-w-full text-sm text-left">
-                            <thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2 font-semibold text-right">#</th><th class="py-2 px-2 font-semibold">Machine</th><th class="py-2 px-2 font-semibold text-center">Tier</th><th class="py-2 px-2 font-semibold text-right">P1</th><th class="py-2 px-2 font-semibold text-right">P2</th><th class="py-2 px-2 font-semibold text-right">Overdue</th><th class="py-2 px-2 font-semibold">Why it is here</th></tr></thead>
+                            <thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2 font-semibold text-right">#</th><th class="py-2 px-2 font-semibold">Machine</th><th class="py-2 px-2 font-semibold">OS</th><th class="py-2 px-2 font-semibold text-center">Tier</th><th class="py-2 px-2 font-semibold text-right">P1</th><th class="py-2 px-2 font-semibold text-right">P2</th><th class="py-2 px-2 font-semibold text-right">Overdue</th><th class="py-2 px-2 font-semibold">Why it is here</th></tr></thead>
                             <tbody id="rpt-top-assets" class="divide-y"></tbody>
                         </table>
                     </div>
@@ -831,6 +832,7 @@
                              <thead class="bg-gray-100 text-gray-600 border-b sticky top-0 z-10">
                                  <tr>
                                      <th class="px-6 py-3">Machine</th>
+                                     <th class="px-6 py-3">OS</th>
                                      <th class="px-6 py-3">Scope</th>
                                      <th class="px-6 py-3">Team</th>
                                      <th class="px-6 py-3">Status</th>
@@ -1799,7 +1801,7 @@
                         os: m.os, osCategory: '', osVersion: '', tags: 'Cloud Agent', metadata: {}, owner: m.team, ownershipSource: 'Demo data', service: m.service, status: 'Approved',
                         environment: m.service === 'Test' ? 'Test' : 'Production', exposure: m.exposure, criticality: 'Medium', lastSeen: new Date(now - day).toISOString(),
                         osLifecycle: m.life, hardwareName: m.appliance ? 'Appliance' : 'Virtual Machine', hwLifecycle: m.service === 'Switching' && m.short.endsWith('1') ? 'EOS' : 'GA', lifecycleSeen: new Date().toISOString(), qualysCriticality: 0 };
-                    if (m.tier) StatusEngine.setTier(r, m.tier);
+                    if (m.tier) StatusEngine.setTier(r, m.tier + (/[02468]$/.test(m.short || '') && m.tier < 3 ? 'B' : 'A'));     // v4.23: even-numbered pairs on HA side B
                     if (m.appliance) r.patchNA = true;
                     return r;
                 });
@@ -2582,15 +2584,24 @@
             static tierOf(r) { const t = +(r && r.tier); return t === 1 || t === 2 || t === 3 ? t : 0; }   // 0 = not set
             static effTier(r) { return this.tierOf(r) || 2; }                                                // not set counts as Tier 2
             static acsHint(r, sum) { return (sum && sum.criticality) || (r && r.qualysCriticality) || 0; }
+            // v4.23 HA side: the two halves of a high-availability pair, patched on different days (A first, then B if A went well).
+            // Scheduling only: priorities use the tier number. A tiered machine is side A unless set to B.
+            static haOf(r) { return this.tierOf(r) ? (r && r.ha === 'B' ? 'B' : 'A') : ''; }
+            static tierCode(r) { const t = this.tierOf(r); return t ? t + this.haOf(r) : ''; }
             static tierCell(r, sum) {
                 const t = this.tierOf(r), h = this.acsHint(r, sum);
-                if (t) return `<span class="font-semibold" title="${esc(this.TIER_LABEL[t])}${r.tierBy ? ' · set by ' + esc(r.tierBy) : ''}${r.tierAt ? ' ' + esc(String(r.tierAt).slice(0, 10)) : ''}">T${t}</span>`;
+                if (t) return `<span class="font-semibold" data-sort="${t}${this.haOf(r)}" title="${esc(this.TIER_LABEL[t])} · HA side ${this.haOf(r)} (patch A first, then B)${r.tierBy ? ' · set by ' + esc(r.tierBy) : ''}${r.tierAt ? ' ' + esc(String(r.tierAt).slice(0, 10)) : ''}">T${t}${this.haOf(r)}</span>`;
                 return `<span class="text-gray-500" title="Tier not set: counts as Tier 2. Qualys criticality ${h || 'none'} is only a hint (it follows Qualys tags).">? not set${h ? ` <span class="text-[10px]">(ACS ${h})</span>` : ''}</span>`;
             }
+            // t: 1-3 (keeps the side, A when new) or '1A'..'3B'; anything else clears the tier and the side
             static setTier(r, t) {
-                t = +t;
-                if (t === 1 || t === 2 || t === 3) { if (r.tier !== t) { r.tier = t; r.tierBy = (StorageService.me && StorageService.me.user) || ''; r.tierAt = new Date().toISOString(); } }
-                else { delete r.tier; delete r.tierBy; delete r.tierAt; }
+                const m = String(t ?? '').trim().toUpperCase().match(/^([123])([AB])?$/);
+                if (m) {
+                    const tier = +m[1], ha = m[2] || (r.ha === 'B' ? 'B' : 'A');
+                    if (r.tier !== tier || (r.ha || 'A') !== ha) { r.tier = tier; r.ha = ha; r.tierBy = (StorageService.me && StorageService.me.user) || ''; r.tierAt = new Date().toISOString(); }
+                    else r.ha = ha;
+                }
+                else { delete r.tier; delete r.ha; delete r.tierBy; delete r.tierAt; }
             }
             static priority(findingTier, r, S = this.settings()) {
                 const row = S.matrix[findingTier] || S.matrix[4];
@@ -3167,6 +3178,9 @@
                 return `<span class="inline-block px-1.5 py-0.5 rounded border text-[10px] font-semibold whitespace-nowrap ${cls}">${esc(word)}</span>`;
             }
             // "Microsoft Windows Server 2016 Standard 1607 Build 14393.9612" -> without the build, so versions group together.
+            // v4.23: an OS short enough for a column (to group and filter on): build numbers and bitness dropped, the full value on hover
+            static osShort(os) { return String(os || '').replace(/\s+Build\s.*$/i, '').replace(/\s+(10\.0|6\.[0-3])\.\d{4,}.*$/, '').replace(/\s+(64|32)-?bit.*$/i, '').replace(/\s+N\/A$/i, '').trim() || '-'; }
+            static osCell(r, cls = 'px-2 py-1.5') { const o = (r && (r.os || r.qualysOs)) || ''; return `<td class="${cls} text-xs" title="${esc(o)}">${esc(Lifecycle.osShort(o))}</td>`; }
             static osFamily(os) { return String(os || 'Unknown OS').replace(/\s+Build\s+[\d.]+/i, '').replace(/\s+64-Bit$/i, '').trim() || 'Unknown OS'; }
             static isEolQid(q) { return /^EOL\/Obsolete/i.test(String(q?.title || '')); }
         }
@@ -4635,11 +4649,11 @@
                     </div>${head}
                     <div class="flex flex-wrap gap-2 items-center"><span class="text-sm font-semibold">Assets:</span>${chipBtn('act', '✖ ▲ needs doing now', t.by.x + t.by.a)}${chipBtn('x', '✖ Overdue', t.by.x)}${chipBtn('a', '▲ Action', t.by.a)}${chipBtn('w', '◐ Watch', t.by.w)}${chipBtn('u', '? Unknown', t.by.u)}${chipBtn('ok', '✓ OK', t.by.ok)}${chipBtn('all', 'All', mine.length)}</div>
                     <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr>
-                        <th class="px-2 py-2 text-left">Asset</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Overall</th><th class="px-2 py-2 text-left">Vulnerabilities</th><th class="px-2 py-2 text-left">Scan</th><th class="px-2 py-2 text-left">End of life</th><th class="px-2 py-2 text-left">Patching</th><th class="px-2 py-2 text-left">Exceptions</th>
+                        <th class="px-2 py-2 text-left">Asset</th><th class="px-2 py-2 text-left">OS</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Overall</th><th class="px-2 py-2 text-left">Vulnerabilities</th><th class="px-2 py-2 text-left">Scan</th><th class="px-2 py-2 text-left">End of life</th><th class="px-2 py-2 text-left">Patching</th><th class="px-2 py-2 text-left">Exceptions</th>
                     </tr></thead><tbody class="divide-y">${shown.slice(0, 400).map(a => `<tr class="align-top cursor-pointer hover:bg-blue-50" data-n="${esc(a.name)}" onclick="app.openAssetDetail(this.dataset.n)">
                         <td class="px-2 py-1.5 font-mono text-xs">${esc(a.name)}<div class="text-[10px] font-sans text-gray-500">${a.p1 ? `${a.p1} P1 · ` : ''}${a.p2 ? `${a.p2} P2 · ` : ''}${fmtNum(a.open)} open</div></td>
-                        <td class="px-2 py-1.5 text-center text-xs">${StatusEngine.tierCell(a.r)}</td><td class="px-2 py-1.5">${StatusEngine.chip(a.overall)}</td>
-                        ${cell(a.checks.vuln)}${cell(a.checks.cov)}${cell(a.checks.eol)}${cell(a.checks.patch)}${cell(a.checks.exc)}</tr>`).join('') || '<tr><td colspan="8" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
+                        ${Lifecycle.osCell(a.r)}<td class="px-2 py-1.5 text-center text-xs">${StatusEngine.tierCell(a.r)}</td><td class="px-2 py-1.5">${StatusEngine.chip(a.overall)}</td>
+                        ${cell(a.checks.vuln)}${cell(a.checks.cov)}${cell(a.checks.eol)}${cell(a.checks.patch)}${cell(a.checks.exc)}</tr>`).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
                     ${shown.length > 400 ? `<p class="text-xs text-gray-500">Showing 400 of ${fmtNum(shown.length)}.</p>` : ''}
                     <h4 class="font-bold pt-2">Trend</h4>${this.statusTrendHTML(this.stScope, S)}`;
             }
@@ -4724,10 +4738,11 @@
                 const T = OrgSettings.teams(), main = OrgSettings.mainTeam();
                 const opt = (v, l) => `<option value="${esc(v)}">${esc(l)}</option>`;
                 const team = (fmt = (t) => t) => T.map(t => opt(t, fmt(t))).join('');
-                const TL = OrgSettings.tiers(), tierOpts = TL.map((t, i) => `<option value="${i + 1}" title="${esc(t.desc)}">Tier ${i + 1} · ${esc(t.name)}</option>`).join('');
+                const TL = OrgSettings.tiers(), tierOpts = TL.map((t, i) => ['A', 'B'].map(h => `<option value="${i + 1}${h}" title="${esc(t.desc)} · HA side ${h}">Tier ${i + 1}${h} · ${esc(t.name)}${h === 'B' ? ' (HA side B)' : ''}</option>`).join('')).join('');
+                const tierFilt = TL.map((t, i) => `<option value="${i + 1}">Tier ${i + 1} (A and B) · ${esc(t.name)}</option><option value="${i + 1}A">Tier ${i + 1}A</option><option value="${i + 1}B">Tier ${i + 1}B</option>`).join('');
                 const th = document.getElementById('reg-tier-th'); if (th) th.title = TL.map((t, i) => `Tier ${i + 1} ${t.name}: ${t.desc}`).join('. ') + '. Set by people.';
                 const spec = {
-                    'reg-f-crit': opt('ALL', 'All tiers') + tierOpts + opt('0', '? Tier not set'),
+                    'reg-f-crit': opt('ALL', 'All tiers') + tierFilt + opt('0', '? Tier not set'),
                     'bulk-crit': opt('', 'no change') + tierOpts + opt('clear', 'Not set'),
                     'bulk-confirm-tier': opt('0', 'Not set yet') + tierOpts,
                     'edit-asset-criticality': opt('0', 'Not set (counts as Tier 2)') + tierOpts,
@@ -4799,6 +4814,7 @@
                         </div>
                     </div>
                     <div class="bg-white border rounded p-4 space-y-2"><h4 class="font-bold">Tiers (how important a machine is)</h4>
+                        <p class="text-xs text-gray-600"><strong>HA side A / B</strong> (v4.23): every tier has two sides, the two halves of a high-availability pair, so you can patch side A one day and side B the next if A went well. The side is for scheduling only: priorities use the tier. Set it with the tier (Tier 1A, 1B…); machine lists can be downloaded per side.</p>
                         <p class="text-xs text-gray-600">Your own names and meanings for the three tiers. People set the tier of each machine in the Asset Register (Edit or bulk edit), like its owner. Tier 1 is the most important; a machine with no tier counts as Tier 2. The starting words follow the NCSC's guidance on critical assets and the systems they rely on.</p>
                         ${OrgSettings.tiers().map((t, i) => `<div class="flex flex-wrap gap-2 items-center text-xs"><span class="font-semibold w-12">Tier ${i + 1}</span><input id="org-tier-n${i}" value="${esc(t.name)}" class="border rounded px-2 py-1 w-40" ${dis}><input id="org-tier-d${i}" value="${esc(t.desc)}" class="border rounded px-2 py-1 flex-1 min-w-[16rem]" ${dis}></div>`).join('')}
                     </div>
@@ -5309,7 +5325,7 @@
                     return `<tr class="align-top cursor-pointer hover:bg-blue-50" data-n="${esc(x.name)}" onclick="app.openAssetDetail(this.dataset.n)">
                         <td class="px-2 py-1.5 print-hide" onclick="event.stopPropagation()"><input type="checkbox" class="cve-tick rounded border-gray-300" data-n="${esc(x.name)}" ${sel.has(x.name) ? 'checked' : ''} onchange="app.cveTick(this.dataset.n, this.checked)" aria-label="Select ${esc(x.name)}"></td>
                         <td class="px-2 py-1.5 font-mono text-xs">${esc(x.r.originalName || x.name)}${x.acc ? '<div class="font-sans">' + RiskView.flag(x.acc, true) + '</div>' : (x.accF.length ? '<div class="font-sans">' + RiskView.flag(x.accF[0], true) + '</div>' : '')}</td>
-                        <td class="px-2 py-1.5 text-xs">${esc(x.team)}</td><td class="px-2 py-1.5 text-center text-xs">${StatusEngine.tierCell(x.r)}</td><td class="px-2 py-1.5 text-xs">${esc(x.exposure)}</td>
+                        <td class="px-2 py-1.5 text-xs">${esc(x.team)}</td>${Lifecycle.osCell(x.r)}<td class="px-2 py-1.5 text-center text-xs">${StatusEngine.tierCell(x.r)}</td><td class="px-2 py-1.5 text-xs">${esc(x.exposure)}</td>
                         <td class="px-2 py-1.5">${x.p <= 4 ? StatusEngine.pBadge(x.p) : ''}</td>
                         <td class="px-2 py-1.5 text-xs">${App.cveRhRow(x, RH)}<span class="inline-block px-1.5 py-0.5 rounded border font-semibold ${s.cls}">${s.w}${x.state.b === 'will' && x.when ? ' ' + esc(day(x.when)) : ''}</span>
                             <div class="text-[10px] text-gray-600 mt-0.5">${esc(x.state.why)}${x.state.approx ? ' ≈' : ''}</div>${x.pkgs.length ? `<div class="text-[10px] text-gray-500 font-mono">${esc(x.pkgs.slice(0, 3).join(', '))}${x.pkgs.length > 3 ? ' +' + (x.pkgs.length - 3) : ''}</div>` : ''}</td>
@@ -5334,8 +5350,8 @@
                     </div>
                     ${qHTML}
                     ${C.list.length ? `<div class="flex flex-wrap gap-2 items-center print-hide"><span class="text-sm font-semibold">Machines:</span>${chip('all', 'All', C.list.length)}${chip('manual', ST.manual.w, n('manual'))}${chip('blocked', ST.blocked.w, n('blocked'))}${chip('will', ST.will.w, n('will'))}${n('done') ? chip('done', ST.done.w, n('done')) : ''}${n('unknown') ? chip('unknown', ST.unknown.w, n('unknown')) : ''}</div>
-                    <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-2 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.cveTickAll(this.checked)" title="Select every machine shown" aria-label="Select every machine shown"></th><th class="px-2 py-2 text-left">Machine</th><th class="px-2 py-2 text-left">Team</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Exposure</th><th class="px-2 py-2 text-left">Priority</th><th class="px-2 py-2 text-left">Fix</th><th class="px-2 py-2 text-left">First found</th></tr></thead>
-                        <tbody class="divide-y">${shown.slice(0, 500).map(rowHTML).join('') || '<tr><td colspan="8" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
+                    <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-2 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.cveTickAll(this.checked)" title="Select every machine shown" aria-label="Select every machine shown"></th><th class="px-2 py-2 text-left">Machine</th><th class="px-2 py-2 text-left">Team</th><th class="px-2 py-2 text-left">OS</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Exposure</th><th class="px-2 py-2 text-left">Priority</th><th class="px-2 py-2 text-left">Fix</th><th class="px-2 py-2 text-left">First found</th></tr></thead>
+                        <tbody class="divide-y">${shown.slice(0, 500).map(rowHTML).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
                     ${shown.length > 500 ? `<p class="text-xs text-gray-500">Showing 500 of ${fmtNum(shown.length)}: the machine list has them all.</p>` : ''}` : ''}
                     ${C.axOnly.length ? `<div><p class="text-sm font-semibold">Automox has a waiting patch for it, but Qualys has not flagged it (${fmtNum(C.axOnly.length)})</p><p class="text-xs text-gray-500 mb-1">Not scanned since, or Qualys checks it differently. Worth including.</p>
                         <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.axOnly.slice(0, 200).map(a => `<tr><td class="px-2 py-1.5 font-mono text-xs">${esc(a.name)}${a.acc ? ' ' + RiskView.flag(a.acc, true) : ''}</td><td class="px-2 py-1.5 text-xs">${esc(a.team)}</td><td class="px-2 py-1.5 text-xs">${a.when ? '⟳ next patch run ' + esc(day(a.when)) : '⚠ ' + esc(a.why)}</td><td class="px-2 py-1.5 text-[10px] font-mono text-gray-500">${esc(a.pkgs.slice(0, 3).join(', '))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
@@ -6058,8 +6074,8 @@
                     const fails = d ? d.policies.filter(p => p.compliant === false) : [];
                     const sevTxt = d ? [['critical', 'crit'], ['high', 'high']].filter(([k]) => d.sev[k]).map(([k, l]) => `${d.sev[k]} ${l}`).join(' · ') : '';
                     return `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(n)}" onclick="app.openAssetDetail(this.dataset.n)">
-                        <td class="px-2 py-2 font-medium text-gray-800 max-w-[220px]"><div class="truncate" title="${esc(n)}">${esc(n)}</div>${(() => { const a = RiskView.machine(r, StatusEngine.exIndex()); return a ? RiskView.flag(a, true) : ''; })()}<div class="text-[10px] text-gray-500">${esc(Lifecycle.osFamily(r.os) || r.os || '')}</div></td>
-                        <td class="px-2 py-2 text-xs">${esc(r.owner || 'Unknown')}</td>
+                        <td class="px-2 py-2 font-medium text-gray-800 max-w-[220px]"><div class="truncate" title="${esc(n)}">${esc(n)}</div>${(() => { const a = RiskView.machine(r, StatusEngine.exIndex()); return a ? RiskView.flag(a, true) : ''; })()}</td>
+                        <td class="px-2 py-2 text-xs">${esc(r.owner || 'Unknown')}</td>${Lifecycle.osCell(r, 'px-2 py-2')}<td class="px-2 py-2 text-xs text-center">${StatusEngine.tierCell(r)}</td>
                         <td class="px-2 py-2">${AutomoxService.badge(d, x.how)}${(() => { const pp = AutomoxService.patchPolicy(d); return pp === 'none' || pp === 'off' ? `<div class="text-[10px] font-semibold text-rose-800 mt-0.5" title="Automox will not patch this machine by itself">⊘ ${esc(AutomoxService.POLICY_WHY[pp])}</div>` : ''; })()}${d ? `<div class="text-[10px] text-gray-500 mt-0.5" title="${esc(d.name)}">${esc(d.name)}${x.how && x.how !== 'name' ? ` · <span class="${x.how === 'IP only' ? 'text-amber-700 font-semibold' : ''}">by ${esc(x.how)}</span>` : ''}</div>` : (x.how === 'ambiguous' ? `<div class="text-[10px] text-gray-500">${(x.cands || []).length} candidates · see below</div>` : x.how === 'duplicate' ? `<div class="text-[10px] text-gray-500">device belongs to ${esc(x.of)}</div>` : '')}</td>
                         <td class="px-2 py-2 text-xs whitespace-nowrap">${d ? esc(AutomoxService.ago(d.lastSeen)) : '-'}</td>
                         <td class="px-2 py-2 text-xs">${d ? `<strong>${fmtNum(d.pending)}</strong>${sevTxt ? `<div class="text-[10px] text-red-800">${sevTxt}</div>` : ''}${d.kev ? `<div class="text-[10px] font-bold text-red-800">⚑ ${d.kev} known exploited</div>` : ''}` : '-'}</td>
@@ -6091,9 +6107,9 @@
 
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">3. Assets <span class="text-sm font-normal text-gray-500">${S.filter === 'ALL' ? 'all' : esc(tiles.find(t => t[0] === S.filter)?.[1] || S.filter)} · ${fmtNum(list.length)}</span></h3>
                         <div class="flex flex-wrap items-center gap-3 mb-3 print-hide"><input type="search" id="ax-q" value="${esc(S.q)}" placeholder="Search asset, device, owner, OS" oninput="app.axState.q = this.value; app.axState.shown = 200; clearTimeout(app._axT); app._axT = setTimeout(() => app.renderAutomox(), 250)" class="border border-gray-300 rounded px-2 py-1 text-sm w-72">${S.filter !== 'ALL' ? '<button onclick="app.axFilter(\'ALL\')" class="text-xs text-blue-700 underline">Show all</button>' : ''}<button onclick="app.axExportList()" class="ml-auto bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1 rounded shadow-sm text-sm" title="Download the names of the machines in this list (after the search), one per line">⬇ Machine list: ${S.filter === 'ALL' ? 'all' : esc(tiles.find(t => t[0] === S.filter)?.[1] || S.filter)} (${fmtNum(list.length)})</button></div>
-                        <div class="overflow-x-auto"><table data-showall="app.axState.shown = 1e9; app.renderAutomox()" data-partial="${list.length > shown.length ? 1 : ''}" class="min-w-full text-sm text-left"><thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2">Asset</th><th class="py-2 px-2">Owner</th><th class="py-2 px-2">Automox</th><th class="py-2 px-2">Check-in</th><th class="py-2 px-2">Waiting patches</th><th class="py-2 px-2">Policies</th><th class="py-2 px-2 text-center">Reboot</th><th class="py-2 px-2 text-right" title="Qualys detections with an Automox patch waiting">Fixable</th><th class="py-2 px-2 print-hide">Tasks</th></tr></thead>
-                        <tbody class="divide-y">${shown.map(row).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">No assets.</td></tr>'}
-                        ${list.length > shown.length ? `<tr><td colspan="9" class="px-2 py-3 text-center bg-gray-50"><button onclick="app.axState.shown += 100; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show 100 more</button> · <button onclick="app.axState.shown = 1e9; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show all ${fmtNum(list.length)}</button> <span class="text-xs text-gray-500">(${fmtNum(list.length - shown.length)} more; show them all before printing)</span></td></tr>` : ''}</tbody></table></div></div>
+                        <div class="overflow-x-auto"><table data-showall="app.axState.shown = 1e9; app.renderAutomox()" data-partial="${list.length > shown.length ? 1 : ''}" class="min-w-full text-sm text-left"><thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2">Asset</th><th class="py-2 px-2">Owner</th><th class="py-2 px-2">OS</th><th class="py-2 px-2">Tier</th><th class="py-2 px-2">Automox</th><th class="py-2 px-2">Check-in</th><th class="py-2 px-2">Waiting patches</th><th class="py-2 px-2">Policies</th><th class="py-2 px-2 text-center">Reboot</th><th class="py-2 px-2 text-right" title="Qualys detections with an Automox patch waiting">Fixable</th><th class="py-2 px-2 print-hide">Tasks</th></tr></thead>
+                        <tbody class="divide-y">${shown.map(row).join('') || '<tr><td colspan="11" class="px-2 py-6 text-center text-gray-500 italic">No assets.</td></tr>'}
+                        ${list.length > shown.length ? `<tr><td colspan="11" class="px-2 py-3 text-center bg-gray-50"><button onclick="app.axState.shown += 100; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show 100 more</button> · <button onclick="app.axState.shown = 1e9; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show all ${fmtNum(list.length)}</button> <span class="text-xs text-gray-500">(${fmtNum(list.length - shown.length)} more; show them all before printing)</span></td></tr>` : ''}</tbody></table></div></div>
 
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">4. Matches to check</h3>
                         <h4 class="font-semibold text-gray-700 mb-1">? To check: ${fmtNum(amb.length)}</h4>
@@ -6478,7 +6494,7 @@
                 tbody.innerHTML = '';
                 if(filtered.length === 0) return tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500">No assets match.</td></tr>`;
                 const TL = OrgSettings.tiers();
-                const tierSel = (id) => `<select id="tier-${id}" class="border text-sm px-2 py-1" title="Tier (optional)"><option value="0">not set</option>${TL.map((t, i) => `<option value="${i + 1}" title="${esc(t.desc)}">${i + 1} · ${esc(t.name)}</option>`).join('')}</select>`;
+                const tierSel = (id) => `<select id="tier-${id}" class="border text-sm px-2 py-1" title="Tier and HA side (optional)"><option value="0">not set</option>${TL.map((t, i) => ['A', 'B'].map(h => `<option value="${i + 1}${h}" title="${esc(t.desc)} · HA side ${h}">${i + 1}${h} · ${esc(t.name)}</option>`).join('')).join('')}</select>`;
                 const expSel = (id) => `<select id="exp-${id}" class="border text-sm px-2 py-1" title="Exposure (optional)">${['Unknown', 'Internal', 'DMZ', 'Internet Facing'].map(x => `<option>${x}</option>`).join('')}</select>`;
                 
                 // Using DocumentFragment to prevent browser thrashing on 1000+ rows
@@ -6518,7 +6534,7 @@
                 const { action, owner } = this.reviewState.pendingAction;
                 const queue = ReviewQueueService.getQueue();
                 const items = queue.filter(q => this.reviewState.selectedIds.has(q.id));
-                const tier = +document.getElementById('bulk-confirm-tier').value, exposure = document.getElementById('bulk-confirm-exposure').value;
+                const tv = document.getElementById('bulk-confirm-tier').value, tier = tv === '0' ? 0 : tv, exposure = document.getElementById('bulk-confirm-exposure').value;
                 const res = items.map(i => ({ id: i.id, finalOwner: owner || 'Unknown', finalService: i.detectedService, finalTier: action === 'APPROVE' ? tier : 0, finalExposure: action === 'APPROVE' ? exposure : '' }));
                 ReviewQueueService.resolveBulk(res, action === 'APPROVE' ? 'APPROVED' : 'REJECTED');
                 this.reviewState.selectedIds.clear();
@@ -6684,7 +6700,7 @@
                 set('edit-asset-env', r.environment, 'Production');
                 document.getElementById('edit-asset-service').value = r.service || '';
                 set('edit-asset-exposure', r.exposure, 'Unknown');
-                document.getElementById('edit-asset-criticality').value = String(StatusEngine.tierOf(r));
+                document.getElementById('edit-asset-criticality').value = StatusEngine.tierCode(r) || '0';
                 document.getElementById('edit-asset-patchna').checked = !!r.patchNA;
                 { const h = StatusEngine.acsHint(r, (StorageService.load(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).find(x => x.name === r.normalizedName));
                   document.getElementById('edit-asset-tier-note').innerHTML = (r.tierBy || r.tierAt ? `Set${r.tierBy ? ' by ' + esc(r.tierBy) : ''}${r.tierAt ? ' on ' + esc(String(r.tierAt).slice(0, 10)) : ''}. ` : '')
@@ -6737,7 +6753,7 @@
 
             approveQueueItem(id) {
                 const o = document.getElementById(`own-${id}`).value;
-                const t = +(document.getElementById(`tier-${id}`) || {}).value || 0, x = (document.getElementById(`exp-${id}`) || {}).value || 'Unknown';
+                const tv = (document.getElementById(`tier-${id}`) || {}).value || '0', t = tv === '0' ? 0 : tv, x = (document.getElementById(`exp-${id}`) || {}).value || 'Unknown';
                 const q = ReviewQueueService.getQueue().find(x => x.id === id);
                 ReviewQueueService.resolveBulk([{ id, finalOwner: o, finalService: q.detectedService, finalTier: t, finalExposure: x }], 'APPROVED');
                 this.updateGlobalBadges(); this.renderReviewQueue();
@@ -6772,6 +6788,7 @@
                             <td class="px-6 py-2 font-medium text-gray-800">${r.normalizedName}${r.osOverride ? ' ' + Lifecycle.editedBadge(r) : ''}${this.registerMatched?.has(r.normalizedName) ? ` <span class="text-[10px] font-normal text-gray-400" title="The search matched this field, not the name">matched: ${esc(this.registerMatched.get(r.normalizedName).join(', ').toLowerCase())}</span>` : ''}${r.unrecognised ? ' <span class="bg-purple-100 text-purple-800 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded" title="Seen in the vulnerability report, not in the inventory. Waiting for an owner in the Review Queue">⚑ Unrecognised</span>' : ''}</td>
                             <td class="px-6 py-2">${esc(r.owner)}</td>
                             <td class="px-6 py-2">${esc(r.service)}</td>
+                            ${Lifecycle.osCell(r, 'px-6 py-2')}
                             <td class="px-6 py-2">${esc(r.environment)}</td>
                             <td class="px-6 py-2">${esc(r.status || 'Approved')}</td>
                             <td class="px-6 py-2">${esc(r.exposure || 'Unknown')}</td>
@@ -6786,7 +6803,7 @@
                 }
                 if (shown < filtered.length) {
                     const rest = filtered.length - shown;
-                    rows.push(`<tr><td colspan="10" class="px-6 py-3 text-center text-sm bg-gray-50"><button onclick="app.registerShowMore(200)" class="text-blue-600 font-semibold hover:underline mr-4">Show 200 more</button><button onclick="app.registerShowMore(1e9)" class="text-blue-600 hover:underline">Show all ${fmtNum(rest)} remaining</button></td></tr>`);
+                    rows.push(`<tr><td colspan="11" class="px-6 py-3 text-center text-sm bg-gray-50"><button onclick="app.registerShowMore(200)" class="text-blue-600 font-semibold hover:underline mr-4">Show 200 more</button><button onclick="app.registerShowMore(1e9)" class="text-blue-600 hover:underline">Show all ${fmtNum(rest)} remaining</button></td></tr>`);
                 }
                 tbody.innerHTML = rows.join('');
             }
@@ -6825,7 +6842,7 @@
                     if (f.env !== 'ALL' && (r.environment || 'Production') !== f.env) return false;
                     if (f.status !== 'ALL' && (r.status || 'Approved') !== f.status) return false;
                     if (f.exposure !== 'ALL' && (r.exposure || 'Unknown') !== f.exposure) return false;
-                    if (f.crit !== 'ALL' && String(StatusEngine.tierOf(r)) !== f.crit) return false;
+                    if (f.crit !== 'ALL' && (f.crit.length === 2 ? StatusEngine.tierCode(r) : String(StatusEngine.tierOf(r))) !== f.crit) return false;
                     if (f.risk !== 'ALL' && (r.riskStatus || 'Open') !== f.risk) return false;
                     if (!search.empty) {
                         const all = { Name: [r.normalizedName, r.originalName, r.originalAssetName], IP: [r.ipv4Address, r.ipv6Address], OS: [r.os, Lifecycle.osFamily(r.os), r.osVersion, r.qualysOs], Tags: r.tags, Service: r.service, Owner: r.owner };
@@ -6892,7 +6909,7 @@
                     if (!sel.has(r.normalizedName)) return;
                     ch.forEach(([k, , val]) => {
                         if (k === 'os') Lifecycle.setOs(r, val.startsWith('(back to') ? '' : val);
-                        else if (k === 'tier') StatusEngine.setTier(r, (val.match(/^Tier (\d)/) || [])[1] || 0);
+                        else if (k === 'tier') StatusEngine.setTier(r, (val.match(/^Tier (\d[AB]?)/) || [])[1] || 0);
                         else if (k === 'patchNA') { if (/^Cannot/.test(val)) r.patchNA = true; else delete r.patchNA; }
                         else r[k] = val;
                     });
@@ -8387,14 +8404,34 @@
                 const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 const acc = RiskView.machineSet(), all = [...new Set(assets)], keep = all.filter(a => !acc.has(a));
                 App._leftOut = all.length - keep.length;
-                return [...new Set(keep.map(a => { const r = reg.get(a) || {}; return String(r.originalName || a).trim(); }).filter(Boolean))].sort((x, y) => x.localeCompare(y));
+                const nm = (a) => { const r = reg.get(a) || {}; return String(r.originalName || a).trim(); }, sort = (l) => [...new Set(l.filter(Boolean))].sort((x, y) => x.localeCompare(y));
+                // v4.23: the HA sides, for patching side A one day and side B the next
+                App._sides = { A: sort(keep.filter(a => StatusEngine.haOf(reg.get(a)) !== 'B').map(nm)), B: sort(keep.filter(a => StatusEngine.haOf(reg.get(a)) === 'B').map(nm)) };
+                return sort(keep.map(nm));
             }
-            static downloadList(name, lines) {
+            static downloadList(name, lines, split = true) {
+                const S = App._sides; App._sides = null;
+                if (split && S && S.A.length && S.B.length) setTimeout(() => App.sidePanel(name, S), 300);
                 if (App._leftOut) { const n = App._leftOut; App._leftOut = 0; setTimeout(() => StorageService.toast(`${fmtNum(n)} risk-accepted machine${n === 1 ? '' : 's'} left out of the list`), 2500); }
                 const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob); link.download = `${name}_${new Date().toISOString().slice(0, 10)}.txt`; link.click();
                 setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+            }
+
+            // v4.23: the list has machines on both HA sides: offer each side as its own list (A first, B the next day)
+            static sidePanel(name, S) {
+                let el = document.getElementById('side-panel'); if (el) el.remove();
+                el = document.createElement('div'); el.id = 'side-panel'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Machine list by HA side');
+                el.className = 'fixed bottom-4 right-4 z-50 bg-white border-2 border-indigo-300 rounded-lg shadow-lg p-3 text-sm max-w-sm print-hide';
+                el.innerHTML = `<div class="flex justify-between gap-3"><strong>This list has both HA sides</strong><button onclick="this.closest('#side-panel').remove()" aria-label="Close" class="text-gray-500">✕</button></div>
+                    <p class="text-xs text-gray-600 mt-1">Patch side A first, then side B once A is fine.</p>
+                    <div class="flex flex-col gap-1 mt-2"><button id="side-a" class="text-left border rounded px-2 py-1 hover:bg-indigo-50">⬇ Day 1: side A and machines without a side (${fmtNum(S.A.length)})</button>
+                    <button id="side-b" class="text-left border rounded px-2 py-1 hover:bg-indigo-50">⬇ Day 2: side B (${fmtNum(S.B.length)})</button></div>`;
+                document.body.appendChild(el);
+                el.querySelector('#side-a').onclick = () => App.downloadList(name + '_sideA', S.A, false);
+                el.querySelector('#side-b').onclick = () => App.downloadList(name + '_sideB', S.B, false);
+                setTimeout(() => { if (document.body.contains(el)) el.remove(); }, 60000);
             }
 
             // The machines a fix needs, as a plain list of names for automation (v4.3.3), within the page's filters.
@@ -8475,13 +8512,14 @@
                         cols: [
                             { key: 'sel', w: 4, head: '<input type="checkbox" title="Select the rows shown" onclick="event.stopPropagation()" onchange="app.toggleAllVuln(this.checked)" class="rounded border-gray-300">', cell: (r) => `<input type="checkbox" ${this.vulnState.selectedAssets.has(r.name) ? 'checked' : ''} data-n="${esc(r.name)}" onclick="event.stopPropagation()" onchange="app.toggleVulnAsset(this.dataset.n, this.checked)" class="rounded border-gray-300">` },
                             { key: 'rank', w: 4, label: '#', num: true, dir: 1, align: 'right', sort: (r) => r.rank, cell: (r) => `<span class="text-gray-500">${r.rank}</span>` },
-                            { key: 'name', w: 19, label: 'Machine', dir: 1, sort: (r) => r.name.toLowerCase(), cell: (r) => `<span class="font-medium text-gray-800">${trunc(r.name)}</span>${r.acc ? ' ' + RiskView.flag(r.acc, true) : ''}` },
+                            { key: 'name', w: 16, label: 'Machine', dir: 1, sort: (r) => r.name.toLowerCase(), cell: (r) => `<span class="font-medium text-gray-800">${trunc(r.name)}</span>${r.acc ? ' ' + RiskView.flag(r.acc, true) : ''}` },
                             { key: 'owner', w: 8, label: 'Team', dir: 1, sort: (r) => r.owner, cell: (r) => esc(r.owner) },
+                            { key: 'os', w: 9, label: 'OS', dir: 1, sort: (r) => Lifecycle.osShort(r.r?.os).toLowerCase(), cell: (r) => `<span class="text-xs" title="${esc(r.r?.os || '')}">${esc(Lifecycle.osShort(r.r?.os))}</span>` },
                             { key: 'tierE', w: 8, label: 'Tier', num: true, dir: 1, align: 'center', sort: (r) => r.tierE, cell: (r) => StatusEngine.tierOf(r.r) ? StatusEngine.tierCell(r.r, r) : `<span class="text-xs text-gray-500 whitespace-nowrap" title="Tier not set: counts as Tier 2. Qualys criticality ${StatusEngine.acsHint(r.r, r) || 'none'} is only a hint.">? not set</span>` },
                             { key: 'p1', w: 5, label: 'P1', num: true, dir: -1, align: 'right', sort: (r) => r.p1, cell: (r) => `<span class="${r.p1 ? 'font-bold' : 'text-gray-400'}">${fmtNum(r.p1)}</span>` },
                             { key: 'p2', w: 5, label: 'P2', num: true, dir: -1, align: 'right', sort: (r) => r.p2, cell: (r) => `<span class="${r.p2 ? 'font-semibold' : 'text-gray-400'}">${fmtNum(r.p2)}</span>` },
                             { key: 'overdue', w: 8, label: 'Overdue', num: true, dir: -1, align: 'right', sort: (r) => r.overdue, cell: (r) => r.overdue ? `<span class="font-bold">✖ ${fmtNum(r.overdue)}</span>` : '<span class="text-gray-400">0</span>' },
-                            { key: 'why', w: 25, label: 'Why it is here', cell: (r) => `<span class="text-xs text-gray-700">${trunc(r.why)}</span>` },
+                            { key: 'why', w: 19, label: 'Why it is here', cell: (r) => `<span class="text-xs text-gray-700">${trunc(r.why)}</span>` },
                             { key: 'truRisk', w: 9, label: 'TruRisk', num: true, dir: -1, sort: (r) => r.truRisk, cell: (r) => PriorityEngine.truRiskBadge(r.truRisk) },
                             { key: 'act', w: 5, align: 'right', cell: (r) => `<button data-n="${esc(r.name)}" onclick="event.stopPropagation(); app.openRiskModal([this.dataset.n], 'vuln')" class="text-amber-700 font-semibold hover:underline text-[10px] uppercase" title="Record an accepted risk for this machine">Accept</button>` }
                         ]
@@ -8632,7 +8670,7 @@
                 const topAssets = ranked.slice(0, 10);
                 $('rpt-top-assets').innerHTML = topAssets.length ? topAssets.map((t, i) => `<tr class="cursor-pointer hover:bg-blue-50 align-top" data-n="${esc(t.name)}" onclick="app.openAssetDetail(this.dataset.n)">
                     <td class="px-2 py-2 text-right text-gray-500">${i + 1}</td><td class="px-2 py-2 font-medium text-gray-800">${esc(t.name)}${t.acc ? ' ' + RiskView.flag(t.acc, true) : ''}</td>
-                    <td class="px-2 py-2 text-center">${StatusEngine.tierOf(t.r) ? 'T' + StatusEngine.tierOf(t.r) : '<span class="text-xs text-gray-500">? not set</span>'}</td>
+                    ${Lifecycle.osCell(t.r, 'px-2 py-2')}<td class="px-2 py-2 text-center">${StatusEngine.tierOf(t.r) ? 'T' + StatusEngine.tierCode(t.r) : '<span class="text-xs text-gray-500">? not set</span>'}</td>
                     <td class="px-2 py-2 text-right font-mono ${t.p1 ? 'font-bold' : 'text-gray-400'}">${sev(t.p1)}</td><td class="px-2 py-2 text-right font-mono ${t.p2 ? 'font-semibold' : 'text-gray-400'}">${sev(t.p2)}</td>
                     <td class="px-2 py-2 text-right font-mono">${t.overdue ? '<strong>✖ ' + sev(t.overdue) + '</strong>' : '<span class="text-gray-400">0</span>'}</td>
                     <td class="px-2 py-2 text-xs text-gray-700">${esc(App.vulnWhy(t))}</td></tr>`).join('') : empty(7, 'No machines with findings in this scope.');
@@ -8735,7 +8773,7 @@
             }
 
             renderRiskAcceptances() {
-                const tmRA = App.team(), ownerRA = new Map((StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).map(r => [r.normalizedName, r.owner]));
+                const tmRA = App.team(), regRA = new Map((StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).map(r => [r.normalizedName, r])), ownerRA = new Map([...regRA].map(([k, r]) => [k, r.owner]));
                 const acceptances = (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => tmRA === 'ALL' || (ownerRA.get(a.asset) || a.owner) === tmRA);     // v4.19: the sidebar team
                 const formatNum = (n) => Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
                 
@@ -8771,7 +8809,7 @@
 
                 const tbody = document.getElementById('risk-accept-tbody');
                 if(acceptances.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">No risk acceptances${tmRA === 'ALL' ? '' : ' for ' + esc(tmRA)} recorded.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500">No risk acceptances${tmRA === 'ALL' ? '' : ' for ' + esc(tmRA)} recorded.</td></tr>`;
                     return;
                 }
                 
@@ -8801,6 +8839,7 @@
                             <div class="font-medium text-gray-800">${esc(a.asset)}</div>
                             <div class="text-[10px] text-gray-500 uppercase">${esc(a.service || '')}</div>
                         </td>
+                        ${Lifecycle.osCell(regRA.get(a.asset), 'px-6 py-3')}
                         <td class="px-6 py-3 text-xs">${a.scope === 'finding' ? `QID ${esc((a.qids || []).slice(0, 4).join(', '))}${(a.qids || []).length > 4 ? '…' : ''}` : '<span title="Hides new findings too: convert to specific findings">◐ whole machine</span>'}</td>
                         <td class="px-6 py-3 text-gray-600">${a.owner}</td>
                         <td class="px-6 py-3"><span class="${stCls} text-xs px-2 py-1 rounded">${esc(stWord)}</span></td>
@@ -9116,12 +9155,12 @@
                         <div class="bg-gray-50 px-4 py-3 border-b font-semibold text-sm text-gray-700 flex items-center justify-between gap-3"><span>Affected machines (${fmtNum(assets.length)})</span><span class="flex gap-2"><button id="insp-accept-btn" onclick="app.inspAccept()" class="write-only hidden print-hide font-normal text-xs border border-amber-300 bg-amber-50 text-amber-900 px-3 py-1 rounded hover:bg-amber-100" title="Accept the risk of this finding on the ticked machines only">⚖️ Accept risk: 0 selected</button><button onclick="app.inspectQidCsv()" class="print-hide font-normal text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Download these machines' names, one per line (an Ansible inventory)">⬇ Machine list</button></span></div>
                         <div class="overflow-auto max-h-[28rem]">
                             <table class="min-w-full text-left text-sm whitespace-nowrap">
-                                <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.inspTickAll(this.checked)" aria-label="Select every machine"></th><th class="px-3 py-2">Machine</th><th class="px-3 py-2">Team</th><th class="px-3 py-2">Service</th><th class="px-3 py-2 text-center">Tier</th><th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>
+                                <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.inspTickAll(this.checked)" aria-label="Select every machine"></th><th class="px-3 py-2">Machine</th><th class="px-3 py-2">Team</th><th class="px-3 py-2">Service</th><th class="px-3 py-2">OS</th><th class="px-3 py-2 text-center">Tier</th><th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>
                                 <tbody class="divide-y">${list.slice().sort((a, b) => ((StatusEngine.tierOf(reg.get(a.asset)) || 2) - (StatusEngine.tierOf(reg.get(b.asset)) || 2)) || ((sums.get(b.asset)?.truRisk || 0) - (sums.get(a.asset)?.truRisk || 0))).map(d => {
                                     const r = reg.get(d.asset) || {}, s = sums.get(d.asset) || {};
                                     return `<tr class="cursor-pointer hover:bg-blue-50" data-n="${esc(d.asset)}" onclick="app.inspectAsset(this.dataset.n)">
                                         <td class="px-3 py-2 print-hide" onclick="event.stopPropagation()"><input type="checkbox" class="insp-tick rounded border-gray-300" data-n="${esc(d.asset)}" onchange="app.inspTick(this.dataset.n, this.checked)" aria-label="Select ${esc(d.asset)}"></td>
-                                        <td class="px-3 py-2 font-medium text-gray-800">${esc(d.asset)}${d.accF ? ' ' + RiskView.flag(d.accF, true) : ''}</td><td class="px-3 py-2">${esc(r.owner || 'Unknown')}</td><td class="px-3 py-2">${esc(r.service || 'Unclassified')}</td>
+                                        <td class="px-3 py-2 font-medium text-gray-800">${esc(d.asset)}${d.accF ? ' ' + RiskView.flag(d.accF, true) : ''}</td><td class="px-3 py-2">${esc(r.owner || 'Unknown')}</td><td class="px-3 py-2">${esc(r.service || 'Unclassified')}</td>${Lifecycle.osCell(r, 'px-3 py-2')}
                                         <td class="px-3 py-2 text-center text-xs">${StatusEngine.tierCell(r)}</td><td class="px-3 py-2">${PriorityEngine.truRiskBadge(s.truRisk || 0)}</td>
                                         <td class="px-3 py-2 text-xs">${esc(d.port || '-')}</td><td class="px-3 py-2 text-xs">${esc(d.status)}</td><td class="px-3 py-2 text-xs">${esc(d.first)}</td><td class="px-3 py-2 text-right text-xs font-mono">${d.age}d</td></tr>`;
                                 }).join('')}</tbody>

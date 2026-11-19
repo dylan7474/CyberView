@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.19.0 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.20.0 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -505,6 +505,7 @@
                             <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded shadow-sm text-sm font-medium">🖨️ Print</button>
                         </div>
                     </div>
+                    <div id="cve-watch" class="mb-6"></div>
                     <div id="cve-out"></div>
                 </div>
             </section>
@@ -584,6 +585,11 @@
                         <h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-4">1. Summary</h3>
                         <div id="rpt-status-line" class="mb-4 text-sm"></div>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="rpt-exec-summary"></div>
+                    </div>
+
+                    <div id="rpt-watch-wrap" class="mb-8 hidden">
+                        <h3 class="text-lg font-bold text-slate-800 border-b pb-2 mb-3">📌 Watched CVEs <span class="text-xs font-normal text-gray-400">pinned on the CVE Lookup; open machines, accepted risk left out</span></h3>
+                        <div id="rpt-watch" class="space-y-2"></div>
                     </div>
 
                     <!-- 2. Machines to fix first -->
@@ -1094,6 +1100,7 @@
                 STATUS_HISTORY: 'gov_status_history',
                 SCAN_DATES: 'gov_scan_dates',
                 PLAN_FORECAST: 'gov_plan_forecast',
+                CVE_WATCH: 'gov_cve_watch',
                 ORG_SETTINGS: 'gov_org_settings'
             };
             // Saved record by record through api/tasks in server mode, never as a whole collection.
@@ -1302,7 +1309,7 @@
                 a.click();
             }
 
-            static BACKUP_KEYS = { assetRegister: 'ASSET_REGISTER', reviewQueue: 'REVIEW_QUEUE', ownershipLedger: 'OWNERSHIP_LEDGER', platformInventory: 'PLATFORM_INVENTORY', vulnAssetSummary: 'VULN_ASSET_SUMMARY', vulnServiceSummary: 'VULN_SERVICE_SUMMARY', vulnCveSummary: 'VULN_CVE_SUMMARY', vulnDetails: 'VULN_DETAILS', vulnMeta: 'VULN_META', riskAcceptances: 'RISK_ACCEPTANCES', eolDates: 'EOL_DATES', remediation: 'REMEDIATION', remediationSettings: 'REMEDIATION_SETTINGS', automoxLinks: 'AUTOMOX_LINKS', statusSettings: 'STATUS_SETTINGS', statusHistory: 'STATUS_HISTORY', scanDates: 'SCAN_DATES', planForecast: 'PLAN_FORECAST', orgSettings: 'ORG_SETTINGS' };
+            static BACKUP_KEYS = { assetRegister: 'ASSET_REGISTER', reviewQueue: 'REVIEW_QUEUE', ownershipLedger: 'OWNERSHIP_LEDGER', platformInventory: 'PLATFORM_INVENTORY', vulnAssetSummary: 'VULN_ASSET_SUMMARY', vulnServiceSummary: 'VULN_SERVICE_SUMMARY', vulnCveSummary: 'VULN_CVE_SUMMARY', vulnDetails: 'VULN_DETAILS', vulnMeta: 'VULN_META', riskAcceptances: 'RISK_ACCEPTANCES', eolDates: 'EOL_DATES', remediation: 'REMEDIATION', remediationSettings: 'REMEDIATION_SETTINGS', automoxLinks: 'AUTOMOX_LINKS', statusSettings: 'STATUS_SETTINGS', statusHistory: 'STATUS_HISTORY', scanDates: 'SCAN_DATES', planForecast: 'PLAN_FORECAST', cveWatch: 'CVE_WATCH', orgSettings: 'ORG_SETTINGS' };
 
             // Replace everything with the contents of a backup made by exportDatabase. Fields the backup lacks are cleared, so the result matches the backup.
             static async importDatabase(db) {
@@ -1864,6 +1871,69 @@
         // are dropped, not counted. Kept in gov_plan_forecast (in backups): open promises, weekly totals per team,
         // and the last 300 misses.
         // =====================================================================================================
+        // =================== Watched CVEs (v4.20) ===================
+        // CVEs pinned on the CVE Lookup, shared by everyone (gov_cve_watch, in backups). Each keeps a history of how many machines
+        // have it open, in total and per team: a point when it is pinned, after every applied Qualys sync and every Refresh.
+        // Counts are official (risk-accepted machines and findings left out, like team status). A CVE at 0 for 7 days closes itself.
+        class CveWatch {
+            static KEEP = 120; static CLEAR_DAYS = 7;
+            static load() { const o = StorageService.load(StorageService.KEYS.CVE_WATCH); return (o && !Array.isArray(o) && Array.isArray(o.pins)) ? o : { pins: [] }; }
+            static save(o) { StorageService.save(StorageService.KEYS.CVE_WATCH, o); }
+            static open() { return this.load().pins.filter(p => !p.closedAt); }
+            static closed() { return this.load().pins.filter(p => p.closedAt).sort((a, b) => String(b.closedAt).localeCompare(String(a.closedAt))); }
+            static get(cve) { return this.load().pins.find(p => p.cve === cve && !p.closedAt) || null; }
+            static who(app) { return (app && app.me && app.me.user) || 'this browser'; }
+            static async pin(app, cve, note, target) {
+                const o = this.load(), p = o.pins.find(x => x.cve === cve && !x.closedAt);
+                if (p) { p.note = note; p.target = target; this.save(o); return; }
+                o.pins.push({ cve, note: note || '', target: target || '', by: this.who(app), at: new Date().toISOString(), hist: [] });
+                this.save(o);
+                await this.snapshot(app, 'pin', [cve]);
+            }
+            static close(app, cve, why) {
+                const o = this.load(), p = o.pins.find(x => x.cve === cve && !x.closedAt); if (!p) return;
+                Object.assign(p, { closedAt: new Date().toISOString(), closedBy: this.who(app), closeWhy: why || 'closed' }); this.save(o);
+            }
+            static async reopen(app, cve) {
+                const o = this.load(); if (o.pins.some(x => x.cve === cve && !x.closedAt)) return;
+                const p = o.pins.filter(x => x.cve === cve).sort((a, b) => String(b.closedAt).localeCompare(String(a.closedAt)))[0]; if (!p) return;
+                delete p.closedAt; delete p.closedBy; delete p.closeWhy; p.clearSince = null; this.save(o);
+                await this.snapshot(app, 'pin', [cve]);
+            }
+            static count(pt, team) { return !pt ? null : team === 'ALL' ? pt.open : (pt.byTeam?.[team] || 0); }
+            static async snapshot(app, src, only = null) {
+                const o = this.load(), now = Date.now(); let changed = false;
+                for (const p of o.pins) {
+                    if (p.closedAt || (only && !only.includes(p.cve))) continue;
+                    const C = await app.cveData([p.cve], 'ALL', true), byTeam = {};
+                    C.list.forEach(x => { byTeam[x.team] = (byTeam[x.team] || 0) + 1; });
+                    const pt = { t: new Date().toISOString(), open: C.list.length, byTeam, src }, last = (p.hist || [])[p.hist.length - 1];
+                    const same = last && last.open === pt.open && JSON.stringify(last.byTeam) === JSON.stringify(byTeam) && now - Date.parse(last.t) < 20 * 3600e3;
+                    if (!same || src === 'pin') { p.hist = [...(p.hist || []), pt].slice(-this.KEEP); changed = true; }
+                    if (pt.open === 0) {
+                        if (!p.clearSince) { p.clearSince = pt.t; changed = true; }
+                        else if (now - Date.parse(p.clearSince) > this.CLEAR_DAYS * 864e5) { Object.assign(p, { closedAt: pt.t, closedBy: 'automatic', closeWhy: `no machine had it for ${this.CLEAR_DAYS} days` }); changed = true; }
+                    } else if (p.clearSince) { p.clearSince = null; changed = true; }
+                }
+                if (changed) this.save(o);
+            }
+            // Against the target date, in words: Cleared / On track / At risk / Missed
+            static status(p, C) {
+                const n = C.list.length;
+                if (!n) return { w: '✓ Cleared: no machine has it open', k: 'ok' };
+                if (!p.target) return { w: '', k: '' };
+                const end = Date.parse(p.target + 'T23:59:59');
+                if (Date.now() > end) return { w: `✖ Missed: ${fmtNum(n)} still open`, k: 'x' };
+                const notAx = C.list.filter(x => x.state.b !== 'will' || (x.when && x.when > end)).length;
+                return notAx ? { w: `⚠ At risk: ${fmtNum(notAx)} not patched by Automox before then`, k: 'a' } : { w: '✓ On track: Automox patches them all before then', k: 'ok' };
+            }
+            static trend(p, team, n = 6) {
+                const v = (p.hist || []).map(pt => this.count(pt, team)).filter(x => x !== null), out = [];
+                v.forEach(x => { if (out[out.length - 1] !== x) out.push(x); });
+                return out.slice(-n).map(fmtNum).join(' → ');
+            }
+        }
+
         class PlanForecast {
             static GRACE = 2;            // days after the patch run before Qualys is expected to show the fix
             static WAIT = 7;             // further days to wait for a rescan before a still-open finding counts as missed
@@ -4695,20 +4765,101 @@
             }
             cveFilt(k) { this.cveFilter = k; this.renderCve(true); }
 
+            // ---------- Watched CVEs (v4.20)
+            cvePinHTML(id) {
+                const p = CveWatch.get(id), D = App.dateText;
+                const form = `<div id="cve-pinform-${esc(id)}" class="hidden mt-2 flex flex-wrap items-end gap-2 text-xs print-hide">
+                    <label class="flex flex-col">Note (e.g. the cyber team's ticket)<input id="cve-pin-note-${esc(id)}" value="${esc(p?.note || '')}" class="border rounded px-2 py-1 text-sm w-64"></label>
+                    <label class="flex flex-col">Target date (optional)<input type="date" id="cve-pin-target-${esc(id)}" value="${esc(p?.target || '')}" class="border rounded px-2 py-1 text-sm"></label>
+                    <button data-c="${esc(id)}" onclick="app.cvePinSave(this.dataset.c)" class="bg-indigo-700 text-white px-3 py-1.5 rounded text-sm">📌 ${p ? 'Save' : 'Pin'}</button></div>`;
+                if (!p) return `<div class="mt-2 print-hide"><button data-c="${esc(id)}" onclick="app.cvePinForm(this.dataset.c)" class="write-only border border-indigo-300 text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded text-xs font-semibold" title="Add it to the Watched CVEs list: its count is tracked after every sync">📌 Pin to watch it</button></div>${form}`;
+                return `<div class="mt-2 text-xs bg-indigo-50 border border-indigo-200 rounded px-2 py-1 flex flex-wrap gap-x-2 items-center">📌 <strong>Watched</strong> since ${esc(D(p.at))} by ${esc(p.by)}${p.note ? ' · ' + esc(p.note) : ''}${p.target ? ' · target ' + esc(D(p.target)) : ''}
+                    <span class="print-hide"><button data-c="${esc(id)}" onclick="app.cvePinForm(this.dataset.c)" class="write-only underline">Edit</button> · <button data-c="${esc(id)}" onclick="app.cveUnpin(this.dataset.c)" class="write-only underline">Stop watching</button></span></div>${form}`;
+            }
+            cvePinForm(id) { document.getElementById('cve-pinform-' + id)?.classList.toggle('hidden'); }
+            async cvePinSave(id) {
+                const note = (document.getElementById('cve-pin-note-' + id)?.value || '').trim().slice(0, 200), target = document.getElementById('cve-pin-target-' + id)?.value || '';
+                const was = !!CveWatch.get(id);
+                await CveWatch.pin(this, id, note, target);
+                StorageService.toast(was ? `${id}: saved` : `${id} pinned: its count is tracked after every sync`);
+                this.renderCve(true);
+            }
+            cveUnpin(id) {
+                if (!confirm(`Stop watching ${id}? It moves to the closed list, with its history, and can be watched again.`)) return;
+                CveWatch.close(this, id, 'stopped by hand'); this.renderCve(true);
+            }
+            async cveWatchAgain(id) { await CveWatch.reopen(this, id); this.renderCve(true); }
+            cveOpen(id) { Prefs.set('cve', { ...Prefs.get('cve', {}), q: id }); this.cveSel = new Set(); this._cve = null; this.switchView('cve'); document.getElementById('cve-out')?.scrollIntoView({ block: 'start' }); }
+            // The table of watched CVEs, for the sidebar team. Counts are official (accepted risk left out, like team status).
+            async renderCveWatch() {
+                const el = document.getElementById('cve-watch'); if (!el) return;
+                const pins = CveWatch.open(), closed = CveWatch.closed();
+                if (!pins.length && !closed.length) { el.innerHTML = ''; return; }
+                const seq = this._cwSeq = (this._cwSeq || 0) + 1, tm = App.team(), D = App.dateText;
+                const rows = [];
+                for (const p of pins) { const C = await this.cveData([p.cve], tm, true); rows.push({ p, C, st: CveWatch.status(p, C) }); }
+                if (seq !== this._cwSeq || this.currentView !== 'cve') return;
+                let kev = null; if (AIService.load().webResearch !== false) { try { kev = await WebResearch.kev(); } catch (e) { kev = null; } }
+                if (seq !== this._cwSeq || this.currentView !== 'cve') return;
+                this._cwRows = rows;
+                const n = (C, k) => C.list.filter(x => x.state.b === k).length;
+                const cls = { ok: 'text-green-900', a: 'text-amber-900 font-semibold', x: 'text-red-900 font-semibold' };
+                const body = rows.map(({ p, C, st }) => {
+                    const first = CveWatch.count((p.hist || [])[0], tm), now = C.list.length, d = first === null ? null : now - first;
+                    const title = C.qinfo[0]?.title || '';
+                    return `<tr class="align-top hover:bg-indigo-50 cursor-pointer" data-c="${esc(p.cve)}" onclick="app.cveOpen(this.dataset.c)">
+                        <td class="px-3 py-2"><div class="font-mono font-semibold text-indigo-900">${esc(p.cve)}${kev && kev.get(p.cve) ? ' <span class="text-red-800 text-xs">⚑ KEV</span>' : ''}</div><div class="text-[11px] text-gray-600 max-w-xs truncate" title="${esc(title)}">${esc(title || 'no Qualys check in our data yet')}</div>${p.note ? `<div class="text-[11px] text-gray-500">${esc(p.note)}</div>` : ''}</td>
+                        <td class="px-3 py-2 text-right"><span class="text-lg font-bold">${fmtNum(now)}</span><div class="text-[11px] text-gray-500">machines</div></td>
+                        <td class="px-3 py-2 text-right whitespace-nowrap">${d === null ? '' : d < 0 ? `<strong class="text-green-900">−${fmtNum(-d)}</strong>` : d > 0 ? `<strong class="text-red-900">+${fmtNum(d)}</strong>` : '±0'}<div class="text-[11px] text-gray-500">since ${esc(D(p.at))}</div></td>
+                        <td class="px-3 py-2 text-xs whitespace-nowrap">${C.ax ? `⟳ ${fmtNum(n(C, 'will'))} will patch<br>⚠ ${fmtNum(n(C, 'blocked'))} blocked · ✋ ${fmtNum(n(C, 'manual'))} manual` : '<span class="text-gray-500">no Automox data</span>'}</td>
+                        <td class="px-3 py-2 text-xs">${p.target ? `<div class="whitespace-nowrap">${esc(D(p.target))}</div>` : ''}<div class="${cls[st.k] || ''}">${esc(st.w || (p.target ? '' : 'no target'))}</div></td>
+                        <td class="px-3 py-2 text-xs font-mono whitespace-nowrap">${esc(CveWatch.trend(p, tm))}</td></tr>`;
+                }).join('');
+                el.innerHTML = `<div class="border-2 border-indigo-200 rounded-lg overflow-hidden">
+                    <div class="bg-indigo-50 px-4 py-2 flex flex-wrap justify-between items-center gap-2"><h3 class="font-bold text-indigo-950">📌 Watched CVEs <span class="font-normal text-sm">· ${esc(App.teamLabel(tm))} · ${fmtNum(pins.length)}</span></h3>
+                        <span class="flex gap-2 print-hide">${Demo.api() && pins.length ? `<button id="cve-refresh-all" onclick="app.cveRefreshAll()" class="write-only bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs disabled:opacity-50" title="Ask Qualys about every watched CVE now (at most 20), then Automox for their machines">⟳ Refresh all pinned</button>` : ''}${pins.length ? `<button onclick="app.cveWatchCopy()" class="bg-slate-800 text-white px-3 py-1 rounded text-xs">📋 Copy update for the cyber team</button>` : ''}</span></div>
+                    ${pins.length ? `<div class="overflow-x-auto"><table class="min-w-full text-sm bg-white"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-3 py-2 text-left">CVE</th><th class="px-3 py-2 text-right">Open now</th><th class="px-3 py-2 text-right">Change</th><th class="px-3 py-2 text-left">Automox</th><th class="px-3 py-2 text-left">Target</th><th class="px-3 py-2 text-left">Trend</th></tr></thead><tbody class="divide-y">${body}</tbody></table></div>
+                        <p class="px-4 py-1.5 text-[11px] text-gray-500 bg-white border-t">Counts leave out risk-accepted machines and findings (like team status). A point is added after every Qualys sync and every Refresh; a CVE at 0 for ${CveWatch.CLEAR_DAYS} days closes itself. Click a row for the full lookup.</p>` : '<p class="px-4 py-3 text-sm text-gray-600 bg-white">Nothing watched right now.</p>'}
+                    ${closed.length ? `<details class="bg-white border-t px-4 py-2 text-xs"><summary class="cursor-pointer font-semibold">Closed (${fmtNum(closed.length)})</summary><table class="mt-1 min-w-full"><tbody class="divide-y">${closed.slice(0, 50).map(p => `<tr><td class="py-1 pr-3 font-mono">${esc(p.cve)}</td><td class="pr-3">${esc(D(p.at))} → ${esc(D(p.closedAt))}</td><td class="pr-3">${esc(p.closeWhy || '')}${p.closedBy && p.closedBy !== 'automatic' ? ' (' + esc(p.closedBy) + ')' : ''}</td><td class="pr-3 font-mono">${esc(CveWatch.trend(p, 'ALL', 4))}</td><td class="text-right"><button data-c="${esc(p.cve)}" onclick="app.cveWatchAgain(this.dataset.c)" class="write-only underline text-indigo-800">Watch again</button></td></tr>`).join('')}</tbody></table></details>` : ''}</div>`;
+            }
+            cveWatchText(rows, tm) {
+                const D = App.dateText, n = (C, k) => C.list.filter(x => x.state.b === k).length, L = [`Watched CVEs: CyberView ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${tm !== 'ALL' ? ' (' + tm + ' team)' : ''}`];
+                rows.forEach(({ p, C, st }) => {
+                    const first = CveWatch.count((p.hist || [])[0], tm), when = C.list.filter(x => x.state.b === 'will' && x.when).map(x => x.when);
+                    L.push('', `${p.cve}${C.qinfo[0] ? ' (' + C.qinfo[0].title + ')' : ''}${p.note ? ' [' + p.note + ']' : ''}`,
+                        `  ${C.list.length} machine${C.list.length === 1 ? '' : 's'} open${first !== null ? ` (was ${first} when pinned ${D(p.at)})` : ''}`);
+                    if (C.list.length && C.ax) L.push(`  Automox will patch ${n(C, 'will')}${when.length ? ' by ' + new Date(Math.max(...when)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : ''}; blocked ${n(C, 'blocked')}; manual ${n(C, 'manual')}`);
+                    if (p.target || st.w) L.push(`  ${p.target ? 'Target ' + D(p.target) + ': ' : ''}${st.w}`);
+                });
+                L.push('', 'Counts leave out risk-accepted machines and findings.');
+                return L.join('\n');
+            }
+            cveWatchCopy() {
+                const t = this.cveWatchText(this._cwRows || [], App.team()); if (!t) return;
+                const done = () => StorageService.toast('Update copied: paste it into your reply');
+                if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, () => prompt('Copy the update:', t)); else prompt('Copy the update:', t);
+            }
+            // A compact block (Dashboard, Team Risk Report)
+            async cveWatchBlockHTML(team, linkable = true) {
+                const pins = CveWatch.open(); if (!pins.length) return '';
+                const rows = [];
+                for (const p of pins) { const C = await this.cveData([p.cve], team, true); rows.push({ p, C, st: CveWatch.status(p, C) }); }
+                const cls = { ok: 'text-green-900', a: 'text-amber-900 font-semibold', x: 'text-red-900 font-semibold' };
+                return rows.map(({ p, C, st }) => { const first = CveWatch.count((p.hist || [])[0], team), d = first === null ? null : C.list.length - first;
+                    return `<${linkable ? `a href="#" data-c="${esc(p.cve)}" onclick="app.cveOpen(this.dataset.c); return false;"` : 'div'} class="flex flex-wrap justify-between items-baseline gap-x-3 border rounded-lg px-3 py-2 ${linkable ? 'hover:bg-indigo-50' : ''}">
+                        <span><span class="font-mono font-semibold">${esc(p.cve)}</span> <span class="text-xs text-gray-600">${esc(C.qinfo[0]?.title || '')}</span></span>
+                        <span class="text-sm"><strong>${fmtNum(C.list.length)}</strong> open${d ? ` <span class="text-xs">(${d < 0 ? '−' + fmtNum(-d) : '+' + fmtNum(d)} since pinned)</span>` : ''}${st.w ? ` · <span class="text-xs ${cls[st.k] || ''}">${esc(st.w)}</span>` : ''}</span></${linkable ? 'a' : 'div'}>`; }).join('');
+            }
+
             // v4.18 ⟳ Refresh this CVE: Qualys's findings for the CVE's QIDs on every host right now (KnowledgeBase searched by CVE
             // too), stored for those QIDs on the machines Qualys returned (nothing else changes), then Automox for those machines.
             static DET_KEYS = ['k', 'asset', 'qid', 'proto', 'port', 'sev', 'qvs', 'cvss', 'status', 'type', 'first', 'last', 'age', 'times', 'patchable', 'cves'];
-            async cveRefresh() {
-                const C = this._cve; if (!C || !C.ids.length) return;
-                if (!Demo.api()) { StorageService.toast('Refreshing needs the CyberView server'); return; }
-                if (OrgSettings.blocked && OrgSettings.needsSetup && OrgSettings.needsSetup()) { OrgSettings.blocked('refreshing the CVE'); return; }
-                const btn = document.getElementById('cve-refresh-btn'); if (btn) { btn.disabled = true; btn.textContent = '⟳ Asking Qualys…'; }
-                let res;
-                try {
-                    const r = await fetch('api/qualys/cve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cves: C.ids, qids: C.qids }) });
-                    res = await r.json().catch(() => ({}));
-                    if (!r.ok) throw new Error(res.error || ('Qualys refresh refused (' + r.status + ')'));
-                } catch (e) { StorageService.toast(e.message); if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh this CVE'; } return; }
+            // The refresh itself (v4.20: shared by Refresh this CVE and Refresh all pinned). Returns { delta, devs }; throws on failure.
+            async cveRefreshCore(ids, qidsKnown) {
+                const C = { ids, qids: qidsKnown };
+                const r = await fetch('api/qualys/cve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cves: ids, qids: qidsKnown }) });
+                const res = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(res.error || ('Qualys refresh refused (' + r.status + ')'));
                 const vd = await this.getVulnData(), idOf = (c) => String(typeof c === 'string' ? c : c?.id || '');
                 const kb = new Map((res.qids || []).map(q => [String(q.qid), q])), Q = new Set([...kb.keys(), ...C.qids.map(String)]);
                 const openOf = (list) => new Set(list.filter(d => Q.has(String(d.qid)) && RemediationVerifier.ACTIVE(d.status)).map(d => d.asset));
@@ -4742,18 +4893,49 @@
                 try {
                     await VulnStore.merge({ detections: dets, qids: qRecs, assets });
                     StorageService.save(StorageService.KEYS.SCAN_DATES, scans);
-                } catch (e) { StorageService.toast('Could not save the refreshed findings: ' + e.message); if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh this CVE'; } return; }
+                } catch (e) { throw new Error('Could not save the refreshed findings: ' + e.message); }
                 this.invalidateVulnData();
                 const vd2 = await this.getVulnData(), after = openOf(vd2.all || []);
-                this._cveDelta = { ids: C.ids.join(','), at: res.at, seconds: res.seconds, found: [...after].filter(a => !before.has(a)), fixed: [...before].filter(a => !after.has(a) && fresh.has(a)),
+                const delta = { ids: C.ids.join(','), at: res.at, seconds: res.seconds, found: [...after].filter(a => !before.has(a)), fixed: [...before].filter(a => !after.has(a) && fresh.has(a)),
                     still: [...after].filter(a => before.has(a)).length, notInReg, kb: res.kb, kbQids: res.kbQids || [], newQids, ax: 'running' };
-                // Automox: refresh with these machines' devices (their installed fixes are read too)
                 let devs = [];
                 try { await AutomoxService.ensure(); const m = AutomoxService.match(); devs = m ? [...new Set([...after, ...before])].map(a => m.byAsset.get(a)?.dev?.id).filter(Boolean) : []; } catch (e) { devs = []; }
-                if (AutomoxService.status?.configured && !(AutomoxService.status?.job?.running)) { this.axSync(false, devs); }
-                else this._cveDelta.ax = AutomoxService.status?.configured ? 'a sync is already running' : 'not connected';
+                return { delta, devs };
+            }
+            // Automox: refresh with these machines' devices (their installed fixes are read too). Returns what the banner says.
+            cveAxFollow(devs) {
+                if (AutomoxService.status?.configured && !(AutomoxService.status?.job?.running)) { this.axSync(false, devs); return 'running'; }
+                return AutomoxService.status?.configured ? 'a sync is already running' : 'not connected';
+            }
+            async cveRefresh() {
+                const C = this._cve; if (!C || !C.ids.length) return;
+                if (!Demo.api()) { StorageService.toast('Refreshing needs the CyberView server'); return; }
+                if (OrgSettings.needsSetup && OrgSettings.needsSetup()) { OrgSettings.blocked('refreshing the CVE'); return; }
+                const btn = document.getElementById('cve-refresh-btn'); if (btn) { btn.disabled = true; btn.textContent = '⟳ Asking Qualys…'; }
+                let r;
+                try { r = await this.cveRefreshCore(C.ids, C.qids); }
+                catch (e) { StorageService.toast(e.message); if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh this CVE'; } return; }
+                r.delta.ax = this.cveAxFollow(r.devs);
+                this._cveDelta = r.delta;
+                try { await CveWatch.snapshot(this, 'refresh', C.ids); } catch (e) { console.error('[Watched CVEs]', e); }
                 this._cve = null; this.renderCve();
             }
+            // ⟳ Refresh all pinned: one CVE after another (at most 20), then one Automox refresh for all their machines.
+            async cveRefreshAll() {
+                if (!Demo.api()) { StorageService.toast('Refreshing needs the CyberView server'); return; }
+                const pins = CveWatch.open().slice(0, 20); if (!pins.length) return;
+                const btn = document.getElementById('cve-refresh-all'); const devs = new Set(); let found = 0, fixed = 0, done = 0;
+                for (const p of pins) {
+                    if (btn) { btn.disabled = true; btn.textContent = `⟳ ${p.cve} (${done + 1} of ${pins.length})…`; }
+                    try { const Cp = await this.cveData([p.cve], 'ALL', true); const r = await this.cveRefreshCore([p.cve], Cp.qids); r.devs.forEach(d => devs.add(d)); found += r.delta.found.length; fixed += r.delta.fixed.length; done++; }
+                    catch (e) { StorageService.toast(`${p.cve}: ${e.message}`); break; }
+                }
+                const ax = this.cveAxFollow([...devs]);
+                try { await CveWatch.snapshot(this, 'refresh'); } catch (e) { console.error('[Watched CVEs]', e); }
+                StorageService.toast(`Refreshed ${done} watched CVE${done === 1 ? '' : 's'} from Qualys: +${found} newly found, −${fixed} fixed${ax === 'running' ? '; Automox refreshing' : ''}`);
+                this._cve = null; this.renderCve();
+            }
+
             cveDeltaHTML(C) {
                 const D = this._cveDelta; if (!D || D.ids !== C.ids.join(',')) return '';
                 const W = App.whenText, reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
@@ -4778,7 +4960,7 @@
                 const r = document.getElementById('ra-reason'); if (r && !r.value) r.value = `${C.ids.join(', ')}: `;
             }
 
-            async cveData(ids, team) {
+            async cveData(ids, team, official = false) {
                 const vd = await this.getVulnData();
                 const S = StatusEngine.settings(), end = Demo.now() + (+S.patchPlanDays || 7) * 864e5;
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), regMap = new Map(reg.map(r => [r.normalizedName, r]));
@@ -4790,7 +4972,7 @@
                 for (const d of [...vd.dets, ...(vd.excepted || [])]) { if (qidHits.has(String(d.qid))) continue; const h = (d.cves || []).map(idOf).filter(c => want.has(c)); if (h.length) addHit(d.qid, h); }
                 let D = null; if (Demo.api()) { try { D = await AutomoxService.ensure(); } catch (e) { D = null; } }
                 const m = D ? AutomoxService.match() : null, auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
-                const show = RiskView.on(), hidden = { machines: 0, findings: 0, expiring: 0 }, hm = new Set(), hidBy = new Map();     // hidBy: CVE -> hidden machines
+                const show = !official && RiskView.on(), hidden = { machines: 0, findings: 0, expiring: 0 }, hm = new Set(), hidBy = new Map();     // hidBy: CVE -> hidden machines
                 const hide = (cves, a) => cves.forEach(c => { if (!hidBy.has(c)) hidBy.set(c, new Set()); hidBy.get(c).add(a); });
                 const inScope = (r) => r && (team === 'ALL' || r.owner === team);
                 const rows = new Map();
@@ -4884,6 +5066,7 @@
                 if ($('cve-scope') && [...$('cve-scope').options].some(o => o.value === team)) $('cve-scope').value = team;
                 if (document.activeElement !== $('cve-input')) $('cve-input').value = pref.q || '';
                 const ids = App.cveIds(pref.q), out = $('cve-out');
+                this.renderCveWatch();
                 const asOf = (this.loadVulnMeta().imports || []).slice(-1)[0];
                 $('cve-asof').textContent = asOf ? `Qualys data as of ${new Date(asOf.at || asOf.date || Date.now()).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
                 if (!ids.length) {
@@ -4908,6 +5091,7 @@
                     <span class="text-sm">${c.machines ? `<strong>${fmtNum(c.machines)}</strong> machine${c.machines === 1 ? '' : 's'} with it open` : (c.qids.length ? `Qualys has a check for it (QID ${esc(c.qids.slice(0, 3).join(', '))}${c.qids.length > 3 ? '…' : ''}); <strong>no machine has it open now</strong>` : '<strong>not in our Qualys data</strong>')}${c.hid ? ` · <strong class="text-amber-800">⚑ plus ${fmtNum(c.hid)} risk-accepted machine${c.hid === 1 ? '' : 's'} (hidden)</strong> <button class="underline print-hide" onclick="app.setShowAccepted(true)">Show</button>` : ''}</span></div>
                     ${!c.qids.length ? `<p class="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded p-2 mt-2">⚠ <strong>This does not mean you are not affected.</strong> No Qualys finding in our data names ${esc(c.id)}: either no scanned machine has it, or Qualys has no check for it yet (new CVEs can take a few days). Search the Qualys KnowledgeBase for ${esc(c.id)} to be sure.${C.axOnly.length ? ' Automox does list a waiting patch for it: see below.' : ''}</p>` : ''}
                     ${App.cveAxLine(c, C)}
+                    ${this.cvePinHTML(c.id)}
                     <div class="text-xs text-gray-600 mt-1" id="cve-intel-${esc(c.id)}"></div></div>`).join('');
                 const qHTML = C.qinfo.length ? `<div><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">Qualys checks for ${C.ids.length === 1 ? 'it' : 'them'}</p><div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.qinfo.map(q => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(q.qid)}" onclick="app.inspectQid(this.dataset.q, 'cve')"><td class="px-2 py-1.5 font-mono text-xs text-gray-500">${esc(q.qid)}</td><td class="px-2 py-1.5">${esc(q.title)}${q.exploited ? ' <strong class="text-red-800 text-xs">⚑ exploited</strong>' : ''}</td><td class="px-2 py-1.5 text-xs text-gray-600">${q.patchable ? 'patch exists' : 'no patch (configuration or end of life)'}</td><td class="px-2 py-1.5 text-right font-mono text-xs">${fmtNum(q.open)} open</td></tr>`).join('')}</tbody></table></div></div>` : '';
                 const sel = this.cveSel = this.cveSel || new Set();
@@ -5486,6 +5670,7 @@
                     await fetch('api/qualys/applied', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ syncId: L.syncId, summary: res }) });
                     try { await this.saveStatusSnapshot('sync', L.syncId); } catch (e) { console.error('[Status] snapshot', e); }
                     try { await PlanForecast.update(this); } catch (e) { console.error('[Patch Plan] forecast check', e); }
+                    try { await CveWatch.snapshot(this, 'sync'); } catch (e) { console.error('[Watched CVEs]', e); }
                     StorageService.toast(`Qualys sync applied: ${fmtNum(res.detections)} findings on ${fmtNum(res.assets)} assets${res.unrecognised ? `, ${fmtNum(res.unrecognised)} new Unrecognised assets in the Review Queue` : ''}`);
                     this.updateGlobalBadges();
                 } catch (e) {
@@ -5901,7 +6086,8 @@
                 if (StorageService.mode !== 'server' && !Demo.ON && !reg.length) { el.innerHTML = Demo.welcomeHTML(); return; }
                 const card = (title, body, link, linkText) => `<div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">${title}</h3>${link ? `<a href="#" onclick="app.switchView('${link}'); return false;" class="text-sm text-blue-700 underline whitespace-nowrap">${linkText} →</a>` : ''}</div>${body}</div>`;
                 const row = (sym, label, value, sub = '') => `<div class="flex justify-between items-baseline gap-3 border rounded-lg px-3 py-2"><span>${sym} ${label}${sub ? ` <span class="text-xs text-gray-500">${sub}</span>` : ''}</span><span class="font-semibold text-right text-sm">${value}</span></div>`;
-                el.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div id="ds-plan">${card('🗓️ Patch Plan', '<p class="text-sm text-gray-500 italic">Working it out…</p>')}</div><div id="ds-eol">${card('⏳ End of life', '<p class="text-sm text-gray-500 italic">Working it out…</p>')}</div></div><div id="ds-fresh"></div>`;
+                el.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div id="ds-plan">${card('🗓️ Patch Plan', '<p class="text-sm text-gray-500 italic">Working it out…</p>')}</div><div id="ds-eol">${card('⏳ End of life', '<p class="text-sm text-gray-500 italic">Working it out…</p>')}</div></div><div id="ds-watch"></div><div id="ds-fresh"></div>`;
+                this.cveWatchBlockHTML(App.team()).then(h => { const w = document.getElementById('ds-watch'); if (w && this.currentView === 'dashboard') w.innerHTML = h ? card('📌 Watched CVEs', `<p class="text-sm text-gray-600">${esc(App.teamLabel())} · open machines, accepted risk left out</p>` + h, 'cve', 'Open the CVE Lookup') : ''; }).catch(e => console.error('[Watched CVEs]', e));
                 // Patch Plan: the team chosen on the Patch Plan page (the main team at first)
                 const f = this.planF, sev = (n) => fmtNum(n);
                 const dseq = this._dsSeq = (this._dsSeq || 0) + 1;
@@ -8160,6 +8346,7 @@
                 this.reportCtx = { scope, riskStatusFilter, groups, assets, dets, inScope };
 
                 $('rpt-coverage').innerHTML = this.coverageHTML(scope);
+                this.cveWatchBlockHTML(scope, false).then(h => { if (stale()) return; $('rpt-watch').innerHTML = h; $('rpt-watch-wrap').classList.toggle('hidden', !h); }).catch(e => console.error('[Watched CVEs]', e));
                 $('rpt-asof').innerHTML = this.asOfHTML(this.dataAsOf(StorageService.load(StorageService.KEYS.ASSET_REGISTER), null));
                 await RemediationService.refreshQuiet();
                 if (stale()) return;

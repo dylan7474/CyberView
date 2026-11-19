@@ -24,7 +24,7 @@ import automox
 import eol
 import qualys
 
-VERSION = "4.19.0"
+VERSION = "4.20.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -40,7 +40,7 @@ FIELD_MAP = {
     "vulnDetails": "gov_vuln_details", "vulnMeta": "gov_vuln_meta", "riskAcceptances": "gov_risk_acceptances",
     "eolDates": "gov_eol_dates", "remediation": "gov_remediation", "remediationSettings": "gov_remediation_settings",
     "automoxLinks": "gov_automox_links", "statusSettings": "gov_status_settings", "statusHistory": "gov_status_history", "scanDates": "gov_scan_dates",
-    "orgSettings": "gov_org_settings", "planForecast": "gov_plan_forecast",
+    "orgSettings": "gov_org_settings", "planForecast": "gov_plan_forecast", "cveWatch": "gov_cve_watch",
 }
 # collections whose edits are written to the change history, and the field that identifies a record
 TRACKED = {"gov_asset_register": ("normalizedName", "normalizedName"), "gov_risk_acceptances": ("id", "asset"),
@@ -52,6 +52,7 @@ COLLECTIONS = {
     "gov_vuln_asset_summary", "gov_vuln_service_summary", "gov_vuln_cve_summary", "gov_vuln_details",
     "gov_vuln_meta", "gov_risk_acceptances", "gov_eol_dates", "gov_remediation", "gov_remediation_settings",
     "gov_automox_links", "gov_status_settings", "gov_status_history", "gov_scan_dates", "gov_org_settings", "gov_plan_forecast",
+    "gov_cve_watch",
 }
 # Saved one record at a time through /api/tasks, never as a whole collection (a stale page would wipe other people's work).
 PER_RECORD = {"gov_remediation"}

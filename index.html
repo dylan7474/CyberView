@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.18.0 · 18 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.19.0 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -4261,7 +4261,7 @@
             // their own team pickers become a label saying the team. The register and Review Queue keep their own filters (they
             // need Unknown and Unrecognised, which are not teams). Starts on the main team from Organisation setup.
             static TEAM_PICKERS = { 'vuln-filter-owner': 'vuln', 'plan-team': 'plan', 'cve-scope': 'cve', 'report-scope-selector': 'reports', 'eol-scope-selector': 'eol', 'ax-scope': 'automox', 'st-scope': 'status', 'rem-f-team': 'remediation' };
-            static TEAM_VIEWS = ['dashboard', 'plan', 'cve', 'vuln', 'remediation', 'status', 'reports', 'eol', 'automox'];
+            static TEAM_VIEWS = ['dashboard', 'plan', 'cve', 'vuln', 'remediation', 'status', 'reports', 'eol', 'automox', 'register', 'review', 'risk-accept', 'health'];
             static team() { const T = OrgSettings.teams(), v = Prefs.get('team', null); return v === 'ALL' || T.includes(v) ? v : (OrgSettings.mainTeam() || 'ALL'); }
             static teamLabel(t = App.team()) { return t === 'ALL' ? 'All teams' : t; }
             applyTeamSwitch() {
@@ -4272,6 +4272,7 @@
             }
             setTeam(v) {
                 Prefs.set('team', v); this._cve = null;
+                ['reg-f-owner', 'review-filter-owner'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });     // back to the sidebar team
                 this.applyTeamSwitch();
                 this.switchView(this.currentView || 'dashboard');
             }
@@ -4289,6 +4290,7 @@
                 else if (viewId === 'cve') { const c = Prefs.get('cve', {}); if (c.team !== t) { Prefs.set('cve', { ...c, team: t }); this._cve = null; } }
                 else if (viewId === 'status') { if (!this._stOther) this.stScope = t; this._stOther = false; }
                 else if (viewId === 'remediation') { this.remF.team = t; }
+                else if (viewId === 'review' && this.reviewState?.filters) { const el = document.getElementById('review-filter-owner'); this.reviewState.filters.owner = el ? el.value : t; }
             }
 
             // ---------- Status (phase B): every source joined into one status per asset and per team.
@@ -4412,7 +4414,7 @@
                     if (!snap) { el.innerHTML = `<div class="bg-white border rounded p-4 text-sm"><strong>🚦 Status by team:</strong> no snapshot yet. <button class="underline text-blue-800" onclick="app.switchView('status')">Open the Status page</button> to work it out; a snapshot is saved after each applied Qualys sync.</div>`; return; }
                     const st = { teams: snap.teams || [] };
                     el.innerHTML = `<div class="bg-white border rounded p-4"><div class="flex justify-between items-baseline mb-2"><h4 class="font-bold">🚦 Status by team <span class="text-xs font-normal text-gray-500">as of ${esc(new Date(snap.at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }))}</span></h4><button class="text-xs underline text-blue-800" onclick="app.switchView('status')">open the Status page (live)</button></div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm">${st.teams.map(t => `<button class="flex justify-between gap-3 text-left hover:bg-blue-50 rounded px-1" data-t="${esc(t.team)}" onclick="app.switchView('status'); app.stOpen(this.dataset.t)"><span class="font-semibold">${esc(t.team)}</span><span>${this.teamWordHTML(t)} <span class="text-xs text-gray-600">${t.newP12 ? t.compliance + '% in SLA' : ''}${t.over12 ? ` · ✖ ${fmtNum(t.over12)} overdue` : ''}</span></span></button>`).join('')}</div></div>`;
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm">${st.teams.map(t => `<button class="flex justify-between gap-3 text-left hover:bg-blue-50 rounded px-1" data-t="${esc(t.team)}" onclick="app.switchView('status'); app.stOpen(this.dataset.t)"><span class="font-semibold">${esc(t.team)}${t.team === App.team() ? ' <span class="text-xs font-normal text-indigo-700" title="Your team (👥 Team in the sidebar)">◀ your team</span>' : ''}</span><span>${this.teamWordHTML(t)} <span class="text-xs text-gray-600">${t.newP12 ? t.compliance + '% in SLA' : ''}${t.over12 ? ` · ✖ ${fmtNum(t.over12)} overdue` : ''}</span></span></button>`).join('')}</div></div>`;
                 } catch (e) { console.error('[Status] dashboard', e); }
             }
 
@@ -4484,8 +4486,8 @@
                     'bulk-crit': opt('', 'no change') + tierOpts + opt('clear', 'Not set'),
                     'bulk-confirm-tier': opt('0', 'Not set yet') + tierOpts,
                     'edit-asset-criticality': opt('0', 'Not set (counts as Tier 2)') + tierOpts,
-                    'review-filter-owner': opt('ALL', 'All teams') + team() + opt('Unknown', 'Unknown'),
-                    'reg-f-owner': opt('ALL', 'All teams') + team() + opt('Unknown', 'Unknown') + opt('Unrecognised', 'Unrecognised'),
+                    'review-filter-owner': opt(App.team(), App.teamLabel()) + opt('Unknown', '? No suggested team'),     // v4.19: follows the sidebar team
+                    'reg-f-owner': opt(App.team(), App.teamLabel()) + opt('Unknown', '? No team') + opt('Unrecognised', '? Unrecognised'),     // v4.19: follows the sidebar team
                     'bulk-owner': opt('', 'no change') + team() + opt('Unknown', 'Unknown'),
                     'vuln-filter-owner': opt('ALL', 'All teams') + team() + opt('Unrecognised', 'Unrecognised'),
                     'report-scope-selector': opt('ALL', 'All teams') + team(),
@@ -5934,7 +5936,7 @@
                 const register = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 this.renderDashSimple();
                 this.renderDashStatus();
-                const drawRem = () => { const el = document.getElementById('dash-remediation'); if (el) el.innerHTML = RemediationStats.html(RemediationStats.compute(RemediationService.list())); };
+                const drawRem = () => { const el = document.getElementById('dash-remediation'); if (el) el.innerHTML = RemediationStats.html(RemediationStats.compute(RemediationService.list(), App.team())); };
                 drawRem();
                 RemediationService.refreshQuiet().then(() => { if (this.currentView === 'dashboard') drawRem(); });
                 this.renderDashRegister(register);
@@ -5943,16 +5945,18 @@
             // Advanced dashboard (v4.15): the register's gaps and the acceptances, each linking to the page that fixes it.
             renderDashRegister(reg) {
                 const el = document.getElementById('dash-register'); if (!el) return;
-                const known = reg.filter(r => !r.unrecognised), queue = ReviewQueueService.getQueue().filter(x => x.status === 'PENDING' || x.status === 'IN_REVIEW').length;
+                const tm = App.team(), mine = (r) => tm === 'ALL' || r.owner === tm;      // v4.19: the sidebar team
+                const known = reg.filter(r => !r.unrecognised && mine(r)), queue = ReviewQueueService.getQueue().filter(x => (x.status === 'PENDING' || x.status === 'IN_REVIEW') && (tm === 'ALL' || x.suggestedOwner === tm)).length;
                 const noTeam = reg.filter(r => StatusEngine.teamOf(r) === 'Unassigned').length, noTier = known.filter(r => !StatusEngine.tierOf(r)).length, noSvc = known.filter(r => !r.service || r.service === 'Unclassified').length;
-                const ras = (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => a.status === 'Risk Accepted' || a.status === 'Open');
+                const ownerOf = new Map(reg.map(r => [r.normalizedName, r.owner]));
+                const ras = (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => (a.status === 'Risk Accepted' || a.status === 'Open') && (tm === 'ALL' || (ownerOf.get(a.asset) || a.owner) === tm));
                 const now = Date.now(), exp = (a) => StatusEngine.time(a.expDate);
                 const expired = ras.filter(a => exp(a) && exp(a) < now).length, soon = ras.filter(a => exp(a) >= now && exp(a) - now <= 30 * 864e5).length;
                 const row = (sym, label, n, view, ok) => `<a href="#" onclick="app.switchView('${view}'); return false;" class="flex justify-between items-baseline gap-3 border rounded-lg px-3 py-2 hover:bg-blue-50"><span>${n ? sym : '✓'} ${label}</span><span class="font-semibold ${n && !ok ? '' : 'text-gray-500'}">${fmtNum(n)}</span></a>`;
                 el.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">🗄️ Register</h3><span class="text-sm text-gray-500">${fmtNum(known.length)} machines</span></div>
-                        ${row('📋', 'Waiting in the Review Queue', queue, 'review')}${row('?', 'No team', noTeam, 'health')}${row('?', 'No tier (counts as Tier 2)', noTier, 'health')}${row('?', 'No service', noSvc, 'health')}</div>
-                    <div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">✅ Risk acceptances</h3><span class="text-sm text-gray-500">${fmtNum(ras.length)} in the register</span></div>
+                    <div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">🗄️ Register</h3><span class="text-sm text-gray-500">${esc(App.teamLabel(tm))} · ${fmtNum(known.length)} machines</span></div>
+                        ${row('📋', tm === 'ALL' ? 'Waiting in the Review Queue' : 'Waiting in the Review Queue (suggested for ' + esc(tm) + ')', queue, 'review')}${row('?', 'No team (any team could own them)', noTeam, 'health')}${row('?', 'No tier (counts as Tier 2)', noTier, 'health')}${row('?', 'No service', noSvc, 'health')}</div>
+                    <div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">✅ Risk acceptances</h3><span class="text-sm text-gray-500">${esc(App.teamLabel(tm))} · ${fmtNum(ras.length)}</span></div>
                         ${row('✖', '<strong>Expired</strong>: their findings count again', expired, 'risk-accept')}${row('⚠', 'Expire within 30 days', soon, 'risk-accept')}${row('✓', 'In date', ras.length - expired - soon, 'risk-accept', true)}</div></div>`;
             }
 
@@ -6510,7 +6514,7 @@
             async renderHealth() {
                 const $ = (id) => document.getElementById(id);
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
-                $('dash-coverage').innerHTML = (StorageService.mode !== 'server' && !Demo.ON && !reg.length) ? Demo.welcomeHTML() : this.coverageHTML('ALL');
+                $('dash-coverage').innerHTML = (StorageService.mode !== 'server' && !Demo.ON && !reg.length) ? Demo.welcomeHTML() : this.coverageHTML(App.team());
                 this.renderDashAutomox();
                 this.renderHealthGaps(reg);
                 await this.renderHealthSources();
@@ -6580,14 +6584,14 @@
             // The register's gaps, each with the machines (click one to open it)
             renderHealthGaps(reg) {
                 const el = document.getElementById('health-gaps'); if (!el) return;
-                const known = reg.filter(r => !r.unrecognised);
+                const tm = App.team(), known = reg.filter(r => !r.unrecognised && (tm === 'ALL' || r.owner === tm));      // v4.19: the sidebar team
                 const gaps = [
                     ['No team', reg.filter(r => StatusEngine.teamOf(r) === 'Unassigned'), 'Nobody owns these: set a team in the Asset Register or the Review Queue.'],
                     ['No tier', known.filter(r => !StatusEngine.tierOf(r)), 'Their priorities assume Tier 2 until a tier is set.'],
                     ['No service', known.filter(r => !r.service || r.service === 'Unclassified'), 'The service helps suggest owners for new machines.'],
                     ['Exposure unknown', known.filter(r => !r.exposure || r.exposure === 'Unknown'), 'Internet-facing machines are fixed first: set the exposure.']
                 ];
-                el.innerHTML = `<div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b"><h3 class="text-lg font-semibold">Register gaps</h3><p class="text-xs text-gray-500">Click a machine to open it.</p></div>
+                el.innerHTML = `<div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b"><h3 class="text-lg font-semibold">Register gaps · ${esc(App.teamLabel(tm))}</h3><p class="text-xs text-gray-500">Click a machine to open it. <em>No team</em> lists every machine nobody owns.</p></div>
                     <div class="divide-y">${gaps.map(([label, list, help]) => `<details class="px-5 py-3" ${list.length && list.length <= 10 ? 'open' : ''}><summary class="cursor-pointer flex justify-between gap-3"><span><span class="font-semibold">${list.length ? '?' : '✓'} ${esc(label)}</span> <span class="text-xs text-gray-500">${esc(help)}</span></span><span class="font-semibold">${fmtNum(list.length)}</span></summary>
                         ${list.length ? `<div class="mt-2 flex flex-wrap gap-1">${list.slice(0, 200).map(r => `<button data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)" class="px-2 py-0.5 rounded border text-xs font-mono hover:bg-blue-50">${esc(r.originalName || r.normalizedName)}</button>`).join('')}${list.length > 200 ? `<span class="text-xs text-gray-500">+${fmtNum(list.length - 200)} more</span>` : ''}</div>` : ''}</details>`).join('')}</div></div>`;
             }
@@ -8289,7 +8293,8 @@
             }
 
             renderRiskAcceptances() {
-                const acceptances = StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || [];
+                const tmRA = App.team(), ownerRA = new Map((StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).map(r => [r.normalizedName, r.owner]));
+                const acceptances = (StorageService.load(StorageService.KEYS.RISK_ACCEPTANCES) || []).filter(a => tmRA === 'ALL' || (ownerRA.get(a.asset) || a.owner) === tmRA);     // v4.19: the sidebar team
                 const formatNum = (n) => Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
                 
                 let acceptedRisk = 0;
@@ -8324,7 +8329,7 @@
 
                 const tbody = document.getElementById('risk-accept-tbody');
                 if(acceptances.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">No risk acceptances recorded.</td></tr>';
+                    tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">No risk acceptances${tmRA === 'ALL' ? '' : ' for ' + esc(tmRA)} recorded.</td></tr>`;
                     return;
                 }
                 

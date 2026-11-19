@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.23.0 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.24.0 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -251,7 +251,7 @@
                                     <th class="px-4 py-3 w-10 text-center"></th>
                                     <th class="px-4 py-3">Asset Details</th>
                                     <th class="px-4 py-3 w-40">Suggested team</th>
-                                    <th class="px-4 py-3">Inferred Service</th>
+                                    <th class="px-4 py-3">Service</th>
                                     <th class="px-4 py-3" title="Optional: set now, or later in the Asset Register">Tier</th>
                                     <th class="px-4 py-3" title="Optional: set now, or later in the Asset Register">Exposure</th>
                                     <th class="px-4 py-3">Status</th>
@@ -309,7 +309,7 @@
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Team</label><select id="bulk-owner" class="border-gray-300 rounded text-sm"></select></div>
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label><select id="bulk-status" class="border-gray-300 rounded text-sm"><option value="">no change</option><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending Review</option></select></div>
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Environment</label><select id="bulk-env" class="border-gray-300 rounded text-sm"><option value="">no change</option><option value="Production">Production</option><option value="Non-Prod">Non-Prod / Dev</option><option value="DR">Disaster Recovery</option></select></div>
-                        <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Service Type</label><input type="text" id="bulk-service" list="reg-service-list" placeholder="no change" class="border-gray-300 rounded text-sm w-40"><datalist id="reg-service-list"></datalist></div>
+                        <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Service</label><select id="bulk-service" onchange="app.svcNew(this)" class="border-gray-300 rounded text-sm w-40"></select><datalist id="reg-service-list"></datalist></div>
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Exposure</label><select id="bulk-exposure" class="border-gray-300 rounded text-sm"><option value="">no change</option><option>Internal</option><option>DMZ</option><option>Internet Facing</option><option>Unknown</option></select></div>
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Operating system</label><input type="text" id="bulk-os" maxlength="200" placeholder="no change" title="Sets the OS on the selected assets; imports keep it. Type - to go back to what Qualys reports." class="border-gray-300 rounded text-sm w-52"></div>
                         <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Tier</label><select id="bulk-crit" class="border-gray-300 rounded text-sm"></select></div>
@@ -962,7 +962,7 @@
                     <div><label class="block font-medium mb-1">Team</label><select id="edit-asset-owner" class="w-full border rounded p-2"></select></div>
                     <div><label class="block font-medium mb-1">Status</label><select id="edit-asset-status" class="w-full border rounded p-2"><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending Review</option></select></div>
                     <div><label class="block font-medium mb-1">Environment</label><select id="edit-asset-env" class="w-full border rounded p-2"><option value="Production">Production</option><option value="Non-Prod">Non-Prod / Dev</option><option value="DR">Disaster Recovery</option></select></div>
-                    <div><label class="block font-medium mb-1">Service Type</label><input type="text" id="edit-asset-service" class="w-full border rounded p-2"></div>
+                    <div><label class="block font-medium mb-1">Service</label><select id="edit-asset-service" class="w-full border rounded p-2" onchange="app.svcNew(this)"></select></div>
                     <div><label class="block font-medium mb-1">Exposure</label><select id="edit-asset-exposure" class="w-full border rounded p-2"><option value="Internal">Internal</option><option value="DMZ">DMZ</option><option value="Internet Facing">Internet Facing</option><option value="Unknown">Unknown</option></select></div>
                     <div><label class="block font-medium mb-1">Tier</label><select id="edit-asset-criticality" class="w-full border rounded p-2"></select><p id="edit-asset-tier-note" class="text-[11px] text-gray-500 mt-1"></p></div>
                     <div class="col-span-2"><label class="inline-flex items-center gap-2"><input type="checkbox" id="edit-asset-patchna"> Cannot take an Automox agent (appliance, network device): leave it out of the patching check</label></div>
@@ -1390,6 +1390,25 @@
                 { name: 'Other', desc: 'Everything else' }
             ];
             static tiers() { const t = this.get().tierLabels; return this.TIER_DEFAULTS.map((d, i) => ({ name: (t && t[i] && t[i].name) || d.name, desc: (t && t[i] && typeof t[i].desc === 'string') ? t[i].desc : d.desc })); }
+            // v4.24 Services: a list in Organisation setup. Until it is saved it is built from the data: every service already in
+            // the register (spelt exactly as stored) and every service the rules name. Nothing on a machine is changed by it.
+            static NO_SVC = ['', 'Unclassified', 'Unknown'];
+            static serviceSeed() {
+                const S = this.get(), out = new Set();
+                (S.serviceRules || []).forEach(r => r.service && out.add(String(r.service).trim()));
+                (S.serviceOwners || []).forEach(r => r.service && out.add(String(r.service).trim()));
+                (StorageService.load(StorageService.KEYS.ASSET_REGISTER) || []).forEach(r => { const v = String(r.service || '').trim(); if (!this.NO_SVC.includes(v)) out.add(v); });
+                return [...out].filter(Boolean).sort((a, b) => a.localeCompare(b));
+            }
+            static services() { const S = this.get(); return Array.isArray(S.services) && S.services.length ? S.services : this.serviceSeed(); }
+            static servicesSaved() { const S = this.stored(); return !!(S && Array.isArray(S.services) && S.services.length); }
+            static inList(v) { return this.NO_SVC.includes(String(v || '').trim()) || this.services().includes(String(v || '').trim()); }
+            // a dropdown of the list; the machine's own value stays (marked) when it is not on the list, so nothing is lost
+            static serviceOptions(cur, { blank = null, admin = false } = {}) {
+                const L = this.services(), c = String(cur ?? '').trim(), o = (v, l) => `<option value="${esc(v)}">${esc(l)}</option>`;
+                return (blank !== null ? o('', blank) : '') + L.map(x => o(x, x)).join('') + (c && !L.includes(c) && !this.NO_SVC.includes(c) ? o(c, c + ' (not in the list)') : '')
+                    + o('Unclassified', 'Unclassified') + (admin ? o('__new__', '＋ New service…') : '');
+            }
             static mainTeam() { const S = this.get(); return S.mainTeam || S.teams[0] || 'Unknown'; }
             // Data but no organisation setup (a database or backup from before v3.20): matching machine names with the wrong
             // domain suffixes would create duplicate assets, so imports and syncs wait until the setup is saved or restored.
@@ -4793,6 +4812,22 @@
                 return { out, bad };
             }
 
+            orgServicesHTML(reg, dis, ta) {
+                const L = OrgSettings.services(), saved = OrgSettings.servicesSaved(), cnt = new Map();
+                reg.forEach(r => { const v = String(r.service || '').trim() || 'Unclassified'; cnt.set(v, (cnt.get(v) || 0) + 1); });
+                const norm = (x) => x.toLowerCase().replace(/[\s_-]+/g, '');
+                const off = [...cnt.keys()].filter(v => !L.includes(v) && !OrgSettings.NO_SVC.includes(v)).sort((a, b) => a.localeCompare(b));
+                const dup = L.filter(v => L.some(w => w !== v && norm(w) === norm(v)));
+                const opts = L.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+                const id = (v) => 'svc-merge-' + encodeURIComponent(v).replace(/[^A-Za-z0-9]/g, '_');
+                const mergeRow = (v, why) => `<tr><td class="py-1 pr-3 font-mono">${esc(v)}</td><td class="pr-3 text-right">${fmtNum(cnt.get(v) || 0)}</td><td class="pr-3 text-gray-600">${why}</td><td>${dis ? '' : `<select id="${id(v)}" class="border rounded text-xs py-0.5"><option value="">Merge into…</option>${opts.replace(`<option value="${esc(v)}">${esc(v)}</option>`, '')}</select> <button data-v="${esc(v)}" onclick="app.svcMerge(this.dataset.v)" class="border rounded px-2 py-0.5 text-xs hover:bg-gray-50">Merge</button>`}</td></tr>`;
+                return `<div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Services</h4>
+                    <p class="text-xs text-gray-600">The services a machine can have: the Edit, bulk edit and Review Queue dropdowns offer this list (plus <em>Unclassified</em>), and the rules that suggest a service must use it. ${saved ? '' : '<strong>Not saved yet:</strong> this list was built from the data (every service already in the register, spelt exactly as stored, and every service the rules name), so nothing is lost; check it and press <em>Save setup</em>.'} Changing the list never changes a machine: use <em>Merge</em> below to move machines from one spelling to another (recorded in History). Administrators can also add a service from a dropdown (＋ New service…).</p>
+                    <div class="grid md:grid-cols-2 gap-4"><label class="block text-xs">Services, one per line${ta('org-services', L.join('\n'), 10)}</label>
+                        <div class="text-xs"><p class="font-semibold mb-1">In use</p><div class="max-h-56 overflow-y-auto"><table class="min-w-full"><tbody class="divide-y">${[...L, 'Unclassified'].map(v => `<tr><td class="py-0.5 pr-3">${esc(v)}${dup.includes(v) ? ' <span class="text-amber-800 font-semibold">⚠ similar to another</span>' : ''}</td><td class="text-right">${fmtNum(cnt.get(v) || 0)}</td></tr>`).join('')}</tbody></table></div></div></div>
+                    ${off.length || dup.length ? `<div class="text-xs border-t pt-2"><p class="font-semibold mb-1">To tidy</p><table class="min-w-full"><tbody class="divide-y">${off.map(v => mergeRow(v, 'not in the list')).join('')}${dup.map(v => mergeRow(v, 'similar to another on the list')).join('')}</tbody></table></div>` : '<p class="text-xs text-green-900">✓ Every machine\'s service is on the list.</p>'}
+                </div>`;
+            }
             renderOrgSetup() {
                 const S = OrgSettings.get(), stored = OrgSettings.stored();
                 const admin = !this.me || this.me.role === 'admin';
@@ -4813,6 +4848,7 @@
                                 <p class="text-gray-600">Assets per team now: ${S.allTeams.map(t => `${esc(t)} ${fmtNum(count(t))}`).join(' · ')}${S.allTeams.length > S.teams.length ? ' (teams found in the register are always kept in the lists)' : ''}.</p></div>
                         </div>
                     </div>
+                    ${this.orgServicesHTML(reg, dis, ta)}
                     <div class="bg-white border rounded p-4 space-y-2"><h4 class="font-bold">Tiers (how important a machine is)</h4>
                         <p class="text-xs text-gray-600"><strong>HA side A / B</strong> (v4.23): every tier has two sides, the two halves of a high-availability pair, so you can patch side A one day and side B the next if A went well. The side is for scheduling only: priorities use the tier. Set it with the tier (Tier 1A, 1B…); machine lists can be downloaded per side.</p>
                         <p class="text-xs text-gray-600">Your own names and meanings for the three tiers. People set the tier of each machine in the Asset Register (Edit or bulk edit), like its owner. Tier 1 is the most important; a machine with no tier counts as Tier 2. The starting words follow the NCSC's guidance on critical assets and the systems they rely on.</p>
@@ -4867,6 +4903,33 @@
                 const s = ReconciliationEngine.suggestOwner({ normalizedName: n, inferredService: svc }, new Set());
                 out.textContent = `matched as "${n}" · service ${svc} · owner ${s.suggestedOwner} (${s.ownershipSource === 'Unknown' ? 'no rule' : s.ownershipSource})`;
             }
+            isAdmin() { return !this.me || this.me.role === 'admin'; }
+            // "＋ New service…" (administrators): adds it to the list (saved in Organisation setup) and picks it
+            svcNew(sel) {
+                if (sel.value !== '__new__') { sel.dataset.cur = sel.value; return; }
+                const name = (prompt('New service name (it is added to the Services list in Organisation setup):') || '').trim().slice(0, 80);
+                const back = () => { sel.value = sel.dataset.cur || (sel.id === 'bulk-service' ? '' : 'Unclassified'); };
+                if (!name) { back(); return; }
+                if (!OrgSettings.stored()) { alert('Save Organisation setup once first (it holds the Services list); then new services can be added here.'); back(); return; }
+                const L = OrgSettings.services(), same = L.find(x => x.toLowerCase() === name.toLowerCase());
+                if (same) { StorageService.toast(`"${same}" is already in the list`); }
+                else { OrgSettings.save({ ...OrgSettings.stored(), services: [...L, name], savedAt: new Date().toISOString(), savedBy: (this.me && this.me.user) || '', savedFrom: 'new service from a dropdown' }); StorageService.toast(`Added "${name}" to the Services list`); }
+                const v = same || name;
+                document.querySelectorAll('#edit-asset-service, #bulk-service').forEach(el => { const was = el === sel ? v : el.value; el.innerHTML = OrgSettings.serviceOptions(el.id === 'edit-asset-service' ? was : '', { blank: el.id === 'bulk-service' ? 'no change' : null, admin: this.isAdmin() }); el.value = was; });
+                sel.value = v; sel.dataset.cur = v;
+                document.getElementById('reg-f-service').dataset.key = '';
+            }
+            // Organisation setup: merge a spelling into a service on the list (every machine with it), recorded in History
+            svcMerge(from) {
+                const to = document.getElementById('svc-merge-' + encodeURIComponent(from).replace(/[^A-Za-z0-9]/g, '_'))?.value; if (!to) return;
+                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), n = reg.filter(r => String(r.service || '').trim() === from).length;
+                if (!n || !confirm(`Change the service of ${n} machine${n === 1 ? '' : 's'} from "${from}" to "${to}"?`)) return;
+                reg.forEach(r => { if (String(r.service || '').trim() === from) r.service = to; });
+                StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
+                const q = ReviewQueueService.getQueue(); let qn = 0; q.forEach(x => { if (x.detectedService === from) { x.detectedService = to; qn++; } }); if (qn) StorageService.save(StorageService.KEYS.REVIEW_QUEUE, q);
+                if (OrgSettings.servicesSaved() && OrgSettings.services().includes(from)) OrgSettings.save({ ...OrgSettings.stored(), services: OrgSettings.services().filter(x => x !== from), savedAt: new Date().toISOString(), savedBy: (this.me && this.me.user) || '', savedFrom: 'service merged' });     // the old spelling leaves the list
+                this.invalidateVulnData(); StorageService.toast(`${n} machine${n === 1 ? '' : 's'} now "${to}"`); this.renderOrgSetup();
+            }
             saveOrgSetup() {
                 const v = (id) => document.getElementById(id).value;
                 const lines = (id) => v(id).split('\n').map(x => x.trim()).filter(Boolean);
@@ -4876,8 +4939,10 @@
                 const own = App.orgParseRules(v('org-owner-rules'), 'team'), svc = App.orgParseRules(v('org-svc-rules'), 'service', true);
                 own.bad.forEach(b => bad.push('owner rule ' + b)); svc.bad.forEach(b => bad.push('service rule ' + b));
                 own.out.filter(r => !teams.includes(r.team)).forEach(r => bad.push(`owner rule "${r.value}" names team "${r.team}", which is not in the team list`));
+                const services = [...new Set(lines('org-services'))].filter(x => !OrgSettings.NO_SVC.includes(x));     // v4.24
+                if (services.length) { svc.out.filter(r => !services.includes(r.service)).forEach(r => bad.push(`service rule "${r.value}" names service "${r.service}", which is not in the Services list`)); }
                 const svcOwners = [];
-                lines('org-svc-owners').forEach(l => { const m = l.match(/^(.+?)\s+=>\s+(.+)$/); if (!m) bad.push('service owner line "' + l + '"'); else if (!teams.includes(m[2].trim())) bad.push(`"${l}": team not in the list`); else svcOwners.push({ service: m[1].trim(), team: m[2].trim() }); });
+                lines('org-svc-owners').forEach(l => { const m = l.match(/^(.+?)\s+=>\s+(.+)$/); if (!m) bad.push('service owner line "' + l + '"'); else if (services.length && !services.includes(m[1].trim())) bad.push(`"${l}": service not in the Services list`); else if (!teams.includes(m[2].trim())) bad.push(`"${l}": team not in the list`); else svcOwners.push({ service: m[1].trim(), team: m[2].trim() }); });
                 const queries = [];
                 lines('org-queries').forEach(l => { const i = l.indexOf(' => '); if (i < 0) bad.push('query line "' + l + '"'); else queries.push({ label: l.slice(0, i).trim(), query: l.slice(i + 4).trim() }); });
                 if (bad.length) { alert('Not saved:\n' + bad.join('\n')); return; }
@@ -4887,7 +4952,7 @@
                 const removed = cur.teams.filter(t => !teams.includes(t));
                 if (removed.length && !confirm(`Removed from the team list: ${removed.join(', ')}. Assets that already belong to them keep their owner (the team stays selectable while it is used). Save?`)) return;
                 const tierLabels = [0, 1, 2].map(i => ({ name: v('org-tier-n' + i).trim() || OrgSettings.TIER_DEFAULTS[i].name, desc: v('org-tier-d' + i).trim() }));
-                OrgSettings.save({ orgName: v('org-name-in').trim(), tierLabels, teams, mainTeam: teams.includes(main) ? main : teams[0], domainSuffixes: domains, ownerRules: own.out, serviceRules: svc.out, serviceOwners: svcOwners,
+                OrgSettings.save({ orgName: v('org-name-in').trim(), tierLabels, teams, mainTeam: teams.includes(main) ? main : teams[0], domainSuffixes: domains, ownerRules: own.out, serviceRules: svc.out, serviceOwners: svcOwners, services,
                     aiTeam: v('org-ai').trim(), queryIntro: v('org-qintro').trim(), queryTips: queries, savedAt: new Date().toISOString(), savedBy: (this.me && this.me.user) || '', savedFrom: 'Organisation setup page' });
                 this.fillTeamSelects(); this.renderOrgSetup(); StorageService.toast('Organisation setup saved');
                 if (StorageService.mode === 'server') this.qxApply(true);     // (the demo applies its syncs itself)
@@ -6507,7 +6572,7 @@
                         <td class="px-4 py-2 text-center"><input type="checkbox" value="${item.id}" ${isChecked ? 'checked' : ''} onchange="app.toggleReviewSelection('${item.id}', this.checked); this.closest('tr').classList.toggle('bg-blue-50/60', this.checked)"></td>
                         <td class="px-4 py-2"><div class="font-medium">${item.normalizedName}</div><div class="text-xs text-gray-500">${item.ipAddress || 'No IP'}</div></td>
                         <td class="px-4 py-2" onclick="event.stopPropagation()"><select id="own-${item.id}" class="border text-sm px-2 py-1">${[...OrgSettings.teams(), 'Unknown'].map(t => `<option value="${esc(t)}" ${item.suggestedOwner === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select><div class="text-[10px] text-gray-400">Src: ${item.ownershipSource||'Unknown'}</div></td>
-                        <td class="px-4 py-2"><span class="bg-gray-100 text-xs px-2 py-1 rounded">${item.detectedService}</span></td>
+                        <td class="px-4 py-2"><select id="svc-${item.id}" class="border text-sm px-2 py-1 max-w-[11rem]" title="Service (from the list in Organisation setup)">${OrgSettings.serviceOptions(item.detectedService)}</select></td>
                         <td class="px-4 py-2" onclick="event.stopPropagation()">${tierSel(item.id)}</td>
                         <td class="px-4 py-2" onclick="event.stopPropagation()">${expSel(item.id)}</td>
                         <td class="px-4 py-2 text-xs">${item.status}</td>
@@ -6698,7 +6763,7 @@
                 set('edit-asset-owner', r.owner, 'Unknown');
                 set('edit-asset-status', r.status, 'Approved');
                 set('edit-asset-env', r.environment, 'Production');
-                document.getElementById('edit-asset-service').value = r.service || '';
+                { const el = document.getElementById('edit-asset-service'); el.innerHTML = OrgSettings.serviceOptions(r.service, { admin: this.isAdmin() }); el.value = (r.service && String(r.service).trim()) || 'Unclassified'; el.dataset.cur = el.value; }
                 set('edit-asset-exposure', r.exposure, 'Unknown');
                 document.getElementById('edit-asset-criticality').value = StatusEngine.tierCode(r) || '0';
                 document.getElementById('edit-asset-patchna').checked = !!r.patchNA;
@@ -6755,7 +6820,8 @@
                 const o = document.getElementById(`own-${id}`).value;
                 const tv = (document.getElementById(`tier-${id}`) || {}).value || '0', t = tv === '0' ? 0 : tv, x = (document.getElementById(`exp-${id}`) || {}).value || 'Unknown';
                 const q = ReviewQueueService.getQueue().find(x => x.id === id);
-                ReviewQueueService.resolveBulk([{ id, finalOwner: o, finalService: q.detectedService, finalTier: t, finalExposure: x }], 'APPROVED');
+                const sv = (document.getElementById(`svc-${id}`) || {}).value || q.detectedService;
+                ReviewQueueService.resolveBulk([{ id, finalOwner: o, finalService: sv, finalTier: t, finalExposure: x }], 'APPROVED');
                 this.updateGlobalBadges(); this.renderReviewQueue();
             }
 
@@ -6857,11 +6923,14 @@
             // The service filter lists whatever services the register really contains.
             populateRegisterServices() {
                 const sel = document.getElementById('reg-f-service');
-                const services = [...new Set(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => r.service || 'Unclassified'))].sort((a, b) => a.localeCompare(b));
-                const key = services.join('|');
+                const used = [...new Set(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => r.service || 'Unclassified'))];
+                const L = OrgSettings.services(), extra = used.filter(x => !L.includes(x) && x !== 'Unclassified').sort((a, b) => a.localeCompare(b));
+                const services = [...L, 'Unclassified', ...extra];     // v4.24: the list's order, then values not in the list
+                const key = services.join('|') + '#' + this.isAdmin();
                 if (sel.dataset.key === key) return;
                 const cur = sel.value;
-                sel.innerHTML = '<option value="ALL">All Services</option>' + services.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+                sel.innerHTML = '<option value="ALL">All services</option>' + services.map(x => `<option value="${esc(x)}">${esc(x)}${extra.includes(x) ? ' (not in the list)' : ''}</option>`).join('');
+                { const b = document.getElementById('bulk-service'); if (b) { const was = b.value; b.innerHTML = OrgSettings.serviceOptions('', { blank: 'no change', admin: this.isAdmin() }); b.value = [...b.options].some(o => o.value === was) ? was : ''; } }
                 sel.value = services.includes(cur) ? cur : 'ALL';
                 if (!this._regSvcApplied) { this._regSvcApplied = true; Prefs.apply('reg-f-service'); }
                 sel.dataset.key = key;
@@ -7032,6 +7101,7 @@
                     ['No team', reg.filter(r => StatusEngine.teamOf(r) === 'Unassigned'), 'Nobody owns these: set a team in the Asset Register or the Review Queue.'],
                     ['No tier', known.filter(r => !StatusEngine.tierOf(r)), 'Their priorities assume Tier 2 until a tier is set.'],
                     ['No service', known.filter(r => !r.service || r.service === 'Unclassified'), 'The service helps suggest owners for new machines.'],
+                    ['Service not in the list', known.filter(r => !OrgSettings.inList(r.service)), 'A spelling that is not in Organisation setup → Services: merge it there.'],
                     ['Exposure unknown', known.filter(r => !r.exposure || r.exposure === 'Unknown'), 'Internet-facing machines are fixed first: set the exposure.']
                 ];
                 el.innerHTML = `<div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b"><h3 class="text-lg font-semibold">Register gaps · ${esc(App.teamLabel(tm))}</h3><p class="text-xs text-gray-500">Click a machine to open it. <em>No team</em> lists every machine nobody owns.</p></div>

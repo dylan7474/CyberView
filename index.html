@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.24.0 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.24.1 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -4757,8 +4757,8 @@
                 const T = OrgSettings.teams(), main = OrgSettings.mainTeam();
                 const opt = (v, l) => `<option value="${esc(v)}">${esc(l)}</option>`;
                 const team = (fmt = (t) => t) => T.map(t => opt(t, fmt(t))).join('');
-                const TL = OrgSettings.tiers(), tierOpts = TL.map((t, i) => ['A', 'B'].map(h => `<option value="${i + 1}${h}" title="${esc(t.desc)} · HA side ${h}">Tier ${i + 1}${h} · ${esc(t.name)}${h === 'B' ? ' (HA side B)' : ''}</option>`).join('')).join('');
-                const tierFilt = TL.map((t, i) => `<option value="${i + 1}">Tier ${i + 1} (A and B) · ${esc(t.name)}</option><option value="${i + 1}A">Tier ${i + 1}A</option><option value="${i + 1}B">Tier ${i + 1}B</option>`).join('');
+                const TL = OrgSettings.tiers(), tierOpts = TL.map((t, i) => ['A', 'B'].map(h => `<option value="${i + 1}${h}" title="Tier ${i + 1} · ${esc(t.name)}: ${esc(t.desc)} · HA side ${h}">Tier${i + 1}${h}</option>`).join('')).join('');
+                const tierFilt = TL.map((t, i) => `<option value="${i + 1}" title="Tier ${i + 1} · ${esc(t.name)}: both HA sides">Tier${i + 1} (A and B)</option><option value="${i + 1}A">Tier${i + 1}A</option><option value="${i + 1}B">Tier${i + 1}B</option>`).join('');
                 const th = document.getElementById('reg-tier-th'); if (th) th.title = TL.map((t, i) => `Tier ${i + 1} ${t.name}: ${t.desc}`).join('. ') + '. Set by people.';
                 const spec = {
                     'reg-f-crit': opt('ALL', 'All tiers') + tierFilt + opt('0', '? Tier not set'),
@@ -6559,7 +6559,7 @@
                 tbody.innerHTML = '';
                 if(filtered.length === 0) return tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500">No assets match.</td></tr>`;
                 const TL = OrgSettings.tiers();
-                const tierSel = (id) => `<select id="tier-${id}" class="border text-sm px-2 py-1" title="Tier and HA side (optional)"><option value="0">not set</option>${TL.map((t, i) => ['A', 'B'].map(h => `<option value="${i + 1}${h}" title="${esc(t.desc)} · HA side ${h}">${i + 1}${h} · ${esc(t.name)}</option>`).join('')).join('')}</select>`;
+                const tierSel = (id) => `<select id="tier-${id}" class="border text-sm px-2 py-1" title="Tier and HA side (optional)"><option value="0">not set</option>${TL.map((t, i) => ['A', 'B'].map(h => `<option value="${i + 1}${h}" title="Tier ${i + 1} · ${esc(t.name)}: ${esc(t.desc)} · HA side ${h}">Tier${i + 1}${h}</option>`).join('')).join('')}</select>`;
                 const expSel = (id) => `<select id="exp-${id}" class="border text-sm px-2 py-1" title="Exposure (optional)">${['Unknown', 'Internal', 'DMZ', 'Internet Facing'].map(x => `<option>${x}</option>`).join('')}</select>`;
                 
                 // Using DocumentFragment to prevent browser thrashing on 1000+ rows
@@ -6978,7 +6978,7 @@
                     if (!sel.has(r.normalizedName)) return;
                     ch.forEach(([k, , val]) => {
                         if (k === 'os') Lifecycle.setOs(r, val.startsWith('(back to') ? '' : val);
-                        else if (k === 'tier') StatusEngine.setTier(r, (val.match(/^Tier (\d[AB]?)/) || [])[1] || 0);
+                        else if (k === 'tier') StatusEngine.setTier(r, (val.match(/^Tier ?(\d[AB]?)/) || [])[1] || 0);
                         else if (k === 'patchNA') { if (/^Cannot/.test(val)) r.patchNA = true; else delete r.patchNA; }
                         else r[k] = val;
                     });

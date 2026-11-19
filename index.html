@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.25.1 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.25.2 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1095,7 +1095,24 @@
             static entries() { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch (e) { return []; } }
             static clear() { try { localStorage.removeItem(this.KEY); } catch (e) { /* ignore */ } }
             static read(key, copy) { const c = this.cur; if (!c) return; c.reads++; if (copy) { c.copies++; c.copyKeys[key] = (c.copyKeys[key] || 0) + 1; } }
+            static WATCH = () => [[App.prototype, 'App', ['getVulnData', 'scopedData', 'statusData', 'planBuckets', 'cveData', 'renderDashboard', 'renderDashSimple', 'renderReviewQueue', 'renderOsConflicts',
+                    'renderRegister', 'renderVulnDashboard', 'renderPlan', 'renderCve', 'renderCveWatch', 'renderStatus', 'renderReports', 'renderEOL', 'renderEOLAssets', 'renderAutomox', 'renderHealth', 'renderRiskAcceptances', 'decorate', 'fillTeamSelects', 'coverageHTML']],
+                [OsCheck, 'OsCheck', ['list']], [AutomoxService, 'Automox', ['match', 'ensure']], [StatusEngine, 'Status', ['assess', 'annotate', 'exIndex']], [PriorityEngine, 'Priority', ['fixGroups']], [EolDates, 'EOL', ['load']], [VulnStore, 'VulnStore', ['all']]];
+            static span(c, name, ms) { const x = c.spans[name] || (c.spans[name] = { n: 0, ms: 0 }); x.n++; x.ms += ms; }
+            static wrapAll() {
+                if (this._wrapped) return; this._wrapped = true;
+                this.WATCH().forEach(([obj, label, names]) => names.forEach(n => {
+                    const orig = obj[n]; if (typeof orig !== 'function') return;
+                    obj[n] = function (...a) {
+                        const c = PerfLog.cur; if (!c) return orig.apply(this, a);
+                        const t = performance.now(), r = orig.apply(this, a), name = label + '.' + n;
+                        if (r && typeof r.then === 'function') return r.then(v => { PerfLog.span(c, name, performance.now() - t); return v; }, e => { PerfLog.span(c, name, performance.now() - t); throw e; });
+                        PerfLog.span(c, name, performance.now() - t); return r;
+                    };
+                }));
+            }
             static install() {
+                this.wrapAll();
                 if (this._installed) return; this._installed = true;
                 try { performance.setResourceTimingBufferSize(2000); } catch (e) { /* old browser */ }
                 try { new PerformanceObserver(list => { const c = this.cur; if (!c) return; list.getEntries().forEach(e => { c.longTasks++; c.blocked += e.duration; c.longest = Math.max(c.longest, e.duration); }); }).observe({ entryTypes: ['longtask'] }); } catch (e) { /* not supported */ }
@@ -1105,22 +1122,22 @@
                 if (!this.on()) return;
                 this.install();
                 if (this.cur) this.finish(true);
-                const c = this.cur = { what, at: new Date().toISOString(), t0: performance.now(), last: performance.now(), reads: 0, copies: 0, copyKeys: {}, longTasks: 0, blocked: 0, longest: 0, busy: 0, maxLag: 0, muts: [] };
+                const c = this.cur = { what, at: new Date().toISOString(), t0: performance.now(), last: performance.now(), reads: 0, copies: 0, copyKeys: {}, longTasks: 0, blocked: 0, longest: 0, busy: 0, maxLag: 0, muts: [], spans: {} };
                 const main = document.querySelector('main');
                 // v4.25.1 "still changing": which part of the page each change was in (the nearest element with an id)
                 const where = (n) => { const e = n && (n.nodeType === 1 ? n : n.parentElement); const h = e && e.closest('[id]'); return h ? '#' + h.id : (e ? e.tagName.toLowerCase() : '?'); };
                 c.mo = new MutationObserver((list) => { const t = performance.now(); c.last = t; if (c.muts.length < 4000) list.forEach(m => c.muts.push([t, where(m.target)])); });
                 if (main) c.mo.observe(main, { childList: true, subtree: true, characterData: true });
-                // v4.25.1 "busy": a 50 ms timer that runs late when the browser is busy (works in every browser)
+                // v4.25.1 "busy": a 50 ms timer that runs late when the browser is busy (works in every browser); v4.25.2 not while the tab is hidden (browsers slow its timers, which looked busy for ever)
                 let exp = performance.now() + 50;
-                c.lag = setInterval(() => { const now = performance.now(), late = now - exp; if (late > 50) { c.busy += late; c.maxLag = Math.max(c.maxLag, late); } exp = now + 50; }, 50);
-                const tick = () => { if (this.cur !== c) return; const now = performance.now(); if (now - c.last > 800 || now - c.t0 > 90000) this.finish(false); else c.timer = setTimeout(tick, 200); };
+                c.lag = setInterval(() => { const now = performance.now(), late = now - exp; if (late > 50 && !document.hidden) { c.busy += late; c.maxLag = Math.max(c.maxLag, late); c.lastBusy = now; } exp = now + 50; }, 50);
+                const tick = () => { if (this.cur !== c) return; const now = performance.now(); if (now - Math.max(c.last, c.lastBusy || 0) > 800 || now - c.t0 > 90000) this.finish(false); else c.timer = setTimeout(tick, 200); };
                 c.timer = setTimeout(tick, 300);
             }
             static finish(cut) {
                 const c = this.cur; if (!c) return; this.cur = null;
                 clearTimeout(c.timer); c.mo && c.mo.disconnect(); clearInterval(c.lag);
-                const end = cut ? performance.now() : c.last;
+                const end = cut ? performance.now() : Math.max(c.last, c.lastBusy || 0);
                 // what was still changing in the last second (and after the first second at all)
                 const tail = {}; c.muts.forEach(([t, w]) => { if (t >= end - 1000 && t - c.t0 > 1000) tail[w] = (tail[w] || 0) + 1; });
                 const api = performance.getEntriesByType('resource').filter(r => r.startTime >= c.t0 - 5 && r.startTime <= end && /\/api\//.test(r.name));
@@ -1130,7 +1147,7 @@
                 const e = { at: c.at, what: c.what, ms: Math.round(end - c.t0), cut: !!cut, api: reqs.length, apiMs: reqs.reduce((a, r) => Math.max(a, r.ms), 0), srvMs: reqs.reduce((a, r) => a + r.srv, 0),
                     kb: reqs.reduce((a, r) => a + r.kb, 0), slowest: reqs.sort((a, b) => b.ms - a.ms).slice(0, 3), reads: c.reads, copies: c.copies,
                     copyKeys: Object.entries(c.copyKeys).sort((a, b) => b[1] - a[1]).slice(0, 4), frozen: Math.round(c.blocked), longest: Math.round(Math.max(c.longest, c.maxLag)), busy: Math.round(c.busy),
-                    tail: Object.entries(tail).sort((a, b) => b[1] - a[1]).slice(0, 3), machines: reg.length,
+                    tail: Object.entries(tail).sort((a, b) => b[1] - a[1]).slice(0, 3), work: Object.entries(c.spans).filter(([, x]) => x.ms >= 20).sort((a, b) => b[1].ms - a[1].ms).slice(0, 6).map(([k, x]) => [k, Math.round(x.ms), x.n]), machines: reg.length,
                     findings: (window.app && app._vd && app._vd.all) ? app._vd.all.length : null, mode: StorageService.mode, v: (document.getElementById('app-version')?.textContent || '').split(' ')[0] };
                 const L = this.entries(); L.push(e);
                 try { localStorage.setItem(this.KEY, JSON.stringify(L.slice(-this.MAX))); } catch (err) { /* full */ }
@@ -1141,8 +1158,8 @@
             static waitDone() { return new Promise(res => { if (!this.cur) return res(null); this._wait = res; }); }
             static text(list = this.entries()) {
                 const L = [`CyberView performance log · ${list[0]?.v || ''} · ${list[0]?.mode || ''} · ${list[list.length - 1]?.machines ?? '?'} machines · ${list[list.length - 1]?.findings ?? '?'} findings`,
-                    'when | what | total ms | busy ms (longest) | still changing at the end | server requests (n, slowest ms, server ms, KB) | stored-data reads / full copies'];
-                list.forEach(e => L.push(`${e.at.slice(11, 19)} | ${e.what} | ${e.ms}${e.cut ? ' (cut short)' : ''} | ${e.busy ?? '-'} (${e.longest}) | ${(e.tail || []).map(([w, n]) => w + ' ×' + n).join(', ') || '-'} | ${e.api}, ${e.apiMs}, ${e.srvMs}, ${e.kb} KB${e.slowest.length ? ' [' + e.slowest.map(r => `${r.u} ${r.ms}ms${r.srv ? '/srv ' + r.srv : ''} ${r.kb}KB`).join('; ') + ']' : ''} | ${e.reads}/${e.copies}${e.copyKeys.length ? ' (' + e.copyKeys.map(([k, n]) => k.replace('gov_', '') + ' ' + n).join(', ') + ')' : ''}`));
+                    'when | what | total ms | busy ms (longest) | where the time went (ms, calls; nested ones overlap) | still changing at the end | server requests (n, slowest ms, server ms, KB) | stored-data reads / full copies'];
+                list.forEach(e => L.push(`${e.at.slice(11, 19)} | ${e.what} | ${e.ms}${e.cut ? ' (cut short)' : ''} | ${e.busy ?? '-'} (${e.longest}) | ${(e.work || []).map(([k, ms, n]) => `${k} ${ms}${n > 1 ? '×' + n : ''}`).join(', ') || '-'} | ${(e.tail || []).map(([w, n]) => w + ' ×' + n).join(', ') || '-'} | ${e.api}, ${e.apiMs}, ${e.srvMs}, ${e.kb} KB${e.slowest.length ? ' [' + e.slowest.map(r => `${r.u} ${r.ms}ms${r.srv ? '/srv ' + r.srv : ''} ${r.kb}KB`).join('; ') + ']' : ''} | ${e.reads}/${e.copies}${e.copyKeys.length ? ' (' + e.copyKeys.map(([k, n]) => k.replace('gov_', '') + ' ' + n).join(', ') + ')' : ''}`));
                 return L.join('\n');
             }
         }
@@ -4519,7 +4536,7 @@
             static ICON_RE = /^[\s✖▲◐✓?⚠⟳✋⛔🔶⊘⏸↻⧗⚑●○−+±▾·]+/u;
             static sortVal(td) {
                 if (!td) return { n: null, s: '' };
-                const raw = (td.dataset.sort ?? td.innerText ?? '').trim(), t = raw.replace(App.ICON_RE, '').trim();
+                const raw = (td.dataset.sort ?? App.cellText(td)).replace(/\s+/g, ' ').trim(), t = raw.replace(App.ICON_RE, '').trim();
                 let m;
                 if (!t || t === '-' || t === '–') return { n: null, s: '' };
                 if ((m = t.match(/^P([1-5])\b/))) return { n: +m[1], s: t };
@@ -4534,9 +4551,11 @@
                 if ((m = t.replace(/,/g, '').match(/^[−-]?\d+(\.\d+)?/))) return { n: parseFloat(m[0].replace('−', '-')), s: t };
                 return { n: null, s: t.toLowerCase() };
             }
+            // v4.25.2 a cell's text without a page layout (innerText forced one): its parts joined with a space, so stacked lines ("18 Nov 2026" over "3 d ago") do not run together
+            static cellText(el) { return el ? [...el.childNodes].map(n => n.textContent).join(' ') : ''; }
             static tableKey(tb) {
                 const v = tb.closest('.view-section')?.id || 'x', all = [...document.querySelectorAll('#' + v + ' table')].filter(App.sortable);
-                const heads = [...tb.querySelectorAll('thead th')].map(h => (h.dataset.label || h.innerText).replace(/[▲▼]/g, '').trim()).join('|');
+                const heads = [...tb.querySelectorAll('thead th')].map(h => (h.dataset.label || h.textContent).replace(/[▲▼]/g, '').replace(/\s+/g, ' ').trim()).join('|');
                 return v + '|' + all.indexOf(tb) + '|' + heads.slice(0, 120);
             }
             static sortable(tb) { return !!tb.tHead && tb.tHead.rows.length && !tb.querySelector('thead th[onclick]') && !tb.closest('[data-nosort]') && tb.tBodies.length; }
@@ -4547,7 +4566,7 @@
                 const val = new Map(data.map(r => [r, App.sortVal(r.cells[col])]));
                 // a column of mostly words (machine names, some of them IP addresses) sorts as text throughout
                 const vs = [...val.values()].filter(v => v.n !== null || v.s), numeric = vs.length && vs.filter(v => v.n !== null).length / vs.length >= 0.8;
-                if (!numeric) val.forEach((v, r) => { if (v.n !== null) val.set(r, { n: null, s: (r.cells[col]?.innerText || '').trim().toLowerCase() }); });
+                if (!numeric) val.forEach((v, r) => { if (v.n !== null) val.set(r, { n: null, s: App.cellText(r.cells[col]).replace(/\s+/g, ' ').trim().toLowerCase() }); });
                 const sorted = data.slice().sort((a, b) => { const x = val.get(a), y = val.get(b);
                     if (x.n !== null && y.n !== null) return (x.n - y.n) * dir || (a.dataset.ord - b.dataset.ord);
                     if (x.n !== null) return -1; if (y.n !== null) return 1;           // numbers first, empty last
@@ -4572,8 +4591,8 @@
                     if (!App.sortable(tb)) return;
                     const key = App.tableKey(tb), cur = S[key];
                     [...tb.tHead.rows[0].cells].forEach((th, i) => {
-                        if (th.querySelector('input,select,button') || !th.innerText.trim()) return;
-                        if (!th.dataset.label) { th.dataset.label = th.innerText.trim(); th.classList.add('cursor-pointer', 'select-none'); th.title = th.title || 'Click to sort'; th.addEventListener('click', () => this.sortClick(th)); }
+                        if (th.querySelector('input,select,button') || !th.textContent.trim()) return;      // v4.25.2: textContent (innerText forced a page layout per heading)
+                        if (!th.dataset.label) { th.dataset.label = th.textContent.replace(/\s+/g, ' ').trim(); th.classList.add('cursor-pointer', 'select-none'); th.title = th.title || 'Click to sort'; th.addEventListener('click', () => this.sortClick(th)); }
                         const on = cur && cur[0] === i, mark = on ? (cur[1] > 0 ? ' ▲' : ' ▼') : '';
                         let sp = th.querySelector('.sort-mark'); if (!sp) { sp = document.createElement('span'); sp.className = 'sort-mark text-indigo-700'; th.appendChild(sp); }
                         if (sp.textContent !== mark) sp.textContent = mark;
@@ -4592,7 +4611,7 @@
                     el.dataset.pen = '1'; const n = el.dataset.n; if (!reg.has(n)) return;
                     const pen = `<button type="button" class="m-edit write-only ml-1 px-1 rounded text-gray-400 hover:text-indigo-800 hover:bg-indigo-50 print-hide" data-asset="${esc(n)}" title="Edit this machine: team, service, tier, exposure, OS" aria-label="Edit ${esc(n)}" onclick="event.stopPropagation(); event.preventDefault(); app.editAsset(this.dataset.asset)">✎</button>`;
                     if (el.tagName === 'TR') { const short = n.split('.')[0].toLowerCase(), cells = [...el.cells].filter(c => !c.querySelector('input'));
-                        const c = cells.find(td => td.innerText.toLowerCase().includes(short)) || cells[0]; if (!c) return;
+                        const c = cells.find(td => App.cellText(td).toLowerCase().includes(short)) || cells[0]; if (!c) return;
                         const first = c.firstElementChild && c.firstElementChild.tagName === 'DIV' ? c.firstElementChild : c; first.insertAdjacentHTML(first === c ? 'afterbegin' : 'beforeend', ''); (first === c ? c : first).insertAdjacentHTML('beforeend', pen); }
                     else el.insertAdjacentHTML('afterend', pen);
                 });
@@ -4915,8 +4934,8 @@
                     <button onclick="app.perfCopy()" class="px-3 py-1 rounded border text-sm bg-slate-800 text-white">📋 Copy the log</button>
                     <button onclick="if (confirm('Clear the performance log in this browser?')) { PerfLog.clear(); app.renderPerfPanel(); }" class="px-3 py-1 rounded border text-sm bg-white">Clear</button></span></div>
                     <p class="text-xs text-gray-600">Times how long pages take in <strong>this browser</strong>: until the page stops changing, the server requests (and how long the server itself took), reads of stored data, and the longest freeze. Turn it on and use the portal as usual, or press <em>Run the standard check</em> (opens the main pages one after another, about a minute), then <em>Copy the log</em> and paste it to whoever is looking at the speed. Nothing is sent anywhere; it is kept in this browser.</p>
-                    ${L.length ? `<div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="min-w-full text-xs" data-nosort><thead class="bg-gray-50 text-gray-600 sticky top-0"><tr><th class="px-2 py-1 text-left">When</th><th class="px-2 py-1 text-left">What</th><th class="px-2 py-1 text-right">Total</th><th class="px-2 py-1 text-right">Server requests</th><th class="px-2 py-1 text-right">Slowest request</th><th class="px-2 py-1 text-right">Server time</th><th class="px-2 py-1 text-right">Data</th><th class="px-2 py-1 text-right">Reads / copies</th><th class="px-2 py-1 text-right">Busy (longest)</th><th class="px-2 py-1 text-left">Still changing</th></tr></thead>
-                        <tbody class="divide-y">${L.map(e => `<tr class="${e.ms > 3000 ? 'bg-amber-50' : ''}"><td class="px-2 py-1 whitespace-nowrap">${esc(App.whenText(Date.parse(e.at)))}</td><td class="px-2 py-1">${esc(e.what)}</td><td class="px-2 py-1 text-right font-semibold">${e.ms > 3000 ? '⚠ ' : ''}${ms(e.ms)}${e.cut ? ' (cut short)' : ''}</td><td class="px-2 py-1 text-right">${e.api}</td><td class="px-2 py-1 text-right" title="${esc(e.slowest.map(r => r.u + ' ' + r.ms + ' ms').join('\n'))}">${e.apiMs ? ms(e.apiMs) + (e.slowest[0] ? ' · ' + esc(e.slowest[0].u) : '') : '-'}</td><td class="px-2 py-1 text-right">${e.srvMs ? ms(e.srvMs) : '-'}</td><td class="px-2 py-1 text-right">${e.kb ? fmtNum(e.kb) + ' KB' : '-'}</td><td class="px-2 py-1 text-right">${e.reads} / ${e.copies}</td><td class="px-2 py-1 text-right">${e.busy ? ms(e.busy) : '-'}${e.longest ? ' (' + ms(e.longest) + ')' : ''}</td><td class="px-2 py-1 font-mono text-[10px]">${esc((e.tail || []).map(([w, n]) => w + ' ×' + n).join(', ') || '-')}</td></tr>`).join('')}</tbody></table></div>`
+                    ${L.length ? `<div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="min-w-full text-xs" data-nosort><thead class="bg-gray-50 text-gray-600 sticky top-0"><tr><th class="px-2 py-1 text-left">When</th><th class="px-2 py-1 text-left">What</th><th class="px-2 py-1 text-right">Total</th><th class="px-2 py-1 text-right">Server requests</th><th class="px-2 py-1 text-right">Slowest request</th><th class="px-2 py-1 text-right">Server time</th><th class="px-2 py-1 text-right">Data</th><th class="px-2 py-1 text-right">Reads / copies</th><th class="px-2 py-1 text-right">Busy (longest)</th><th class="px-2 py-1 text-left">Where the time went</th><th class="px-2 py-1 text-left">Still changing</th></tr></thead>
+                        <tbody class="divide-y">${L.map(e => `<tr class="${e.ms > 3000 ? 'bg-amber-50' : ''}"><td class="px-2 py-1 whitespace-nowrap">${esc(App.whenText(Date.parse(e.at)))}</td><td class="px-2 py-1">${esc(e.what)}</td><td class="px-2 py-1 text-right font-semibold">${e.ms > 3000 ? '⚠ ' : ''}${ms(e.ms)}${e.cut ? ' (cut short)' : ''}</td><td class="px-2 py-1 text-right">${e.api}</td><td class="px-2 py-1 text-right" title="${esc(e.slowest.map(r => r.u + ' ' + r.ms + ' ms').join('\n'))}">${e.apiMs ? ms(e.apiMs) + (e.slowest[0] ? ' · ' + esc(e.slowest[0].u) : '') : '-'}</td><td class="px-2 py-1 text-right">${e.srvMs ? ms(e.srvMs) : '-'}</td><td class="px-2 py-1 text-right">${e.kb ? fmtNum(e.kb) + ' KB' : '-'}</td><td class="px-2 py-1 text-right">${e.reads} / ${e.copies}</td><td class="px-2 py-1 text-right">${e.busy ? ms(e.busy) : '-'}${e.longest ? ' (' + ms(e.longest) + ')' : ''}</td><td class="px-2 py-1 font-mono text-[10px]">${esc((e.work || []).slice(0, 3).map(([k, ms, n]) => k + ' ' + ms + (n > 1 ? '×' + n : '')).join(', ') || '-')}</td><td class="px-2 py-1 font-mono text-[10px]">${esc((e.tail || []).map(([w, n]) => w + ' ×' + n).join(', ') || '-')}</td></tr>`).join('')}</tbody></table></div>`
                         : `<p class="text-sm text-gray-500">${on ? 'Recording: open a few pages and they appear here.' : 'Nothing recorded yet.'}</p>`}`;
             }
             perfToggle() { PerfLog.setOn(!PerfLog.on()); this.renderPerfPanel(); StorageService.toast(PerfLog.on() ? 'Recording page timings in this browser' : 'Performance log stopped'); }

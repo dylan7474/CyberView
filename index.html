@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.22.1 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.22.2 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -6050,6 +6050,8 @@
                 const list = reg.filter(r => (S.filter === 'ALL' || cats.get(r.normalizedName).has(S.filter)) && (!q || `${r.normalizedName} ${m.byAsset.get(r.normalizedName)?.dev?.name || ''} ${r.owner} ${r.os}`.toLowerCase().includes(q)))
                     .sort((a, b) => (assetFix.get(b.normalizedName) || 0) - (assetFix.get(a.normalizedName) || 0) || (m.byAsset.get(b.normalizedName)?.dev?.pending || 0) - (m.byAsset.get(a.normalizedName)?.dev?.pending || 0) || a.normalizedName.localeCompare(b.normalizedName));
                 this._axList = list;
+                this._axCatList = (k) => reg.filter(r => k === 'ALL' || cats.get(r.normalizedName).has(k));     // v4.22.2: a list per box, for its machine list
+                this._axTiles = tiles;
                 const shown = list.slice(0, S.shown);
                 const row = (r) => {
                     const n = r.normalizedName, x = m.byAsset.get(n) || {}, d = x.dev;
@@ -6076,6 +6078,7 @@
                 body.innerHTML = `
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-4">1. Summary <span class="text-xs font-normal text-gray-400">click a box to list those assets</span></h3>
                         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">${tiles.map(tile).join('')}</div>
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs print-hide"><span class="font-semibold text-gray-600">⬇ Machine lists:</span>${tiles.filter(t => t[0] !== 'ALL' && t[2] > 0).map(t => `<button onclick="app.axExportList('${t[0]}')" class="text-blue-700 underline hover:text-blue-900" title="Download these machines' names, one per line (risk-accepted machines are never in a list)">${esc(t[1])} (${fmtNum(t[2])})</button>`).join('<span class="text-gray-300">·</span>') || '<span class="text-gray-500">none</span>'}</div>
                         <p class="text-xs text-gray-500 mt-2">${fmtNum(m.extra.length)} Automox device${m.extra.length === 1 ? ' is' : 's are'} not in the register (section 4). Matching: hand links first, then the full name, the short name, and last the IP address (marked "by IP only": check those).</p></div>
 
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">2. Qualys findings Automox can fix</h3>
@@ -6087,7 +6090,7 @@
                         ${groups.length > 300 ? `<tr><td colspan="9" class="px-2 py-2 text-xs text-gray-500 text-center">First 300 of ${fmtNum(groups.length)} findings.</td></tr>` : ''}</tbody></table></div></div>
 
                     <div class="mb-8"><h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">3. Assets <span class="text-sm font-normal text-gray-500">${S.filter === 'ALL' ? 'all' : esc(tiles.find(t => t[0] === S.filter)?.[1] || S.filter)} · ${fmtNum(list.length)}</span></h3>
-                        <div class="flex flex-wrap items-center gap-3 mb-3 print-hide"><input type="search" id="ax-q" value="${esc(S.q)}" placeholder="Search asset, device, owner, OS" oninput="app.axState.q = this.value; app.axState.shown = 200; clearTimeout(app._axT); app._axT = setTimeout(() => app.renderAutomox(), 250)" class="border border-gray-300 rounded px-2 py-1 text-sm w-72">${S.filter !== 'ALL' ? '<button onclick="app.axFilter(\'ALL\')" class="text-xs text-blue-700 underline">Show all</button>' : ''}</div>
+                        <div class="flex flex-wrap items-center gap-3 mb-3 print-hide"><input type="search" id="ax-q" value="${esc(S.q)}" placeholder="Search asset, device, owner, OS" oninput="app.axState.q = this.value; app.axState.shown = 200; clearTimeout(app._axT); app._axT = setTimeout(() => app.renderAutomox(), 250)" class="border border-gray-300 rounded px-2 py-1 text-sm w-72">${S.filter !== 'ALL' ? '<button onclick="app.axFilter(\'ALL\')" class="text-xs text-blue-700 underline">Show all</button>' : ''}<button onclick="app.axExportList()" class="ml-auto bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1 rounded shadow-sm text-sm" title="Download the names of the machines in this list (after the search), one per line">⬇ Machine list: ${S.filter === 'ALL' ? 'all' : esc(tiles.find(t => t[0] === S.filter)?.[1] || S.filter)} (${fmtNum(list.length)})</button></div>
                         <div class="overflow-x-auto"><table data-showall="app.axState.shown = 1e9; app.renderAutomox()" data-partial="${list.length > shown.length ? 1 : ''}" class="min-w-full text-sm text-left"><thead class="text-gray-500 bg-gray-50 border-b"><tr><th class="py-2 px-2">Asset</th><th class="py-2 px-2">Owner</th><th class="py-2 px-2">Automox</th><th class="py-2 px-2">Check-in</th><th class="py-2 px-2">Waiting patches</th><th class="py-2 px-2">Policies</th><th class="py-2 px-2 text-center">Reboot</th><th class="py-2 px-2 text-right" title="Qualys detections with an Automox patch waiting">Fixable</th><th class="py-2 px-2 print-hide">Tasks</th></tr></thead>
                         <tbody class="divide-y">${shown.map(row).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">No assets.</td></tr>'}
                         ${list.length > shown.length ? `<tr><td colspan="9" class="px-2 py-3 text-center bg-gray-50"><button onclick="app.axState.shown += 100; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show 100 more</button> · <button onclick="app.axState.shown = 1e9; app.renderAutomox()" class="text-blue-600 font-semibold hover:underline">Show all ${fmtNum(list.length)}</button> <span class="text-xs text-gray-500">(${fmtNum(list.length - shown.length)} more; show them all before printing)</span></td></tr>` : ''}</tbody></table></div></div>
@@ -6155,10 +6158,13 @@
                 this._axNote = AutomoxEvidence.summaryText(s) + (missing ? ` · ${missing} device${missing === 1 ? '' : 's'} with open tasks not checked yet: press Sync.` : '');
                 this.renderAutomox();
             }
-            axExportList() {
-                const names = App.hostNames(new Set((this._axList || []).map(r => r.normalizedName)));
-                if (!names.length) { StorageService.toast('No machines to export'); return; }
-                App.downloadList(`patch_coverage_${this.axState?.filter && this.axState.filter !== 'ALL' ? this.axState.filter : 'all'}`, names);
+            axExportList(cat = null) {
+                const rows = cat && this._axCatList ? this._axCatList(cat) : (this._axList || []), k = cat || (this.axState?.filter && this.axState.filter !== 'ALL' ? this.axState.filter : 'all');
+                const names = App.hostNames(new Set(rows.map(r => r.normalizedName)));
+                if (!names.length) { const n = App._leftOut; App._leftOut = 0; StorageService.toast(n ? 'Only risk-accepted machines here: machine lists never include them' : 'No machines to export'); return; }
+                const slug = { none: 'no-agent', nopolicy: 'no-patch-policy', stale: 'stale-agent', noncompliant: 'not-compliant', reboot: 'reboot-needed', waiting: 'patches-waiting', managed: 'managed', ambiguous: 'to-check' }[k] || k;
+                const team = (document.getElementById('ax-scope')?.value || 'ALL');
+                App.downloadList(`patch_coverage_${slug}_${team === 'ALL' ? 'all-teams' : team.replace(/[^A-Za-z0-9_-]+/g, '')}`, names);
                 StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
             }
             axExportCSV() {

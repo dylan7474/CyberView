@@ -22,9 +22,10 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 
 import automox
 import eol
+import redhat
 import qualys
 
-VERSION = "4.21.0"
+VERSION = "4.22.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -158,7 +159,7 @@ def migrate(wait_seconds=90):
     while True:
         try:
             with conn_ctx() as c, c.cursor() as cur:
-                for stmt in SCHEMA + [automox.SCHEMA, qualys.SCHEMA, eol.SCHEMA]:
+                for stmt in SCHEMA + [automox.SCHEMA, qualys.SCHEMA, eol.SCHEMA, redhat.SCHEMA]:
                     cur.execute(stmt)
             return
         except pymysql.err.OperationalError:
@@ -176,6 +177,7 @@ def _startup():
     automox.init(conn_ctx, audit)
     qualys.init(conn_ctx, audit)
     eol.init(conn_ctx, audit)
+    redhat.init(conn_ctx, audit)
 
 
 # ------------------------------------------------------------------ users, sessions, roles
@@ -841,6 +843,12 @@ def eol_sync(request: Request):
     if not eol.start(current_user(request)):
         return JSONResponse({"error": "Already fetching", "job": eol.status()["job"]}, status_code=409)
     return JSONResponse({"started": True}, status_code=202)
+
+
+@app.get("/api/redhat")
+async def redhat_cves(ids: str = ""):
+    """v4.22 Red Hat Security Data for up to 20 CVEs (cached a day on the server; only CVE numbers leave it)."""
+    return await run_in_threadpool(redhat.get, ids.split(","))
 
 
 @app.get("/api/eol/data")

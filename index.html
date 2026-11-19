@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.21.0 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.22.0 · 19 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1871,6 +1871,69 @@
         // are dropped, not counted. Kept in gov_plan_forecast (in backups): open promises, weekly totals per team,
         // and the last 300 misses.
         // =====================================================================================================
+        // =================== Red Hat Security Data (v4.22) ===================
+        // What Red Hat says about a CVE per RHEL release: fixed (advisory + package), not affected, will not fix, fix deferred,
+        // out of support. From the server (cached a day there); the demo (no server) asks Red Hat directly. Only CVE numbers leave.
+        class RedHat {
+            static cache = new Map();
+            static norm(cve, j) {
+                const txt = (v, n) => String((v && v.value) || v || '').replace(/\s+/g, ' ').trim().slice(0, n);
+                return { cve, severity: j.threat_severity || '', cvss: (j.cvss3 || {}).cvss3_base_score || '', public: String(j.public_date || '').slice(0, 10), statement: txt(j.statement, 900), mitigation: txt(j.mitigation, 900),
+                    fixed: (j.affected_release || []).map(r => ({ p: r.product_name || '', a: r.advisory || '', pkg: r.package || '', d: String(r.release_date || '').slice(0, 10) })),
+                    states: (j.package_state || []).map(r => ({ p: r.product_name || '', s: r.fix_state || '', pkg: r.package_name || '' })) };
+            }
+            static async get(ids) {
+                ids = [...new Set((ids || []).map(String))].filter(c => /^CVE-\d{4}-\d{4,7}$/.test(c)).slice(0, 20);
+                const need = ids.filter(c => !this.cache.has(c));
+                if (need.length) {
+                    if (StorageService.mode === 'server') {
+                        try { const r = await fetch('api/redhat?ids=' + encodeURIComponent(need.join(',')), { cache: 'no-store' }); if (r.ok) { const j = await r.json(); need.forEach(c => { if (j[c]) this.cache.set(c, j[c]); }); } } catch (e) { /* not available now */ }
+                    } else if (AIService.load().webResearch !== false) {
+                        await Promise.all(need.map(async c => {
+                            try { const r = await fetch(`https://access.redhat.com/hydra/rest/securitydata/cve/${encodeURIComponent(c)}.json`); this.cache.set(c, r.status === 404 ? { cve: c, none: true } : (r.ok ? this.norm(c, await r.json()) : { cve: c, error: 'HTTP ' + r.status })); }
+                            catch (e) { this.cache.set(c, { cve: c, error: 'not reachable' }); }
+                        }));
+                    }
+                }
+                return Object.fromEntries(ids.map(c => [c, this.cache.get(c) || null]));
+            }
+            static major(os) { const m = String(os || '').match(/Red Hat Enterprise Linux\D{0,12}?(\d+)/i) || String(os || '').match(/\bRHEL\s*(\d+)/i); return m ? +m[1] : null; }
+            static pkg(p) { return String(p || '').replace(/-\d+:/, '-'); }
+            static STATE = { 'Not affected': 'not', 'Will not fix': 'wont', 'Fix deferred': 'deferred', 'Out of support scope': 'oos', 'Affected': 'affected', 'Under investigation': 'investigating', 'New': 'affected' };
+            static WORD = { not: 'not affected', wont: 'will not fix', deferred: 'fix deferred', oos: 'out of support (no fix)', affected: 'affected, no fix yet', investigating: 'under investigation' };
+            // One RHEL major release: { kind: fixed|eus|not|wont|deferred|oos|affected|investigating|none, adv, pkg, d, more }
+            static forMajor(doc, major) {
+                if (!doc || doc.none || doc.error || !major) return { kind: 'none' };
+                const main = 'Red Hat Enterprise Linux ' + major;
+                const all = (doc.fixed || []).filter(f => f.p === main && !/kernel-rt|-rt-/.test(f.pkg)), real = all.filter(f => !/^kpatch/.test(f.pkg));     // a live patch (kpatch) only when nothing else
+                const fx = (real.length ? real : all).sort((a, b) => String(b.d).localeCompare(String(a.d)));
+                if (fx.length) return { kind: 'fixed', adv: fx[0].a, pkg: this.pkg(fx[0].pkg), d: fx[0].d, more: new Set(fx.map(f => f.a)).size - 1 };
+                const st = (doc.states || []).find(x => x.p === main);
+                if (st && this.STATE[st.s]) return { kind: this.STATE[st.s], pkg: st.pkg };
+                const eus = (doc.fixed || []).filter(f => f.p.startsWith(main + '.'));
+                if (eus.length) return { kind: 'eus', adv: eus[0].a, pkg: this.pkg(eus[0].pkg), d: eus[0].d, more: eus.length - 1 };
+                return { kind: 'none' };
+            }
+            static text(v, major) {
+                const D = (d) => d ? App.dateText(d) : '';
+                if (v.kind === 'fixed') return `RHEL ${major}: fixed in ${v.adv} (${v.pkg}${v.d ? ', ' + D(v.d) : ''})${v.more > 0 ? ` +${v.more} more advisor${v.more === 1 ? 'y' : 'ies'}` : ''}`;
+                if (v.kind === 'eus') return `RHEL ${major}: fixed only for update streams (EUS/SAP), e.g. ${v.adv}`;
+                return v.kind === 'none' ? '' : `RHEL ${major}: ${this.WORD[v.kind]}`;
+            }
+            // Every RHEL major Red Hat mentions, fixed first, the rest grouped: "RHEL 6, 7, 8, 10: not affected"
+            static summary(doc) {
+                if (!doc) return '';
+                if (doc.error) return 'Red Hat: not available right now';
+                if (doc.none) return 'Red Hat: no record of this CVE';
+                const majors = [...new Set([...(doc.fixed || []), ...(doc.states || [])].map(x => (x.p.match(/^Red Hat Enterprise Linux (\d+)(?:$|\.)/) || [])[1]).filter(Boolean).map(Number))].sort((a, b) => a - b);
+                const fixed = [], groups = new Map();
+                majors.forEach(m => { const v = this.forMajor(doc, m); if (v.kind === 'fixed' || v.kind === 'eus') fixed.push(this.text(v, m)); else if (v.kind !== 'none') { const w = this.WORD[v.kind]; if (!groups.has(w)) groups.set(w, []); groups.get(w).push(m); } });
+                const sev = doc.severity ? `${doc.severity}${doc.cvss ? ' (CVSS ' + doc.cvss + ')' : ''}` : '';
+                return ['Red Hat' + (sev ? ': ' + sev : ''), ...fixed, ...[...groups].map(([w, ms]) => `RHEL ${ms.join(', ')}: ${w}`)].join(' · ');
+            }
+            static advLink(a) { return a ? `https://access.redhat.com/errata/${encodeURIComponent(a)}` : ''; }
+        }
+
         // =================== Watched CVEs (v4.20) ===================
         // CVEs pinned on the CVE Lookup, shared by everyone (gov_cve_watch, in backups). Each keeps a history of how many machines
         // have it open, in total and per team: a point when it is pinned, after every applied Qualys sync and every Refresh.
@@ -4861,6 +4924,28 @@
                 if (A.unm) bits.push(`and ${n(A.unm, 'Automox device')} not in the register`);
                 return 'Automox patch: ' + bits.join(' · ');
             }
+            // 🎩 Red Hat on a CVE card (v4.22), and the RHEL machines Qualys flags where Red Hat says that release is not affected
+            static cveRhHTML(doc, id, C) {
+                const rhel = C.list.filter(x => x.cves.has(id) && RedHat.major(x.r.os || x.r.qualysOs));
+                if (!doc || (doc.none && !rhel.length) || (doc.error && !rhel.length)) return '';
+                const notAff = rhel.filter(x => RedHat.forMajor(doc, RedHat.major(x.r.os || x.r.qualysOs)).kind === 'not');
+                const links = [...new Set((doc.fixed || []).filter(f => /^Red Hat Enterprise Linux \d+$/.test(f.p)).map(f => f.a))].slice(0, 3);
+                return `<div class="mt-1 text-sm"><span class="font-semibold text-slate-800">🎩 ${esc(RedHat.summary(doc))}</span>
+                    ${links.length ? ` <span class="text-xs">${links.map(a => `<a class="underline text-blue-800" target="_blank" rel="noopener noreferrer" href="${esc(RedHat.advLink(a))}">${esc(a)}</a>`).join(' ')}</span>` : ''}
+                    ${notAff.length ? `<div class="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded px-2 py-1 mt-1">⚠ Qualys flags ${fmtNum(notAff.length)} RHEL machine${notAff.length === 1 ? '' : 's'} on a release Red Hat says is <strong>not affected</strong>: check those findings (a back-ported fix or a false positive).</div>` : ''}
+                    ${doc.statement || doc.mitigation ? `<details class="text-xs text-gray-700 mt-1"><summary class="cursor-pointer text-blue-800">Red Hat's statement${doc.mitigation ? ' and mitigation' : ''}</summary>${doc.statement ? `<p class="mt-1">${esc(doc.statement)}</p>` : ''}${doc.mitigation ? `<p class="mt-1"><strong>Mitigation:</strong> ${esc(doc.mitigation)}</p>` : ''}<p class="mt-1"><a class="underline" target="_blank" rel="noopener noreferrer" href="https://access.redhat.com/security/cve/${esc(id)}">Red Hat's page for ${esc(id)}</a></p></details>` : ''}</div>`;
+            }
+            // On a RHEL machine's row: what Red Hat says for its release
+            static cveRhRow(x, RH) {
+                const m = RedHat.major(x.r.os || x.r.qualysOs); if (!m || !RH) return '';
+                for (const c of x.cves) {
+                    const v = RedHat.forMajor(RH[c], m); if (v.kind === 'none') continue;
+                    if (v.kind === 'not') return `<div class="text-[10px] font-semibold text-amber-900 mb-0.5">⚠ Red Hat: RHEL ${m} not affected by ${esc(c)}: check this finding</div>`;
+                    if (v.kind === 'fixed' || v.kind === 'eus') return `<div class="text-[10px] text-gray-700 mb-0.5">🎩 Red Hat fix: <span class="font-mono">${esc(v.pkg)}</span> (${esc(v.adv)})</div>`;
+                    return `<div class="text-[10px] text-gray-700 mb-0.5">🎩 Red Hat: RHEL ${m} ${esc(RedHat.WORD[v.kind])}</div>`;
+                }
+                return '';
+            }
             static cveAxLine(c, C) {
                 const t = App.cveAxText(c, C); if (!t) return '';
                 const at = C.axAt ? ` <span class="text-gray-400 font-normal">(Automox data ${esc(new Date(C.axAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))})</span>` : '';
@@ -4918,6 +5003,7 @@
                 for (const p of pins) { const C = await this.cveData([p.cve], tm, true); rows.push({ p, C, st: CveWatch.status(p, C) }); }
                 if (seq !== this._cwSeq || this.currentView !== 'cve') return;
                 let kev = null; if (AIService.load().webResearch !== false) { try { kev = await WebResearch.kev(); } catch (e) { kev = null; } }
+                RedHat.get(pins.map(p => p.cve)).catch(() => {});     // v4.22: ready for the copied update
                 if (seq !== this._cwSeq || this.currentView !== 'cve') return;
                 this._cwRows = rows;
                 const n = (C, k) => C.list.filter(x => x.state.b === k).length;
@@ -4949,6 +5035,7 @@
                         `  ${C.list.length} machine${C.list.length === 1 ? '' : 's'} open${first !== null ? ` (was ${first} when pinned ${D(p.at)})` : ''}`);
                     if (C.list.length && C.ax) L.push(`  Automox will patch ${n(C, 'will')}${when.length ? ' by ' + new Date(Math.max(...when)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : ''}; blocked ${n(C, 'blocked')}; manual ${n(C, 'manual')}`);
                     if (p.target || st.w) L.push(`  ${p.target ? 'Target ' + D(p.target) + ': ' : ''}${st.w}`);
+                    { const rh = RedHat.cache.get(p.cve); if (rh && !rh.none && !rh.error) L.push('  ' + RedHat.summary(rh)); }
                 });
                 L.push('', 'Counts leave out risk-accepted machines and findings.');
                 return L.join('\n');
@@ -5197,6 +5284,7 @@
                 }
                 const seq = this._cveSeq = (this._cveSeq || 0) + 1;
                 if (!keep || !this._cve) { out.innerHTML = '<p class="text-sm text-gray-500">Looking…</p>'; this._cve = await this.cveData(ids, team); }
+                const RH = await Promise.race([RedHat.get(ids).catch(() => ({})), new Promise(r => setTimeout(() => r({}), 6000))]);     // v4.22
                 if (seq !== this._cveSeq || this.currentView !== 'cve') return;
                 const C = this._cve, f = this.cveFilter || 'all', ST = App.CVE_STATE;
                 this.accNote(C.hidden);
@@ -5211,6 +5299,7 @@
                     <span class="text-sm">${c.machines ? `<strong>${fmtNum(c.machines)}</strong> machine${c.machines === 1 ? '' : 's'} with it open` : (c.qids.length ? `Qualys has a check for it (QID ${esc(c.qids.slice(0, 3).join(', '))}${c.qids.length > 3 ? '…' : ''}); <strong>no machine has it open now</strong>` : '<strong>not in our Qualys data</strong>')}${c.hid ? ` · <strong class="text-amber-800">⚑ plus ${fmtNum(c.hid)} risk-accepted machine${c.hid === 1 ? '' : 's'} (hidden)</strong> <button class="underline print-hide" onclick="app.setShowAccepted(true)">Show</button>` : ''}</span></div>
                     ${!c.qids.length ? `<p class="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded p-2 mt-2">⚠ <strong>This does not mean you are not affected.</strong> No Qualys finding in our data names ${esc(c.id)}: either no scanned machine has it, or Qualys has no check for it yet (new CVEs can take a few days). Search the Qualys KnowledgeBase for ${esc(c.id)} to be sure.${C.axOnly.length ? ' Automox does list a waiting patch for it: see below.' : ''}</p>` : ''}
                     ${App.cveAxLine(c, C)}
+                    ${App.cveRhHTML(RH[c.id], c.id, C)}
                     ${this.cvePinHTML(c.id)}
                     <div class="text-xs text-gray-600 mt-1" id="cve-intel-${esc(c.id)}"></div></div>`).join('');
                 const qHTML = C.qinfo.length ? `<div><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">Qualys checks for ${C.ids.length === 1 ? 'it' : 'them'}</p><div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.qinfo.map(q => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(q.qid)}" onclick="app.inspectQid(this.dataset.q, 'cve')"><td class="px-2 py-1.5 font-mono text-xs text-gray-500">${esc(q.qid)}</td><td class="px-2 py-1.5">${esc(q.title)}${q.exploited ? ' <strong class="text-red-800 text-xs">⚑ exploited</strong>' : ''}</td><td class="px-2 py-1.5 text-xs text-gray-600">${q.patchable ? 'patch exists' : 'no patch (configuration or end of life)'}</td><td class="px-2 py-1.5 text-right font-mono text-xs">${fmtNum(q.open)} open</td></tr>`).join('')}</tbody></table></div></div>` : '';
@@ -5221,7 +5310,7 @@
                         <td class="px-2 py-1.5 font-mono text-xs">${esc(x.r.originalName || x.name)}${x.acc ? '<div class="font-sans">' + RiskView.flag(x.acc, true) + '</div>' : (x.accF.length ? '<div class="font-sans">' + RiskView.flag(x.accF[0], true) + '</div>' : '')}</td>
                         <td class="px-2 py-1.5 text-xs">${esc(x.team)}</td><td class="px-2 py-1.5 text-center text-xs">${StatusEngine.tierCell(x.r)}</td><td class="px-2 py-1.5 text-xs">${esc(x.exposure)}</td>
                         <td class="px-2 py-1.5">${x.p <= 4 ? StatusEngine.pBadge(x.p) : ''}</td>
-                        <td class="px-2 py-1.5 text-xs"><span class="inline-block px-1.5 py-0.5 rounded border font-semibold ${s.cls}">${s.w}${x.state.b === 'will' && x.when ? ' ' + esc(day(x.when)) : ''}</span>
+                        <td class="px-2 py-1.5 text-xs">${App.cveRhRow(x, RH)}<span class="inline-block px-1.5 py-0.5 rounded border font-semibold ${s.cls}">${s.w}${x.state.b === 'will' && x.when ? ' ' + esc(day(x.when)) : ''}</span>
                             <div class="text-[10px] text-gray-600 mt-0.5">${esc(x.state.why)}${x.state.approx ? ' ≈' : ''}</div>${x.pkgs.length ? `<div class="text-[10px] text-gray-500 font-mono">${esc(x.pkgs.slice(0, 3).join(', '))}${x.pkgs.length > 3 ? ' +' + (x.pkgs.length - 3) : ''}</div>` : ''}</td>
                         <td class="px-2 py-1.5 text-xs text-gray-600 whitespace-nowrap">${x.first ? esc(new Date(x.first).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })) : ''}</td></tr>`; };
                 const notes = [];
@@ -5299,8 +5388,8 @@
                 const ST = App.CVE_STATE, n = (k) => C.list.filter(x => x.state.b === k).length, L = [];
                 const when = C.list.filter(x => x.state.b === 'will' && x.when).map(x => x.when);
                 L.push(`${C.ids.join(', ')}: CyberView lookup ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}${C.team !== 'ALL' ? ' (' + C.team + ' team)' : ''}`);
-                C.per.forEach(c => { const x = this._cveIntel?.get(c.id), ax = App.cveAxText(c, C);
-                    L.push(`${c.id}: ${c.machines ? c.machines + ' machine' + (c.machines === 1 ? '' : 's') + ' affected' : (c.qids.length ? 'no machine has it open' : 'not in our Qualys data yet (not proof we are unaffected)')}${c.hid ? `, plus ${c.hid} risk-accepted machine${c.hid === 1 ? '' : 's'}` : ''}${x?.kev ? '; on the CISA KEV list' : ''}${x?.nvd?.cvss ? '; CVSS ' + x.nvd.cvss : ''}`); if (ax) L.push('  ' + ax); });
+                C.per.forEach(c => { const x = this._cveIntel?.get(c.id), ax = App.cveAxText(c, C), rh = RedHat.cache.get(c.id);
+                    L.push(`${c.id}: ${c.machines ? c.machines + ' machine' + (c.machines === 1 ? '' : 's') + ' affected' : (c.qids.length ? 'no machine has it open' : 'not in our Qualys data yet (not proof we are unaffected)')}${c.hid ? `, plus ${c.hid} risk-accepted machine${c.hid === 1 ? '' : 's'}` : ''}${x?.kev ? '; on the CISA KEV list' : ''}${x?.nvd?.cvss ? '; CVSS ' + x.nvd.cvss : ''}`); if (ax) L.push('  ' + ax); if (rh && !rh.none && !rh.error) L.push('  ' + RedHat.summary(rh)); });
                 if (C.qinfo.length) L.push(`Qualys checks: ${C.qinfo.map(q => 'QID ' + q.qid + ' ' + q.title).join('; ')}`);
                 if (C.list.length) {
                     const teams = [...C.list.reduce((m, x) => m.set(x.team, (m.get(x.team) || 0) + 1), new Map())].map(([t, v]) => `${t} ${v}`).join(', ');
@@ -6671,7 +6760,7 @@
                     const rs = r.riskStatus || 'Open';
                     let rsBadge = rs === 'Open' ? 'bg-red-100 text-red-800' : (rs === 'Risk Accepted' ? 'bg-amber-100 text-amber-800' : (rs === 'Resolved' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'));
                     rows.push(`
-                        <tr class="cursor-pointer ${isSelected ? 'bg-blue-50/60' : 'hover:bg-gray-50'}" onclick="app.openAssetDetail('${r.normalizedName}')">
+                        <tr class="cursor-pointer ${isSelected ? 'bg-blue-50/60' : 'hover:bg-gray-50'}" data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)">
                             <td class="px-6 py-2 text-center" onclick="event.stopPropagation()"><input type="checkbox" value="${r.normalizedName}" ${isSelected ? 'checked' : ''} onchange="app.toggleRegisterAsset(this.value, this.checked)" class="rounded border-gray-300"></td>
                             <td class="px-6 py-2 font-medium text-gray-800">${r.normalizedName}${r.osOverride ? ' ' + Lifecycle.editedBadge(r) : ''}${this.registerMatched?.has(r.normalizedName) ? ` <span class="text-[10px] font-normal text-gray-400" title="The search matched this field, not the name">matched: ${esc(this.registerMatched.get(r.normalizedName).join(', ').toLowerCase())}</span>` : ''}${r.unrecognised ? ' <span class="bg-purple-100 text-purple-800 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded" title="Seen in the vulnerability report, not in the inventory. Waiting for an owner in the Review Queue">⚑ Unrecognised</span>' : ''}</td>
                             <td class="px-6 py-2">${esc(r.owner)}</td>
@@ -8311,6 +8400,20 @@
             }
 
             // The fix page's "Affected assets" table as a list of names: the machines it shows (its team filter, or every team after "Show all teams").
+            // A fix's page (v4.22): what Red Hat says about its CVEs, when it is a Red Hat check or affects RHEL machines
+            async inspRedHat(q, list) {
+                const el = document.getElementById('insp-rh'); if (!el || !q) return;
+                const reg = new Map(StorageService.load(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const rhel = (list || []).map(d => reg.get(d.asset)).filter(r => r && RedHat.major(r.os || r.qualysOs));
+                if (!/Red Hat|RHSA|RHEL/i.test(q.title || '') && !rhel.length) return;
+                const ids = (q.cves || []).map(c => typeof c === 'string' ? c : c.id).filter(Boolean).slice(0, 8); if (!ids.length) return;
+                const RH = await RedHat.get(ids); if (!document.body.contains(el)) return;
+                const majors = [...new Set(rhel.map(r => RedHat.major(r.os || r.qualysOs)))].sort((a, b) => a - b);
+                const rows = ids.map(id => { const d = RH[id]; if (!d) return '';
+                    const mine = majors.map(m => RedHat.text(RedHat.forMajor(d, m), m)).filter(Boolean);
+                    return `<li><span class="font-mono">${esc(id)}</span>: ${esc(RedHat.summary(d))}${mine.length && majors.length ? `<div class="text-gray-600">Your machines (RHEL ${majors.join(', ')}): ${esc(mine.join(' · '))}</div>` : ''}</li>`; }).filter(Boolean);
+                el.innerHTML = rows.length ? `<div class="mt-4"><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">🎩 Red Hat Security Data</p><ul class="text-xs space-y-1">${rows.join('')}</ul>${ids.length < (q.cves || []).length ? `<p class="text-[11px] text-gray-500">First ${ids.length} CVEs of ${fmtNum((q.cves || []).length)}.</p>` : ''}</div>` : '';
+            }
             inspTick(n, on) {
                 const S = this.inspSel = this.inspSel || new Set(); if (on) S.add(n); else S.delete(n);
                 document.querySelectorAll('#view-inspect .insp-tick').forEach(b => { if (b.dataset.n === n) b.checked = on; });     // one machine, several ports
@@ -8940,6 +9043,7 @@
                     ? `<div class="flex flex-wrap items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-900"><span>🔎 <strong>Showing: ${esc(App.inspectScopeLabel(scope))}</strong> · ${fmtNum(assets.length)} of ${fmtNum(allN)} affected assets</span><button class="print-hide underline text-blue-700 hover:text-blue-900" onclick="app.inspectScopeAll()">Show all teams</button></div>`
                     : (entry.saved ? `<div class="flex flex-wrap items-center gap-2 bg-gray-50 border rounded-lg px-4 py-2 text-sm text-gray-700"><span>🌐 <strong>Showing: every asset</strong> · ${fmtNum(assets.length)} affected</span><button class="print-hide underline text-blue-700 hover:text-blue-900" onclick="app.inspectScopeBack()">Back to ${esc(App.inspectScopeLabel(entry.saved))}</button></div>` : '');
                 setTimeout(() => { const c = this.intelCache.get('intel:qid:' + qid), el = document.getElementById('intel-out'); if (c && el) el.innerHTML = c; }, 0);
+                setTimeout(() => this.inspRedHat(q, list), 0);     // v4.22
                 const kpi = (label, v) => `<div class="bg-gray-50 border p-3 rounded"><p class="text-[10px] uppercase font-semibold opacity-70">${label}</p><p class="text-xl font-bold">${v}</p></div>`;
                 const cves = (q.cves || []).slice(0, 30).map(c => `<a class="inline-block mr-1 mb-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-mono hover:bg-blue-100" target="_blank" rel="noopener noreferrer" href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(c.id)}">${esc(c.id)}${c.cvss ? ' · ' + c.cvss : ''}</a>`).join('');
 
@@ -8961,6 +9065,7 @@
                             ${kpi('Fix available', q.patchable ? '✅ Patchable' : 'No patch')}
                         </div>
                         ${cves ? `<div class="mt-4"><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">CVEs (${fmtNum(q.cveCount || q.cves.length)}${(q.cveCount || q.cves.length) > 30 ? ', first 30 shown' : ''})</p>${cves}</div>` : ''}
+                        <div id="insp-rh"></div>
                     </div>
 
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">

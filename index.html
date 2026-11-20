@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.27.0 · 20 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.28.0 · 20 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -2126,7 +2126,7 @@
                 if (!p.target) return { w: '', k: '' };
                 const end = Date.parse(p.target + 'T23:59:59');
                 if (Date.now() > end) return { w: `✖ Missed: ${fmtNum(n)} still open`, k: 'x' };
-                const notAx = C.list.filter(x => x.state.b !== 'will' || (x.when && x.when > end)).length;
+                const notAx = C.list.filter(x => !(x.state.b === 'will' || x.state.b === 'later') || !x.when || x.when > end).length;
                 return notAx ? { w: `⚠ At risk: ${fmtNum(notAx)} not patched by Automox before then`, k: 'a' } : { w: '✓ On track: Automox patches them all before then', k: 'ok' };
             }
             static trend(p, team, n = 6) {
@@ -4816,7 +4816,7 @@
             }
             cfRows(tb) { const n = tb.tHead.rows[0].cells.length; return [...tb.tBodies[0].rows].filter(r => r.cells.length >= n - 1 && !r.querySelector('td[colspan]')); }
             cfCell(key, td, row) {
-                const text = App.cellText(td), v = ColFilter.value(key, text, row.dataset.n);
+                const text = App.cellText(td), v = td && td.dataset.fv ? td.dataset.fv : ColFilter.value(key, text, row.dataset.n);     // data-fv: the cell's plain value (v4.28)
                 return { v, vals: key === 'machine' ? [v, ColFilter.clean(text)] : [v], n: ColFilter.num(App.sortVal(td).n) };
             }
             cfApply(tb) {
@@ -5488,10 +5488,23 @@
             static CVE_STATE = {
                 manual: { w: '✋ Manual fix', order: 0, cls: 'bg-red-50 text-red-900 border-red-300' },
                 blocked: { w: '⚠ Automox patch blocked', order: 1, cls: 'bg-amber-50 text-amber-900 border-amber-300' },
+                later: { w: '◷ Automox will patch later', order: 1.5, cls: 'bg-sky-50 text-sky-900 border-sky-300 border-dashed' },
                 will: { w: '⟳ Automox will patch', order: 2, cls: 'bg-blue-50 text-blue-900 border-blue-300' },
                 done: { w: '✓ Installed, awaiting rescan', order: 3, cls: 'bg-green-50 text-green-900 border-green-300' },
                 unknown: { w: '? No Automox data', order: 4, cls: 'bg-gray-50 text-gray-700 border-gray-300' }
             };
+            // v4.28: a run after the plan's window is "will patch later", not "blocked" (CVE Lookup and a fix's machines)
+            static axState(c) { return c && c.b === 'blocked' && c.later ? { ...c, b: 'later', why: `next run is after the next ${+StatusEngine.settings().patchPlanDays || 7} days` } : c; }
+            static axDay(t) { return t ? new Date(t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : ''; }
+            // Automox | Next patch run cells: words and a symbol on each (colour-blind users); data-fv = the value the ▾ filter ticks, data-sort = the date
+            static axStateTd(c) {
+                const s = App.CVE_STATE[c.b] || App.CVE_STATE.unknown, w = s.w.replace(/^\S+\s/, '');
+                return `<td class="px-2 py-1.5 text-xs" data-fv="${esc(w)}"><span class="inline-block px-1.5 py-0.5 rounded border font-semibold whitespace-nowrap ${s.cls}">${s.w}</span><div class="text-[10px] text-gray-600 mt-0.5">${esc(c.why || '')}${c.approx ? ' ≈' : ''}</div></td>`;
+            }
+            static axRunTd(c) {
+                const t = c.when || 0, soon = t && (c.b === 'will');
+                return `<td class="px-2 py-1.5 text-xs whitespace-nowrap" data-sort="${t || ''}">${t ? `<span class="${soon ? 'font-semibold' : ''}">${esc(App.axDay(t))}</span>${c.policy ? `<div class="text-[10px] text-gray-500 whitespace-normal max-w-[180px]">${esc(c.policy)}</div>` : ''}` : '<span class="text-gray-400">-</span>'}</td>`;
+            }
             // "🩹 Automox patch: ✓ yes on 25 of 42 machines (openssh 9.8p1) · ✓ installed on 2 · ✗ not listed on 10 · no agent on 7"
             static cveAxText(c, C) {
                 const A = c.axA;
@@ -5604,7 +5617,7 @@
                         <td class="px-3 py-2"><div class="font-mono font-semibold text-indigo-900">${sel ? '▾ ' : ''}${esc(p.cve)}${kev && kev.get(p.cve) ? ' <span class="text-red-800 text-xs">⚑ KEV</span>' : ''}</div><div class="text-[11px] text-gray-600 max-w-xs truncate" title="${esc(title)}">${esc(title || 'no Qualys check in our data yet')}</div>${p.note ? `<div class="text-[11px] text-gray-500">${esc(p.note)}</div>` : ''}</td>
                         <td class="px-3 py-2 text-right"><span class="text-lg font-bold">${fmtNum(now)}</span><div class="text-[11px] text-gray-500">machines</div></td>
                         <td class="px-3 py-2 text-right whitespace-nowrap">${d === null ? '' : d < 0 ? `<strong class="text-green-900">−${fmtNum(-d)}</strong>` : d > 0 ? `<strong class="text-red-900">+${fmtNum(d)}</strong>` : '±0'}<div class="text-[11px] text-gray-500">since ${esc(D(p.at))}</div></td>
-                        <td class="px-3 py-2 text-xs whitespace-nowrap">${C.ax ? `⟳ ${fmtNum(n(C, 'will'))} will patch<br>⚠ ${fmtNum(n(C, 'blocked'))} blocked · ✋ ${fmtNum(n(C, 'manual'))} manual` : '<span class="text-gray-500">no Automox data</span>'}</td>
+                        <td class="px-3 py-2 text-xs whitespace-nowrap">${C.ax ? `⟳ ${fmtNum(n(C, 'will'))} will patch${n(C, 'later') ? ` · ◷ ${fmtNum(n(C, 'later'))} later` : ''}<br>⚠ ${fmtNum(n(C, 'blocked'))} blocked · ✋ ${fmtNum(n(C, 'manual'))} manual` : '<span class="text-gray-500">no Automox data</span>'}</td>
                         <td class="px-3 py-2 text-xs">${p.target ? `<div class="whitespace-nowrap">${esc(D(p.target))}</div>` : ''}<div class="${cls[st.k] || ''}">${esc(st.w || (p.target ? '' : 'no target'))}</div></td>
                         <td class="px-3 py-2 text-xs font-mono whitespace-nowrap">${esc(CveWatch.trend(p, tm))}</td></tr>`;
                 }).join('');
@@ -5621,7 +5634,7 @@
                     const first = CveWatch.count((p.hist || [])[0], tm), when = C.list.filter(x => x.state.b === 'will' && x.when).map(x => x.when);
                     L.push('', `${p.cve}${C.qinfo[0] ? ' (' + C.qinfo[0].title + ')' : ''}${p.note ? ' [' + p.note + ']' : ''}`,
                         `  ${C.list.length} machine${C.list.length === 1 ? '' : 's'} open${first !== null ? ` (was ${first} when pinned ${D(p.at)})` : ''}`);
-                    if (C.list.length && C.ax) L.push(`  Automox will patch ${n(C, 'will')}${when.length ? ' by ' + new Date(Math.max(...when)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : ''}; blocked ${n(C, 'blocked')}; manual ${n(C, 'manual')}`);
+                    if (C.list.length && C.ax) L.push(`  Automox will patch ${n(C, 'will')}${when.length ? ' by ' + new Date(Math.max(...when)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : ''}${n(C, 'later') ? `; later ${n(C, 'later')}` : ''}; blocked ${n(C, 'blocked')}; manual ${n(C, 'manual')}`);
                     if (p.target || st.w) L.push(`  ${p.target ? 'Target ' + D(p.target) + ': ' : ''}${st.w}`);
                     { const rh = RedHat.cache.get(p.cve); if (rh && !rh.none && !rh.error) L.push('  ' + RedHat.summary(rh)); }
                 });
@@ -5782,8 +5795,8 @@
                         continue;
                     }
                     const q = vd.qmap.get(d.qid) || {};
-                    const c = m ? App.planClassify({ ...d, cves: [...new Set([...hit, ...(d.cves || []).map(idOf)])] }, r, m, end, S, q, auto.has(String(r.owner || '').toLowerCase()))
-                        : { b: 'unknown', why: Demo.api() ? 'Automox is not set up or has not synced' : 'Automox needs the server version' };
+                    const c = App.axState(m ? App.planClassify({ ...d, cves: [...new Set([...hit, ...(d.cves || []).map(idOf)])] }, r, m, end, S, q, auto.has(String(r.owner || '').toLowerCase()))
+                        : { b: 'unknown', why: Demo.api() ? 'Automox is not set up or has not synced' : 'Automox needs the server version' });
                     let x = rows.get(d.asset);
                     if (!x) rows.set(d.asset, x = { name: d.asset, r, team: StatusEngine.teamOf(r), tier: StatusEngine.tierOf(r), exposure: r.exposure || 'Unknown', p: 5, cves: new Set(), qids: new Set(), first: '', state: null, acc: am, accF: [], pkgs: [], when: 0 });
                     hit.forEach(c => x.cves.add(c)); x.qids.add(String(d.qid));
@@ -5840,7 +5853,7 @@
                             const own = x.pkgBy?.get(id) || [];
                             own.forEach(k => axA.pkgs.set(k, (axA.pkgs.get(k) || 0) + 1));
                             if (own.length) axA.yes++;
-                            else if (x.state.b === 'will' || x.state.b === 'blocked') { axA.yes++; axA.approx++; }      // matched by package name
+                            else if (x.state.b === 'will' || x.state.b === 'later' || x.state.b === 'blocked') { axA.yes++; axA.approx++; }      // matched by package name
                             else if ((x.instBy?.get(id) || []).length || x.state.b === 'done') axA.inst++;
                             else if (x.dev) axA.notListed++;
                             else axA.noAgent++;
@@ -5899,17 +5912,17 @@
                         <td class="px-2 py-1.5 font-mono text-xs">${esc(x.r.originalName || x.name)}${x.acc ? '<div class="font-sans">' + RiskView.flag(x.acc, true) + '</div>' : (x.accF.length ? '<div class="font-sans">' + RiskView.flag(x.accF[0], true) + '</div>' : '')}</td>
                         <td class="px-2 py-1.5 text-xs">${esc(x.team)}</td>${Lifecycle.osCell(x.r)}<td class="px-2 py-1.5 text-center text-xs">${StatusEngine.tierCell(x.r)}</td><td class="px-2 py-1.5 text-xs">${esc(x.exposure)}</td>
                         <td class="px-2 py-1.5">${x.p <= 4 ? StatusEngine.pBadge(x.p) : ''}</td>
-                        <td class="px-2 py-1.5 text-xs">${App.cveRhRow(x, RH)}<span class="inline-block px-1.5 py-0.5 rounded border font-semibold ${s.cls}">${s.w}${x.state.b === 'will' && x.when ? ' ' + esc(day(x.when)) : ''}</span>
-                            <div class="text-[10px] text-gray-600 mt-0.5">${esc(x.state.why)}${x.state.approx ? ' ≈' : ''}</div>${x.pkgs.length ? `<div class="text-[10px] text-gray-500 font-mono">${esc(x.pkgs.slice(0, 3).join(', '))}${x.pkgs.length > 3 ? ' +' + (x.pkgs.length - 3) : ''}</div>` : ''}</td>
+                        ${App.axStateTd(x.state)}${App.axRunTd(x.state)}
+                        <td class="px-2 py-1.5 text-xs">${App.cveRhRow(x, RH)}${x.pkgs.length ? `<div class="text-[10px] text-gray-700 font-mono">${esc(x.pkgs.slice(0, 3).join(', '))}${x.pkgs.length > 3 ? ' +' + (x.pkgs.length - 3) : ''}</div>` : (x.inst && x.inst.length ? `<div class="text-[10px] text-gray-500 font-mono">installed: ${esc(x.inst.slice(0, 2).join(', '))}</div>` : '<span class="text-gray-400">-</span>')}</td>
                         <td class="px-2 py-1.5 text-xs text-gray-600 whitespace-nowrap">${x.first ? esc(new Date(x.first).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })) : ''}</td></tr>`; };
                 const notes = [];
                 if (C.fixed) notes.push(`✓ ${fmtNum(C.fixed)} machine${C.fixed === 1 ? '' : 's'} already fixed (Qualys saw it fixed).`);
                 if (C.stale || C.never) notes.push(`⚠ Could have it without showing here: ${C.stale ? `${fmtNum(C.stale)} machine${C.stale === 1 ? '' : 's'} not scanned for over ${fmtNum(+C.S.scanStaleDays || 30)} days` : ''}${C.stale && C.never ? ', ' : ''}${C.never ? `${fmtNum(C.never)} with no scan date` : ''}.`);
-                if (!C.ax) notes.push('Automox data is not available here, so the fix column cannot say what Automox will do.');
+                if (!C.ax) notes.push('Automox data is not available here, so the Automox column cannot say what Automox will do.');
                 out.innerHTML = `<div class="space-y-4">${this.cveDeltaHTML(C)}
                     <div class="grid grid-cols-1 ${C.per.length > 1 ? 'md:grid-cols-2' : ''} gap-3">${perHTML}</div>
                     ${C.list.length ? `<div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        ${[['Machines', C.list.length, teams.map(([t, v]) => `${t} ${v}`).join(' · ')], ['⟳ Automox will patch', n('will'), `within ${C.days} days`], ['⚠ Automox blocked', n('blocked'), 'patch waiting, not going on'], ['✋ Manual fix', n('manual'), C.list.some(x => x.state.b === 'manual' && x.axAvail) ? `${C.list.filter(x => x.state.b === 'manual' && x.axAvail).length} have an Automox patch to apply` : 'no Automox patch or agent'], ['Exposure', internet, `internet facing · ${t1} Tier 1`]]
+                        ${[['Machines', C.list.length, teams.map(([t, v]) => `${t} ${v}`).join(' · ')], ['⟳ Automox will patch', n('will'), `within ${C.days} days${n('later') ? ` · ◷ ${fmtNum(n('later'))} more later` : ''}`], ['⚠ Automox blocked', n('blocked'), 'patch waiting, not going on'], ['✋ Manual fix', n('manual'), C.list.some(x => x.state.b === 'manual' && x.axAvail) ? `${C.list.filter(x => x.state.b === 'manual' && x.axAvail).length} have an Automox patch to apply` : 'no Automox patch or agent'], ['Exposure', internet, `internet facing · ${t1} Tier 1`]]
                             .map(([l, v, sub]) => `<div class="p-3 rounded border bg-white"><p class="text-[10px] uppercase text-gray-500 font-semibold">${l}</p><p class="text-xl font-bold">${fmtNum(v)}</p><p class="text-[11px] text-gray-600">${esc(sub)}</p></div>`).join('')}</div>` : ''}
                     ${notes.length ? `<div class="text-xs text-gray-700 space-y-1">${notes.map(t => `<p>${esc(t)}</p>`).join('')}</div>` : ''}
                     <div class="flex flex-wrap gap-2 print-hide">
@@ -5921,9 +5934,9 @@
                         <button onclick="app.cveCopy()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded shadow-sm text-sm">📋 Copy summary for the cyber team</button>
                     </div>
                     ${qHTML}
-                    ${C.list.length ? `<div class="flex flex-wrap gap-2 items-center print-hide"><span class="text-sm font-semibold">Machines:</span>${chip('all', 'All', C.list.length)}${chip('manual', ST.manual.w, n('manual'))}${chip('blocked', ST.blocked.w, n('blocked'))}${chip('will', ST.will.w, n('will'))}${n('done') ? chip('done', ST.done.w, n('done')) : ''}${n('unknown') ? chip('unknown', ST.unknown.w, n('unknown')) : ''}</div>
-                    <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-2 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.cveTickAll(this.checked)" title="Select every machine shown" aria-label="Select every machine shown"></th><th class="px-2 py-2 text-left">Machine</th><th class="px-2 py-2 text-left">Team</th><th class="px-2 py-2 text-left">OS</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Exposure</th><th class="px-2 py-2 text-left">Priority</th><th class="px-2 py-2 text-left">Fix</th><th class="px-2 py-2 text-left">First found</th></tr></thead>
-                        <tbody class="divide-y">${shown.slice(0, 500).map(rowHTML).join('') || '<tr><td colspan="9" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
+                    ${C.list.length ? `<div class="flex flex-wrap gap-2 items-center print-hide"><span class="text-sm font-semibold">Machines:</span>${chip('all', 'All', C.list.length)}${chip('manual', ST.manual.w, n('manual'))}${chip('blocked', ST.blocked.w, n('blocked'))}${chip('will', ST.will.w, n('will'))}${n('later') ? chip('later', ST.later.w, n('later')) : ''}${n('done') ? chip('done', ST.done.w, n('done')) : ''}${n('unknown') ? chip('unknown', ST.unknown.w, n('unknown')) : ''}</div>
+                    <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs"><tr><th class="px-2 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.cveTickAll(this.checked)" title="Select every machine shown" aria-label="Select every machine shown"></th><th class="px-2 py-2 text-left">Machine</th><th class="px-2 py-2 text-left">Team</th><th class="px-2 py-2 text-left">OS</th><th class="px-2 py-2">Tier</th><th class="px-2 py-2 text-left">Exposure</th><th class="px-2 py-2 text-left">Priority</th><th class="px-2 py-2 text-left">Automox</th><th class="px-2 py-2 text-left">Next patch run</th><th class="px-2 py-2 text-left">Patch</th><th class="px-2 py-2 text-left">First found</th></tr></thead>
+                        <tbody class="divide-y">${shown.slice(0, 500).map(rowHTML).join('') || '<tr><td colspan="11" class="px-2 py-6 text-center text-gray-500 italic">None.</td></tr>'}</tbody></table></div>
                     ${shown.length > 500 ? `<p class="text-xs text-gray-500">Showing 500 of ${fmtNum(shown.length)}: the machine list has them all.</p>` : ''}` : ''}
                     ${C.axOnly.length ? `<div><p class="text-sm font-semibold">Automox has a waiting patch for it, but Qualys has not flagged it (${fmtNum(C.axOnly.length)})</p><p class="text-xs text-gray-500 mb-1">Not scanned since, or Qualys checks it differently. Worth including.</p>
                         <div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.axOnly.slice(0, 200).map(a => `<tr><td class="px-2 py-1.5 font-mono text-xs">${esc(a.name)}${a.acc ? ' ' + RiskView.flag(a.acc, true) : ''}</td><td class="px-2 py-1.5 text-xs">${esc(a.team)}</td><td class="px-2 py-1.5 text-xs">${a.when ? '⟳ next patch run ' + esc(day(a.when)) : '⚠ ' + esc(a.why)}</td><td class="px-2 py-1.5 text-[10px] font-mono text-gray-500">${esc(a.pkgs.slice(0, 3).join(', '))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
@@ -5984,6 +5997,7 @@
                     const teams = [...C.list.reduce((m, x) => m.set(x.team, (m.get(x.team) || 0) + 1), new Map())].map(([t, v]) => `${t} ${v}`).join(', ');
                     L.push('', `Affected: ${C.list.length} machine${C.list.length === 1 ? '' : 's'} (${teams}); ${C.list.filter(x => /internet/i.test(x.exposure)).length} internet facing; ${C.list.filter(x => x.tier === 1).length} Tier 1`);
                     L.push(`- Automox will patch: ${n('will')}${when.length ? ' (by ' + new Date(Math.max(...when)).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ')' : ''}`);
+                    if (n('later')) { const lt = C.list.filter(x => x.state.b === 'later' && x.when).map(x => x.when); L.push(`- Automox will patch later (after the next ${C.days} days): ${n('later')}${lt.length ? ' (by ' + App.axDay(Math.max(...lt)) + ')' : ''}`); }
                     L.push(`- Automox patch waiting but blocked: ${n('blocked')}`);
                     const av = C.list.filter(x => x.state.b === 'manual' && x.axAvail).length;
                     L.push(`- Manual fix needed: ${n('manual')}${av ? ` (Automox has the patch for ${av} of them)` : ''}`);
@@ -6025,15 +6039,18 @@
                 const block = [];
                 if (AutomoxService.stale(dev)) block.push(`agent not seen for ${Math.floor((Date.now() - AutomoxService.time(dev.lastSeen)) / 864e5)} days`);
                 if (dev.needsReboot) block.push('reboot pending');
-                const nr = AutomoxService.nextRun(dev, w.pkgs), next = nr.t;
+                const nr = AutomoxService.nextRun(dev, w.pkgs), next = nr.t, policy = nr.policy ? nr.policy.name : '';
+                const hard = block.length;      // stale agent or reboot pending: Automox will not install it as things stand
                 if (!next) block.push(nr.why);
-                else if (next > end) block.push('next patch run ' + new Date(next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + (nr.policy ? ` (${nr.policy.name})` : ''));
+                else if (next > end) block.push('next patch run ' + new Date(next).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + (policy ? ` (${policy})` : ''));
                 const def = w.pkgs.map(p => AutomoxService.time(p.deferred)).filter(Boolean);
                 if (def.length && Math.min(...def) > end) block.push('patch deferred');
-                if (block.length) return { b: 'blocked', why: block.join(', '), approx };
+                // v4.28: the only reason is that the next run is after the plan's window: Automox WILL patch it, later (the Patch Plan still counts it as not this week)
+                const later = !!next && next > end && !hard && block.length === 1;
+                if (block.length) return { b: 'blocked', why: block.join(', '), approx, when: next || 0, policy, later };
                 // A policy that shows "not compliant" has patches still to install; Automox retries them at the next run, so it is a note, not a block.
                 const note = dev.compliant === false ? ' (policy shows not compliant)' : '';
-                return { b: 'will', why: (approx ? 'waiting patch matched by package name (≈)' : 'waiting patch names its CVE') + note, when: next, approx };
+                return { b: 'will', why: (approx ? 'waiting patch matched by package name (≈)' : 'waiting patch names its CVE') + note, when: next, approx, policy };
             }
 
             // The four Patch Plan sections for a team and urgency (shared by the Patch Plan page and the Team Risk Report). null = no Automox data.
@@ -9790,6 +9807,10 @@
                 const assets = [...new Set(list.map(d => d.asset))];
                 this.inspectCtx = { qid, vd, list, scope };
                 this.inspSel = new Set();
+                // v4.28 what Automox will do for this finding on each machine, and when (same rules as the CVE Lookup)
+                let axm = null; if (Demo.api()) { try { if (await AutomoxService.ensure()) axm = AutomoxService.match(); } catch (e) { axm = null; } }
+                const S = StatusEngine.settings(), end = Demo.now() + (+S.patchPlanDays || 7) * 864e5, auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
+                const axOf = (d) => { const r = reg.get(d.asset) || {}; return App.axState(App.planClassify(d, r, axm, end, S, q, auto.has(String(r.owner || '').toLowerCase()))); };
                 const scopeBar = scope
                     ? `<div class="flex flex-wrap items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-900"><span>🔎 <strong>Showing: ${esc(App.inspectScopeLabel(scope))}</strong> · ${fmtNum(assets.length)} of ${fmtNum(allN)} affected assets</span><button class="print-hide underline text-blue-700 hover:text-blue-900" onclick="app.inspectScopeAll()">Show all teams</button></div>`
                     : (entry.saved ? `<div class="flex flex-wrap items-center gap-2 bg-gray-50 border rounded-lg px-4 py-2 text-sm text-gray-700"><span>🌐 <strong>Showing: every asset</strong> · ${fmtNum(assets.length)} affected</span><button class="print-hide underline text-blue-700 hover:text-blue-900" onclick="app.inspectScopeBack()">Back to ${esc(App.inspectScopeLabel(entry.saved))}</button></div>` : '');
@@ -9845,13 +9866,13 @@
                         <div class="bg-gray-50 px-4 py-3 border-b font-semibold text-sm text-gray-700 flex items-center justify-between gap-3"><span>Affected machines (${fmtNum(assets.length)})</span><span class="flex gap-2"><button id="insp-accept-btn" onclick="app.inspAccept()" class="write-only hidden print-hide font-normal text-xs border border-amber-300 bg-amber-50 text-amber-900 px-3 py-1 rounded hover:bg-amber-100" title="Accept the risk of this finding on the ticked machines only">⚖️ Accept risk: 0 selected</button><button onclick="app.inspectQidCsv()" class="print-hide font-normal text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Download these machines' names, one per line (an Ansible inventory)">⬇ Machine list</button></span></div>
                         <div class="overflow-auto max-h-[28rem]">
                             <table class="min-w-full text-left text-sm whitespace-nowrap" data-own-notes="1">
-                                <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.inspTickAll(this.checked)" aria-label="Select every machine"></th><th class="px-3 py-2">Machine</th><th class="px-3 py-2 text-center" title="Comments on this finding on that machine">💬</th><th class="px-3 py-2">Team</th><th class="px-3 py-2">Service</th><th class="px-3 py-2">OS</th><th class="px-3 py-2 text-center">Tier</th><th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>
+                                <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.inspTickAll(this.checked)" aria-label="Select every machine"></th><th class="px-3 py-2">Machine</th><th class="px-3 py-2 text-center" title="Comments on this finding on that machine">💬</th><th class="px-3 py-2">Team</th><th class="px-3 py-2">Service</th><th class="px-3 py-2">OS</th><th class="px-3 py-2 text-center">Tier</th>${axm ? '<th class="px-2 py-2">Automox</th><th class="px-2 py-2">Next patch run</th>' : ''}<th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>
                                 <tbody class="divide-y">${list.slice().sort((a, b) => ((StatusEngine.tierOf(reg.get(a.asset)) || 2) - (StatusEngine.tierOf(reg.get(b.asset)) || 2)) || ((sums.get(b.asset)?.truRisk || 0) - (sums.get(a.asset)?.truRisk || 0))).map(d => {
                                     const r = reg.get(d.asset) || {}, s = sums.get(d.asset) || {};
                                     return `<tr class="cursor-pointer hover:bg-blue-50" data-n="${esc(d.asset)}" onclick="app.inspectAsset(this.dataset.n)">
                                         <td class="px-3 py-2 print-hide" onclick="event.stopPropagation()"><input type="checkbox" class="insp-tick rounded border-gray-300" data-n="${esc(d.asset)}" onchange="app.inspTick(this.dataset.n, this.checked)" aria-label="Select ${esc(d.asset)}"></td>
                                         <td class="px-3 py-2 font-medium text-gray-800">${esc(d.asset)}${d.accF ? ' ' + RiskView.flag(d.accF, true) : ''}</td>${this.noteFindingTd(d.asset, d.qid)}<td class="px-3 py-2">${esc(r.owner || 'Unknown')}</td><td class="px-3 py-2">${esc(r.service || 'Unclassified')}</td>${Lifecycle.osCell(r, 'px-3 py-2')}
-                                        <td class="px-3 py-2 text-center text-xs">${StatusEngine.tierCell(r)}</td><td class="px-3 py-2">${PriorityEngine.truRiskBadge(s.truRisk || 0)}</td>
+                                        <td class="px-3 py-2 text-center text-xs">${StatusEngine.tierCell(r)}</td>${axm ? (c => App.axStateTd(c) + App.axRunTd(c))(axOf(d)) : ''}<td class="px-3 py-2">${PriorityEngine.truRiskBadge(s.truRisk || 0)}</td>
                                         <td class="px-3 py-2 text-xs">${esc(d.port || '-')}</td><td class="px-3 py-2 text-xs">${esc(d.status)}</td><td class="px-3 py-2 text-xs">${esc(d.first)}</td><td class="px-3 py-2 text-right text-xs font-mono">${d.age}d</td></tr>`;
                                 }).join('')}</tbody>
                             </table>

@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.26.0 · 20 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.27.0 · 20 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -3508,6 +3508,95 @@
             }
         }
 
+        // ---- Column filters (v4.27): every list's columns can be filtered from a ▾ on the heading. A filter belongs to the column's
+        // NAME (Team, OS, Tier, Machine…), so it carries over to every page and every list with that column, and machine lists and CSV
+        // downloads follow it. Kept per person in Prefs ('colFilters'): { key: {kind:'set', values:[…]} | {kind:'text', q} | {kind:'num'|'date', min, max} }.
+        class ColFilter {
+            // Columns that mean the same thing everywhere: a filter on them applies strictly. Any other column (Status…) only applies
+            // to a list where at least one of the chosen values appears, so "Status = Open" on tasks never empties the register.
+            static SYN = { machine: ['machine', 'asset', 'asset details', 'host'], team: ['team', 'owner', 'owners', 'suggested team'], os: ['os', 'operating system'],
+                tier: ['tier'], priority: ['p', 'priority'], fix: ['fix', 'title', 'missed fix', 'software (qualys qid)'], service: ['service'], exposure: ['exposure'], environment: ['env', 'environment'] };
+            static FACTS = ['machine', 'team', 'service', 'os', 'tier', 'exposure', 'environment'];      // known for every machine: machine lists follow these
+            static NAMES = { machine: 'Machine', team: 'Team', os: 'OS', tier: 'Tier', priority: 'Priority', fix: 'Fix', service: 'Service', exposure: 'Exposure', environment: 'Environment' };
+            static _c = null;
+            static all() { if (!this._c) { const o = Prefs.get('colFilters', {}); this._c = (o && typeof o === 'object') ? o : {}; } return this._c; }
+            static active() { return Object.keys(this.all()).length > 0; }
+            static set(key, f) { const o = { ...this.all() }; if (f) o[key] = f; else delete o[key]; this._c = o; Prefs.set('colFilters', o); }
+            static clear() { this._c = {}; Prefs.set('colFilters', {}); }
+            static labelOf(th) { return String(th.dataset?.label || th.textContent || '').replace(/[▲▼↕⏷▾]/g, '').replace(/\(\d+\)|filtered/g, '').replace(/\s+/g, ' ').trim(); }
+            static canon(label) {
+                const l = String(label || '').replace(/[▲▼↕⏷▾]/g, '').replace(/\s+/g, ' ').trim().toLowerCase(); if (!l) return '';
+                for (const [k, v] of Object.entries(this.SYN)) if (v.includes(l)) return k;
+                return l;
+            }
+            static strict(key) { return key in this.SYN; }
+            static name(key) { return this.NAMES[key] || key.replace(/^./, c => c.toUpperCase()); }
+            static clean(t) { return String(t || '').replace(/＋💬|💬\s*[\d,]*|✎|▾ on/g, ' ').replace(/\s+/g, ' ').trim().replace(/^[^\p{L}\p{N}?]+/u, '').trim(); }     // leading symbols (◔ Planned, ✖ 3) are decoration
+            // The value a cell shows, for ticking from a list: machines by their name, priorities as P1-P5, tiers as T1A / Not set.
+            static value(key, text, rowName) {
+                if (key === 'machine' && rowName) return rowName;
+                const t = this.clean(text); let m;
+                if (key === 'priority') return (m = t.match(/\bP[1-5]\b/)) ? m[0] : (t || '-');
+                if (key === 'tier') return (m = t.match(/\bT[1-4][AB]?\b/)) ? m[0] : (/not set/i.test(t) || !t || t === '-' ? 'Not set' : t);
+                return t.length > 90 ? t.slice(0, 90) : (t || '-');
+            }
+            static num(n) { return n === null || n === undefined || isNaN(n) ? null : Math.abs(n); }      // "3 d ago" sorts as a negative time: use its size
+            static _tpl = null;
+            static htmlText(html) { const t = this._tpl || (this._tpl = document.createElement('template')); t.innerHTML = html; return [...t.content.childNodes].map(n => n.textContent).join(' '); }
+            static _rx = new Map();
+            static compiled(q) { if (!this._rx.has(q)) { if (this._rx.size > 50) this._rx.clear(); this._rx.set(q, TextSearch.compile(q)); } return this._rx.get(q); }
+            static dayMs(iso, end) { const d = Date.parse(iso + 'T00:00:00Z'); return isNaN(d) ? null : d + (end ? 864e5 - 1 : 0); }
+            // Does one value pass a filter? vals = the ways the value can be written (a machine: short and full name).
+            static pass(f, key, vals, n) {
+                if (f.kind === 'set') { const S = new Set(f.values); return vals.some(v => S.has(v)) || (key === 'os' && vals.some(v => f.values.some(x => v && x && (v.startsWith(x) || x.startsWith(v))))); }
+                if (f.kind === 'text') return !!TextSearch.match(this.compiled(f.q), { v: vals });
+                if (f.kind === 'num' || f.kind === 'date') {
+                    if (n === null) return false;
+                    const lo = f.kind === 'date' ? (f.min ? this.dayMs(f.min) : null) : (f.min === '' || f.min == null ? null : +f.min);
+                    const hi = f.kind === 'date' ? (f.max ? this.dayMs(f.max, true) : null) : (f.max === '' || f.max == null ? null : +f.max);
+                    return (lo === null || n >= lo) && (hi === null || n <= hi);
+                }
+                return true;
+            }
+            // Which filters apply to a list, given each column's values: [{col, key, f}]
+            static applicable(cols, valuesOf) {
+                const F = this.all(), out = [];
+                cols.forEach((key, col) => {
+                    const f = key && F[key]; if (!f) return;
+                    if (f.kind === 'set' && !this.strict(key)) { const vs = valuesOf(col); if (!f.values.some(v => vs.has(v))) return; }
+                    out.push({ col, key, f });
+                });
+                return out;
+            }
+            static summary(key, f) {
+                if (f.kind === 'set') return f.values.length <= 2 ? f.values.join(', ') : `${f.values.slice(0, 2).join(', ')} +${f.values.length - 2}`;
+                if (f.kind === 'text') return `“${f.q}”`;
+                const fmt = (v) => f.kind === 'date' ? EolDates.fmt(v) : fmtNum(+v);
+                if (f.min !== '' && f.min != null && f.max !== '' && f.max != null) return `${fmt(f.min)} to ${fmt(f.max)}`;
+                return f.min !== '' && f.min != null ? `≥ ${fmt(f.min)}` : `≤ ${fmt(f.max)}`;
+            }
+            // Machine lists and CSVs: the machine's own facts against the filters on Machine, Team, Service, OS, Tier, Exposure, Environment.
+            static facts(r, name) {
+                r = r || {}; const os = r.os || r.qualysOs || '', t = StatusEngine.tierOf(r);
+                return { machine: [name, r.normalizedName, r.originalName].filter(Boolean), team: [r.owner || 'Unknown'], service: [r.service || 'Unclassified'],
+                    os: [Lifecycle.osShort(os), Lifecycle.osFamily(os), os].filter(Boolean), tier: [t ? 'T' + t + StatusEngine.haOf(r) : 'Not set'], exposure: [r.exposure || 'Unknown'], environment: [r.environment || 'Production'] };
+            }
+            static factFilters() { const F = this.all(); return this.FACTS.filter(k => F[k] && F[k].kind !== 'num' && F[k].kind !== 'date').map(k => [k, F[k]]); }
+            static machineOk(name, reg) {
+                const ff = this.factFilters(); if (!ff.length) return true;
+                const fx = this.facts(reg ? reg.get(name) : StorageService.peek(StorageService.KEYS.ASSET_REGISTER).find(x => x.normalizedName === name), name);
+                return ff.every(([k, f]) => this.pass(f, k, fx[k], null));
+            }
+            // A drawn list's rows that pass its filters (by machine name, task id or QID), or null when no filter applies to it.
+            static passing(tb) {
+                if (!tb || !tb._cf || !tb._cf.used) return null;
+                const out = new Set();
+                [...tb.tBodies[0].rows].forEach(r => { if (!r.hidden) { const k = r.dataset.n || r.dataset.id || r.dataset.q; if (k) out.add(k); } });
+                return out;
+            }
+            static tableIn(viewId, test) { return [...document.querySelectorAll('#view-' + viewId + ' table')].find(test) || null; }
+        }
+
         // Remediation tasks: one fix on a set of assets, tracked to a due date. Server mode saves each task on its own
         // (api/tasks, with a per-task revision); local mode keeps them in this browser like everything else.
         class RemediationService {
@@ -4681,8 +4770,9 @@
                     if (!App.sortable(tb)) return;
                     const key = App.tableKey(tb), cur = S[key];
                     [...tb.tHead.rows[0].cells].forEach((th, i) => {
-                        if (th.querySelector('input,select,button') || !th.textContent.trim()) return;      // v4.25.2: textContent (innerText forced a page layout per heading)
-                        if (!th.dataset.label) { th.dataset.label = th.textContent.replace(/\s+/g, ' ').trim(); th.classList.add('cursor-pointer', 'select-none'); th.title = th.title || 'Click to sort'; th.addEventListener('click', () => this.sortClick(th)); }
+                        if (th.querySelector('input,select,button:not(.cf-btn)') || !th.textContent.trim()) return;      // v4.25.2: textContent (innerText forced a page layout per heading)
+                        if (!th.dataset.label) { th.dataset.label = th.textContent.replace(/\s+/g, ' ').trim(); th.classList.add('cursor-pointer', 'select-none'); th.title = th.title || 'Click to sort'; th.addEventListener('click', () => this.sortClick(th));
+                            if (!App.cfSkip(tb) && th.dataset.label !== '#') th.insertAdjacentHTML('beforeend', `<button type="button" class="cf-btn print-hide ml-1 px-1 rounded text-gray-400 hover:text-indigo-800 hover:bg-indigo-50 font-normal normal-case" title="Filter by ${esc(th.dataset.label)}" aria-label="Filter by ${esc(th.dataset.label)}" onclick="event.stopPropagation(); app.cfOpen(this)">▾</button>`); }
                         const on = cur && cur[0] === i, mark = on ? (cur[1] > 0 ? ' ▲' : ' ▼') : '';
                         let sp = th.querySelector('.sort-mark'); if (!sp) { sp = document.createElement('span'); sp.className = 'sort-mark text-indigo-700'; th.appendChild(sp); }
                         if (sp.textContent !== mark) sp.textContent = mark;
@@ -4692,7 +4782,9 @@
                         if (tb.dataset.partial === '1' && tb.dataset.showall && !tb.dataset.expanding) { tb.dataset.expanding = '1'; try { new Function('app', tb.dataset.showall)(this); } catch (e) { /* keep the shown rows */ } return; }
                         this.sortTable(tb, cur[0], cur[1]);
                     }
+                    this.cfApply(tb);
                 });
+                this.cfStrip(view);
                 // ✎ next to every machine that links to its page (not in the register, which has its own Edit)
                 if (view.id === 'view-register') return;
                 const reg = this._regNames && this._regNamesAt === StorageService.peek(StorageService.KEYS.ASSET_REGISTER).length ? this._regNames
@@ -4714,6 +4806,167 @@
                     else { const nx = el.nextElementSibling; (nx && nx.classList.contains('m-edit') ? nx : el).insertAdjacentHTML('afterend', ic); }
                 });
             }
+
+            // ---------- Column filters (v4.27): see class ColFilter. Drawn lists are filtered here, after every redraw; Vuln Management's
+            // two paged lists are filtered on their data (cfVulnRows).
+            static cfSkip(tb) {
+                if (!tb.tHead || tb.closest('[data-nofilter]')) return true;
+                const first = ColFilter.labelOf([...tb.tHead.rows[0].cells].find(h => h.textContent.trim()) || {});
+                return /^(Month|Started|When|Source|System Field)$/.test(first);      // trends, sync history, data sources, the import wizard: not lists
+            }
+            cfRows(tb) { const n = tb.tHead.rows[0].cells.length; return [...tb.tBodies[0].rows].filter(r => r.cells.length >= n - 1 && !r.querySelector('td[colspan]')); }
+            cfCell(key, td, row) {
+                const text = App.cellText(td), v = ColFilter.value(key, text, row.dataset.n);
+                return { v, vals: key === 'machine' ? [v, ColFilter.clean(text)] : [v], n: ColFilter.num(App.sortVal(td).n) };
+            }
+            cfApply(tb) {
+                if (App.cfSkip(tb) || !tb.tBodies.length) return;
+                const heads = [...tb.tHead.rows[0].cells], keys = heads.map(h => h.dataset.label && h.dataset.label !== '#' ? ColFilter.canon(h.dataset.label) : '');
+                const rows = this.cfRows(tb), vcache = {};
+                const valuesOf = (col) => vcache[col] || (vcache[col] = new Set(rows.map(r => this.cfCell(keys[col], r.cells[col], r).v)));
+                const use = ColFilter.active() ? ColFilter.applicable(keys, valuesOf) : [];
+                heads.forEach((h, i) => { const b = h.querySelector('.cf-btn'); if (!b) return; const on = use.some(u => u.col === i), t = on ? '▾ on' : '▾';
+                    if (b.textContent !== t) { b.textContent = t; b.classList.toggle('text-indigo-800', on); b.classList.toggle('font-bold', on); b.classList.toggle('text-gray-400', !on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); } });
+                const prev = tb._cf;
+                if (!use.length) {
+                    if (prev && prev.used) rows.forEach(r => { r.hidden = false; });
+                    tb._cf = { used: false, shown: rows.length, total: rows.length }; this.cfNote(tb); return;
+                }
+                if (tb.dataset.partial === '1' && tb.dataset.showall && !tb.dataset.expanding) { tb.dataset.expanding = '1'; try { new Function('app', tb.dataset.showall)(this); } catch (e) { /* keep the shown rows */ } return; }
+                let shown = 0;
+                rows.forEach(r => { const ok = use.every(u => { const c = this.cfCell(u.key, r.cells[u.col], r); return ColFilter.pass(u.f, u.key, c.vals, c.n); }); if (r.hidden === ok) r.hidden = !ok; if (ok) shown++; });
+                tb._cf = { used: true, shown, total: rows.length, keys: use.map(u => u.key) };
+                this.cfNote(tb);
+            }
+            cfNote(tb) {
+                let el = tb.nextElementSibling; if (!(el && el.classList.contains('cf-note'))) el = null;
+                const c = tb._cf, html = c && c.used ? `🔎 Column filters: showing <strong>${fmtNum(c.shown)}</strong> of ${fmtNum(c.total)} rows · <button class="underline text-blue-700 print-hide" onclick="app.cfClearKeys('${(c.keys || []).map(k => encodeURIComponent(k)).join(',')}')">clear these filters</button>` : '';
+                if (!html) { if (el) el.remove(); return; }
+                if (!el) { el = document.createElement('div'); el.className = 'cf-note px-3 py-1.5 text-xs text-indigo-900 bg-indigo-50 border-t border-indigo-200'; tb.insertAdjacentElement('afterend', el); }
+                if (el.innerHTML !== html) el.innerHTML = html;
+            }
+            // The strip at the top of every page while any column filter is on: what is on, what it hides here, ✕ to remove one.
+            cfStrip(view) {
+                let el = view.querySelector(':scope > .cf-strip');
+                if (!ColFilter.active()) { document.querySelectorAll('.cf-strip').forEach(x => x.remove()); return; }
+                const F = ColFilter.all(), used = new Set(), tbls = [...view.querySelectorAll('table')].filter(t => t._cf && t._cf.used);
+                tbls.forEach(t => t._cf.keys.forEach(k => used.add(k)));
+                Object.values(this._cfVuln || {}).forEach(v => { if (this.currentView === 'vuln' && v.used) v.keys.forEach(k => used.add(k)); });
+                const hidden = tbls.reduce((n, t) => n + t._cf.total - t._cf.shown, 0) + (this.currentView === 'vuln' ? Object.values(this._cfVuln || {}).reduce((n, v) => n + (v.hidden || 0), 0) : 0);
+                const chips = Object.entries(F).map(([k, f]) => `<span class="inline-flex items-center gap-1 rounded-full border ${used.has(k) ? 'border-indigo-400 bg-white' : 'border-dashed border-gray-400 bg-gray-50 text-gray-600'} px-2 py-0.5"><strong>${esc(ColFilter.name(k))}</strong>: ${esc(ColFilter.summary(k, f))}${used.has(k) ? '' : ' <em class="text-[10px]">(not on this page)</em>'}<button class="print-hide text-gray-500 hover:text-red-700 ml-0.5" data-k="${esc(k)}" onclick="app.cfClearKeys(encodeURIComponent(this.dataset.k))" aria-label="Remove the ${esc(ColFilter.name(k))} filter" title="Remove this filter">✕</button></span>`).join(' ');
+                const html = `<div class="flex flex-wrap items-center gap-2"><span class="font-semibold">🔎 Column filters on</span>${chips}<span class="text-xs text-indigo-900">${hidden ? `· ${fmtNum(hidden)} row${hidden === 1 ? '' : 's'} hidden on this page` : '· nothing hidden on this page'} · machine lists and downloads follow them</span><button class="print-hide underline text-blue-700 text-xs" onclick="app.cfClearKeys()">Clear all</button></div>`;
+                if (!el) { el = document.createElement('div'); el.className = 'cf-strip mb-3 rounded-lg border-2 border-indigo-300 bg-indigo-50 px-4 py-2 text-sm text-indigo-950'; el.setAttribute('role', 'status'); view.prepend(el); }
+                if (el.innerHTML !== html) el.innerHTML = html;
+            }
+            cfClearKeys(list) {
+                if (list === undefined) ColFilter.clear(); else String(list).split(',').filter(Boolean).forEach(k => ColFilter.set(decodeURIComponent(k), null));
+                this.cfRefresh();
+            }
+            cfRefresh() {
+                PerfLog.begin('action: column filter');
+                if (this.currentView === 'vuln' && this.vulnData) { ['assets', 'fixes'].forEach(t => { if (this.vulnState?.tables?.[t]) { this.vulnState.tables[t].page = 0; this.renderVulnTable(t); } }); }
+                this.decorate();
+                const p = document.getElementById('cf-pop'); if (p && p._src) this.cfFill(p);
+            }
+            // ▾ on a heading: a small panel. Few values: tick the ones to keep. Numbers and dates: from / to. Names and titles: a search.
+            cfOpen(btn, vtab, vkey) {
+                let src;
+                if (vtab) {
+                    const cfg = this.vulnTabConfig(vtab), c = cfg.cols.find(x => x.key === vkey); if (!c) return;
+                    const key = ColFilter.canon(c.label);
+                    src = { key, label: c.label, cells: cfg.rows.map(r => this.cfVulnCell(vtab, c, r, key)) };
+                } else {
+                    const th = btn.closest('th'), tb = th.closest('table'), col = [...th.parentNode.cells].indexOf(th), key = ColFilter.canon(th.dataset.label);
+                    src = { key, label: th.dataset.label, cells: this.cfRows(tb).map(r => this.cfCell(key, r.cells[col], r)) };
+                }
+                const vals = src.cells.filter(c => c.v && c.v !== '-'), nums = vals.filter(c => c.n !== null);
+                const SETKEYS = ['team', 'os', 'tier', 'priority', 'service', 'exposure', 'environment'];
+                let kind = SETKEYS.includes(src.key) ? 'set' : (vals.length && nums.length / vals.length >= 0.8) ? (Math.max(...nums.map(c => c.n)) > 1e11 ? 'date' : 'num')
+                    : (src.key === 'machine' || src.key === 'fix' || new Set(vals.map(c => c.v)).size > 40) ? 'text' : 'set';
+                const cur = ColFilter.all()[src.key]; if (cur && (cur.kind === kind || (cur.kind === 'text' && kind === 'set'))) kind = cur.kind;
+                src.kind = kind;
+                let p = document.getElementById('cf-pop'); if (p) p.remove();
+                p = document.createElement('div'); p.id = 'cf-pop'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Filter by ' + src.label);
+                p.className = 'fixed z-50 bg-white border border-slate-300 rounded-lg shadow-xl p-3 text-sm w-80 max-h-[70vh] flex flex-col print-hide';
+                p._src = src; document.body.appendChild(p);
+                const r = btn.getBoundingClientRect();
+                p.style.left = Math.max(8, Math.min(r.left - 120, window.innerWidth - 336)) + 'px'; p.style.top = Math.min(r.bottom + 4, window.innerHeight - 320) + 'px';
+                this.cfFill(p);
+                p.querySelector('input')?.focus();
+                if (!this._cfDoc) { this._cfDoc = true;
+                    document.addEventListener('mousedown', (e) => { const q = document.getElementById('cf-pop'); if (q && !q.contains(e.target) && !e.target.closest('.cf-btn')) q.remove(); });
+                    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.getElementById('cf-pop')?.remove(); }); }
+            }
+            cfFill(p) {
+                const src = p._src, key = src.key, f = ColFilter.all()[key], kind = src.kind;
+                const head = `<div class="flex items-center justify-between mb-2"><strong>Filter: ${esc(src.label)}</strong><button class="text-gray-500 hover:text-gray-800" onclick="document.getElementById('cf-pop').remove()" aria-label="Close">✕</button></div>`;
+                const foot = `<div class="flex items-center justify-between gap-2 mt-2 pt-2 border-t text-xs"><span class="text-gray-500">Applies to every list with a column called ${esc(ColFilter.name(key))}, and to machine lists and downloads.</span><button class="shrink-0 px-2 py-1 border rounded hover:bg-gray-50" onclick="app.cfClearKeys(encodeURIComponent(document.getElementById('cf-pop')._src.key))">Clear</button></div>`;
+                let body = '';
+                if (kind === 'set') {
+                    const cnt = new Map(); src.cells.forEach(c => cnt.set(c.v, (cnt.get(c.v) || 0) + 1));
+                    (f && f.kind === 'set' ? f.values : []).forEach(v => { if (!cnt.has(v)) cnt.set(v, 0); });
+                    const on = new Set(f && f.kind === 'set' ? f.values : []), q = (p._q || '').toLowerCase();
+                    const list = [...cnt].sort((a, b) => String(a[0]).localeCompare(String(b[0]), undefined, { numeric: true })).filter(([v]) => !q || String(v).toLowerCase().includes(q));
+                    body = `${cnt.size > 10 ? `<input type="search" class="cf-q border border-gray-300 rounded px-2 py-1 text-sm mb-2 w-full" placeholder="Find a value" value="${esc(p._q || '')}" oninput="const p = document.getElementById('cf-pop'); p._q = this.value; app.cfFill(p); const i = p.querySelector('.cf-q'); i.focus(); i.setSelectionRange(i.value.length, i.value.length);">` : ''}
+                        <div class="flex gap-3 text-xs mb-1"><span class="text-gray-500">Tick the values to show:</span></div>
+                        <div class="overflow-y-auto max-h-64 border rounded divide-y">${list.map(([v, n]) => `<label class="flex items-center gap-2 px-2 py-1 hover:bg-indigo-50 cursor-pointer"><input type="checkbox" class="rounded border-gray-300" data-v="${esc(v)}" ${on.has(v) ? 'checked' : ''} onchange="app.cfTick(this.dataset.v, this.checked)"><span class="flex-1 truncate" title="${esc(v)}">${esc(v)}</span><span class="text-xs text-gray-500">${fmtNum(n)}</span></label>`).join('') || '<p class="p-2 text-xs text-gray-500">No values match.</p>'}</div>`;
+                } else if (kind === 'text') {
+                    body = `<label class="block text-xs text-gray-600 mb-1">Show rows containing (wildcards * ? or /regex/):</label><input type="search" class="cf-text border border-gray-300 rounded px-2 py-1 text-sm w-full" value="${esc(f && f.kind === 'text' ? f.q : '')}" placeholder="e.g. web or lon1-*db*" oninput="app.cfTextSoon(this.value)"><p class="cf-err text-xs text-red-700 mt-1"></p>`;
+                } else {
+                    const isD = kind === 'date', t = isD ? 'date' : 'number', mn = f && f.kind === kind ? f.min ?? '' : '', mx = f && f.kind === kind ? f.max ?? '' : '';
+                    const ns = src.cells.map(c => c.n).filter(n => n !== null), lo = ns.length ? Math.min(...ns) : null, hi = ns.length ? Math.max(...ns) : null;
+                    body = `<div class="grid grid-cols-2 gap-2"><label class="text-xs text-gray-600">${isD ? 'From' : 'At least'}<input type="${t}" class="cf-min border border-gray-300 rounded px-2 py-1 text-sm w-full" value="${esc(mn)}" onchange="app.cfRange()"></label><label class="text-xs text-gray-600">${isD ? 'To' : 'At most'}<input type="${t}" class="cf-max border border-gray-300 rounded px-2 py-1 text-sm w-full" value="${esc(mx)}" onchange="app.cfRange()"></label></div>
+                        ${lo !== null ? `<p class="text-xs text-gray-500 mt-1">In this list: ${isD ? `${esc(EolDates.fmt(new Date(lo).toISOString().slice(0, 10)))} to ${esc(EolDates.fmt(new Date(hi).toISOString().slice(0, 10)))}` : `${fmtNum(lo)} to ${fmtNum(hi)}`}. Rows with no value are hidden while this filter is on.</p>` : ''}`;
+                }
+                p.innerHTML = head + body + foot;
+            }
+            cfTick(v, on) {
+                const p = document.getElementById('cf-pop'); if (!p) return; const key = p._src.key, f = ColFilter.all()[key];
+                const S = new Set(f && f.kind === 'set' ? f.values : []); if (on) S.add(v); else S.delete(v);
+                ColFilter.set(key, S.size ? { kind: 'set', values: [...S] } : null); this.cfRefresh();
+            }
+            cfTextSoon(q) {
+                clearTimeout(this._cfT); this._cfT = setTimeout(() => {
+                    const p = document.getElementById('cf-pop'); if (!p) return; const c = TextSearch.compile(q), err = p.querySelector('.cf-err');
+                    if (err) err.textContent = c.ok ? '' : c.error; if (!c.ok) return;
+                    ColFilter.set(p._src.key, q.trim() ? { kind: 'text', q: q.trim() } : null);
+                    PerfLog.begin('action: column filter');
+                    if (this.currentView === 'vuln' && this.vulnData) ['assets', 'fixes'].forEach(t => { if (this.vulnState?.tables?.[t]) { this.vulnState.tables[t].page = 0; this.renderVulnTable(t); } });
+                    this.decorate();      // not cfRefresh: the panel keeps the text box being typed in
+                }, 300);
+            }
+            cfRange() {
+                const p = document.getElementById('cf-pop'); if (!p) return; const mn = p.querySelector('.cf-min').value, mx = p.querySelector('.cf-max').value;
+                ColFilter.set(p._src.key, mn === '' && mx === '' ? null : { kind: p._src.kind, min: mn, max: mx }); this.cfRefresh();
+            }
+            // Vuln Management's paged lists: the same filters, on the data before paging.
+            cfVulnCell(tab, c, r, key) {
+                const text = ColFilter.htmlText(c.cell(r)), v = ColFilter.value(key, text, tab === 'assets' ? r.name : '');
+                let n = c.num ? ColFilter.num(c.sort(r)) : ColFilter.num(App.sortVal({ dataset: {}, childNodes: [{ textContent: text }] }).n);
+                return { v, vals: key === 'machine' ? [v, ColFilter.clean(text)] : [v], n };
+            }
+            cfVulnRows(tab, cfg, rows) {
+                this._cfVuln = this._cfVuln || {};
+                if (!ColFilter.active()) { this._cfVuln[tab] = { used: false }; return rows; }
+                const cols = cfg.cols, keys = cols.map(c => c.label && c.key !== 'rank' && c.key !== 'sel' ? ColFilter.canon(c.label) : ''), vcache = {};
+                const valuesOf = (i) => vcache[i] || (vcache[i] = new Set(cfg.rows.map(r => this.cfVulnCell(tab, cols[i], r, keys[i]).v)));
+                const use = ColFilter.applicable(keys, valuesOf);
+                if (!use.length) { this._cfVuln[tab] = { used: false }; return rows; }
+                const out = rows.filter(r => use.every(u => { const c = this.cfVulnCell(tab, cols[u.col], r, u.key); return ColFilter.pass(u.f, u.key, c.vals, c.n); }));
+                this._cfVuln[tab] = { used: true, hidden: rows.length - out.length, keys: use.map(u => u.key) };
+                return out;
+            }
+            cfVulnBtn(tab, c) {
+                if (!c.label || c.key === 'rank') return '';
+                const on = !!(this._cfVuln?.[tab]?.used && this._cfVuln[tab].keys.includes(ColFilter.canon(c.label)));
+                return `<button type="button" class="cf-btn print-hide ml-1 px-1 rounded ${on ? 'text-indigo-800 font-bold' : 'text-gray-400'} hover:text-indigo-800 hover:bg-indigo-50 normal-case" aria-pressed="${on}" title="Filter by ${esc(c.label)}" aria-label="Filter by ${esc(c.label)}" onclick="event.stopPropagation(); app.cfOpen(this, '${tab}', '${c.key}')">${on ? '▾ on' : '▾'}</button>`;
+            }
+            // Downloads: keep only the rows a drawn list shows (when a filter applies to it); machine facts are checked in hostNames.
+            static cfKeep(names, tb) {
+                const P = ColFilter.passing(tb); if (!P) return names;
+                App._cfUsed = true; return new Set([...names].filter(n => P.has(n)));
+            }
+            static cfCsvName(name) { if (App._cfUsed || ColFilter.factFilters().length) { App._cfUsed = false; setTimeout(() => StorageService.toast('Filtered download: it follows the column filters'), 2600); return name.replace(/(\.csv)$/, '_filtered$1'); } return name; }
             initDecorate() {
                 const main = document.querySelector('main'); if (!main || this._mo) return;
                 let queued = false;
@@ -5492,7 +5745,7 @@
                     <p class="text-xs text-blue-900">Qualys only knows what its last scan of each machine found: a machine fixed since then shows as fixed after its Cloud Agent next reports or a scan runs.</p></div>`;
             }
             cveTick(n, on) { const S = this.cveSel = this.cveSel || new Set(); if (on) S.add(n); else S.delete(n); this.cveSelPaint(); }
-            cveTickAll(on) { document.querySelectorAll('#cve-out .cve-tick').forEach(b => { b.checked = on; this.cveTick(b.dataset.n, on); }); }
+            cveTickAll(on) { document.querySelectorAll('#cve-out .cve-tick').forEach(b => { if (b.closest('tr')?.hidden) return; b.checked = on; this.cveTick(b.dataset.n, on); }); }
             cveSelPaint() { const b = document.getElementById('cve-accept-btn'), n = (this.cveSel || new Set()).size; if (!b) return; b.textContent = `⚖️ Accept risk: ${fmtNum(n)} selected`; b.classList.toggle('hidden', !n); }
             // The ticked machines, with only the QIDs of this CVE that each one has (a per-finding acceptance, the default)
             cveAccept() {
@@ -5705,7 +5958,7 @@
             cveList(which) {
                 const C = this._cve; if (!C) return;
                 const rows = which === 'manual' ? C.list.filter(x => x.state.b === 'manual' || x.state.b === 'blocked') : C.list;
-                const names = App.hostNames(new Set([...rows.filter(x => !x.accF.length || x.accF.length < x.qids.size).map(x => x.name), ...(which === 'all' ? C.axOnly.map(a => a.name) : [])]));
+                const names = App.hostNames(App.cfKeep(new Set([...rows.filter(x => !x.accF.length || x.accF.length < x.qids.size).map(x => x.name), ...(which === 'all' ? C.axOnly.map(a => a.name) : [])]), ColFilter.tableIn('cve', t => !!t.querySelector('tbody tr[data-n]'))));
                 if (!names.length) { const k = App._leftOut; App._leftOut = 0; StorageService.toast(k ? `Only risk-accepted machine${k === 1 ? '' : 's'} here: machine lists never include them` : 'No machines to export'); return; }
                 App.downloadList(`cve_${C.ids.join('-').slice(0, 60)}_${which === 'manual' ? 'not-by-automox_' : ''}${C.team === 'ALL' ? 'all-teams' : C.team.replace(/[^A-Za-z0-9_-]+/g, '')}`, names);
                 StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
@@ -6495,7 +6748,7 @@
             }
             axExportList(cat = null) {
                 const rows = cat && this._axCatList ? this._axCatList(cat) : (this._axList || []), k = cat || (this.axState?.filter && this.axState.filter !== 'ALL' ? this.axState.filter : 'all');
-                const names = App.hostNames(new Set(rows.map(r => r.normalizedName)));
+                const set0 = new Set(rows.map(r => r.normalizedName)), names = App.hostNames(cat ? set0 : App.cfKeep(set0, ColFilter.tableIn('automox', t => !!t.querySelector('tbody tr[data-n]'))));
                 if (!names.length) { const n = App._leftOut; App._leftOut = 0; StorageService.toast(n ? 'Only risk-accepted machines here: machine lists never include them' : 'No machines to export'); return; }
                 const slug = { none: 'no-agent', nopolicy: 'no-patch-policy', stale: 'stale-agent', noncompliant: 'not-compliant', reboot: 'reboot-needed', waiting: 'patches-waiting', managed: 'managed', ambiguous: 'to-check' }[k] || k;
                 const team = (document.getElementById('ax-scope')?.value || 'ALL');
@@ -6507,11 +6760,13 @@
                 const safe = (v) => { const t = String(v ?? ''); return /^[=+\-@\t\r]/.test(t) ? "'" + t : t; };
                 const head = ['Asset', 'Owner', 'OS', 'Automox', 'Device', 'Matched by', 'Last check-in', 'Waiting patches', 'Critical', 'High', 'Known exploited', 'Compliant', 'Failing policies', 'Reboot needed', 'Agent version', 'Patch policy'];
                 const ppTxt = (d) => { const pp = AutomoxService.patchPolicy(d); return pp === 'ok' ? 'automatic' : pp ? AutomoxService.POLICY_WHY[pp] : ''; };
-                const rows = (this._axList || []).map(r => { const x = m.byAsset.get(r.normalizedName) || {}, d = x.dev;
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const keepN = App.cfKeep(new Set((this._axList || []).map(r => r.normalizedName)), ColFilter.tableIn('automox', t => !!t.querySelector('tbody tr[data-n]')));
+                const rows = (this._axList || []).filter(r => keepN.has(r.normalizedName) && ColFilter.machineOk(r.normalizedName, reg)).map(r => { const x = m.byAsset.get(r.normalizedName) || {}, d = x.dev;
                     const state = !d ? (x.how === 'ambiguous' ? 'Ambiguous' : 'No agent') : AutomoxService.stale(d) ? 'Stale' : d.compliant === false ? 'Not compliant' : 'Managed';
                     return [r.normalizedName, r.owner, r.os, state, d?.name, d ? x.how : '', d?.lastSeen, d?.pending, d?.sev.critical, d?.sev.high, d?.kev, d ? (d.compliant === false ? 'no' : d.compliant ? 'yes' : '') : '', d ? d.policies.filter(p => p.compliant === false).map(p => p.name || p.id).join('; ') : '', d ? (d.needsReboot ? 'yes' : 'no') : '', d?.agent, ppTxt(d)].map(safe); });
                 const blob = new Blob(['﻿' + Papa.unparse([head, ...rows])], { type: 'text/csv;charset=utf-8' });
-                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `patch_coverage_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = App.cfCsvName(`patch_coverage_${new Date().toISOString().slice(0, 10)}.csv`); a.click();
                 setTimeout(() => URL.revokeObjectURL(a.href), 5000);
             }
 
@@ -7259,7 +7514,8 @@
             }
 
             toggleAllRegister(isChecked) {
-                const filtered = this.getRegisterFilteredAssets();
+                const P = ColFilter.passing(document.getElementById('register-table'));      // v4.27: never rows hidden by a column filter
+                const filtered = this.getRegisterFilteredAssets().filter(r => !P || P.has(r.normalizedName));
                 filtered.forEach(r => isChecked ? this.registerState.selectedAssets.add(r.normalizedName) : this.registerState.selectedAssets.delete(r.normalizedName));
                 this.renderRegister();
             }
@@ -7773,7 +8029,9 @@
             }
 
             eolExportCSV() {
-                const list = this.eolFiltered();
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const all0 = this.eolFiltered(), keepN = App.cfKeep(new Set(all0.map(x => x.r.normalizedName)), ColFilter.tableIn('eol', t => !!t.querySelector('tbody tr[data-n]')));
+                const list = all0.filter(x => keepN.has(x.r.normalizedName) && ColFilter.machineOk(x.r.normalizedName, reg));
                 if (!list.length) { this.toast ? this.toast('No assets match these filters') : null; return; }
                 // Cells starting = + - @ would run as formulas in Excel: prefix them.
                 const safe = (v) => { const t = String(v ?? ''); return /^[=+\-@\t\r]/.test(t) ? "'" + t : t; };
@@ -7791,7 +8049,7 @@
                 const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
-                a.download = `eol_actions_${String(this.eolCtx.scope).replace(/[^A-Za-z0-9]+/g, '') || 'ALL'}_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.download = App.cfCsvName(`eol_actions_${String(this.eolCtx.scope).replace(/[^A-Za-z0-9]+/g, '') || 'ALL'}_${new Date().toISOString().slice(0, 10)}.csv`);
                 a.click();
                 setTimeout(() => URL.revokeObjectURL(a.href), 5000);
             }
@@ -7939,14 +8197,15 @@
             }
 
             remExportCSV() {
-                const list = this.remFiltered();
+                const all0 = this.remFiltered(), keep = App.cfKeep(new Set(all0.map(t => t.id)), ColFilter.tableIn('remediation', t => !!t.querySelector('tbody tr[data-id]')));
+                const list = all0.filter(t => keep.has(t.id));
                 const safe = (v) => { const t = String(v ?? ''); return /^[=+\-@\t\r]/.test(t) ? "'" + t : t; };
                 const head = ['ID', 'Title', 'Type', 'Source', 'Team', 'Assignee', 'Priority', 'Due', 'Overdue', 'Status', 'Assets', 'Fixed', 'Asset names', 'Ticket', 'Created', 'Created by', 'Updated', 'Updated by', 'Last comment'];
                 const rows = list.map(t => { const p = RemediationService.progress(t), c = (t.comments || []).slice(-1)[0];
                     return [t.id, t.title, t.type, t.source?.label || '', t.team, t.assignee, RemediationService.prioLabel(t), t.due, RemediationService.overdue(t) ? 'yes' : '', t.status, p.total, p.done,
                         (t.assets || []).filter(a => a.state !== 'moved').map(a => `${a.name} (${a.state})`).join('; '), t.ticket, t.createdAt, t.createdBy, t.updatedAt, t.updatedBy, c ? `${c.by || ''} ${c.at}: ${c.text}` : ''].map(safe); });
                 const blob = new Blob(['﻿' + Papa.unparse([head, ...rows])], { type: 'text/csv;charset=utf-8' });
-                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `remediation_tasks_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = App.cfCsvName(`remediation_tasks_${new Date().toISOString().slice(0, 10)}.csv`); a.click();
                 setTimeout(() => URL.revokeObjectURL(a.href), 5000);
             }
 
@@ -8824,8 +9083,10 @@
             // Machine lists for Ansible never contain risk-accepted machines (v4.13): they are often accepted because patching breaks them.
             static hostNames(assets) {
                 const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
-                const acc = RiskView.machineSet(), all = [...new Set(assets)], keep = all.filter(a => !acc.has(a));
-                App._leftOut = all.length - keep.length;
+                const acc = RiskView.machineSet(), all = [...new Set(assets)], keep0 = all.filter(a => !acc.has(a));
+                App._leftOut = all.length - keep0.length;
+                const keep = keep0.filter(a => ColFilter.machineOk(a, reg));       // v4.27: the column filters on Machine, Team, Service, OS, Tier, Exposure, Environment
+                if (keep.length < keep0.length) { App._cfUsed = true; App._cfOut = keep0.length - keep.length; }
                 const nm = (a) => { const r = reg.get(a) || {}; return String(r.originalName || a).trim(); }, sort = (l) => [...new Set(l.filter(Boolean))].sort((x, y) => x.localeCompare(y));
                 // v4.23: the HA sides, for patching side A one day and side B the next
                 App._sides = { A: sort(keep.filter(a => StatusEngine.haOf(reg.get(a)) !== 'B').map(nm)), B: sort(keep.filter(a => StatusEngine.haOf(reg.get(a)) === 'B').map(nm)) };
@@ -8833,6 +9094,8 @@
             }
             static downloadList(name, lines, split = true) {
                 const S = App._sides; App._sides = null;
+                if (App._cfUsed || ColFilter.factFilters().length) { name += '_filtered'; const n = App._cfOut; setTimeout(() => StorageService.toast(`Filtered list: it follows the column filters${n ? ` (${fmtNum(n)} machine${n === 1 ? '' : 's'} left out)` : ''}`), 1200); }
+                App._cfUsed = false; App._cfOut = 0;
                 if (split && S && S.A.length && S.B.length) setTimeout(() => App.sidePanel(name, S), 300);
                 if (App._leftOut) { const n = App._leftOut; App._leftOut = 0; setTimeout(() => StorageService.toast(`${fmtNum(n)} risk-accepted machine${n === 1 ? '' : 's'} left out of the list`), 2500); }
                 const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
@@ -8851,8 +9114,8 @@
                     <div class="flex flex-col gap-1 mt-2"><button id="side-a" class="text-left border rounded px-2 py-1 hover:bg-indigo-50">⬇ Day 1: side A and machines without a side (${fmtNum(S.A.length)})</button>
                     <button id="side-b" class="text-left border rounded px-2 py-1 hover:bg-indigo-50">⬇ Day 2: side B (${fmtNum(S.B.length)})</button></div>`;
                 document.body.appendChild(el);
-                el.querySelector('#side-a').onclick = () => App.downloadList(name + '_sideA', S.A, false);
-                el.querySelector('#side-b').onclick = () => App.downloadList(name + '_sideB', S.B, false);
+                el.querySelector('#side-a').onclick = () => App.downloadList(name.replace(/_filtered$/, '') + '_sideA', S.A, false);
+                el.querySelector('#side-b').onclick = () => App.downloadList(name.replace(/_filtered$/, '') + '_sideB', S.B, false);
                 setTimeout(() => { if (document.body.contains(el)) el.remove(); }, 60000);
             }
 
@@ -8870,6 +9133,7 @@
                 } else {
                     const q = (st.tables.fixes.q || '').toLowerCase(), cfg = this.vulnTabConfig('fixes');
                     rows = q ? rows0.filter(r => cfg.search(r).toLowerCase().includes(q)) : rows0;
+                    const n0 = rows.length; rows = this.cfVulnRows('fixes', cfg, rows); if (rows.length < n0) App._cfUsed = true;     // v4.27 column filters
                 }
                 if (!rows.length) { StorageService.toast('No fixes to export'); return; }
                 const assets = new Set(); rows.forEach(r => (r.need || r.assets).forEach(a => assets.add(a)));     // the rows' machines (not accepted findings), within the page's filters
@@ -8900,13 +9164,13 @@
                 document.querySelectorAll('#view-inspect .insp-tick').forEach(b => { if (b.dataset.n === n) b.checked = on; });     // one machine, several ports
                 const b = document.getElementById('insp-accept-btn'); if (b) { b.textContent = `⚖️ Accept risk: ${fmtNum(S.size)} selected`; b.classList.toggle('hidden', !S.size); }
             }
-            inspTickAll(on) { [...new Set([...document.querySelectorAll('#view-inspect .insp-tick')].map(b => b.dataset.n))].forEach(n => this.inspTick(n, on)); }
+            inspTickAll(on) { [...new Set([...document.querySelectorAll('#view-inspect .insp-tick')].filter(b => !b.closest('tr')?.hidden).map(b => b.dataset.n))].forEach(n => this.inspTick(n, on)); }
             inspAccept() { const c = this.inspectCtx, S = this.inspSel; if (!c?.qid || !S?.size) return; this.openRiskModal([...S], 'inspect', [], [String(c.qid)]); }
             async inspectQidCsv() {
                 const c = this.inspectCtx; if (!c || !c.qid) return;
                 const vd = c.vd || await this.getVulnData(), q = vd.qmap.get(c.qid) || {}, list = c.list || [];
                 if (!list.length) { StorageService.toast('No machines to export'); return; }
-                const names = App.hostNames(new Set(list.filter(x => !x.accF).map(x => x.asset)));
+                const names = App.hostNames(App.cfKeep(new Set(list.filter(x => !x.accF).map(x => x.asset)), ColFilter.tableIn('inspect', t => t.dataset.ownNotes === '1' && !!t.querySelector('.insp-tick'))));
                 const scope = (c.scope && c.scope.owner) ? c.scope.owner : 'all-teams';
                 App.downloadList(`fix_${c.qid}_${scope.replace(/[^A-Za-z0-9_-]+/g, '')}`, names);
                 StorageService.toast(`Exported ${fmtNum(names.length)} machine names`);
@@ -8988,6 +9252,8 @@
                 const T = this.vulnState.tables[tab], cfg = this.vulnTabConfig(tab);
                 const q = (T.q || '').toLowerCase();
                 let rows = q ? cfg.rows.filter(r => cfg.search(r).toLowerCase().includes(q)) : cfg.rows;
+                const pre = rows.length; rows = this.cfVulnRows(tab, cfg, rows);       // v4.27 column filters
+                const cfHid = pre - rows.length;
                 if (T.key) {
                     const c = cfg.cols.find(x => x.key === T.key && x.sort);
                     if (c) rows = [...rows].sort((a, b) => { const x = c.sort(a), y = c.sort(b); return (x < y ? -1 : x > y ? 1 : 0) * T.dir; });
@@ -9002,19 +9268,19 @@
                 const align = (c) => c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
                 const head = cfg.cols.map(c => {
                     if (c.head) return `<th class="px-3 py-2 ${align(c)}">${c.head}</th>`;
-                    if (!c.sort) return `<th class="px-3 py-2 ${align(c)}">${c.label || ''}</th>`;
+                    if (!c.sort) return `<th class="px-3 py-2 ${align(c)}">${c.label || ''}${this.cfVulnBtn(tab, c)}</th>`;
                     const on = c.key === 'rank' ? !T.key : T.key === c.key;
-                    return `<th class="px-3 py-2 ${align(c)} whitespace-nowrap cursor-pointer select-none hover:text-gray-900" aria-sort="${on ? (T.dir > 0 ? 'ascending' : 'descending') : 'none'}" onclick="app.vulnSort('${tab}', '${c.key}', ${c.dir})" title="${c.key === 'rank' ? 'Back to the ranked order' : 'Sort by ' + esc(c.label)}">${c.label}<span class="ml-1 text-[9px] ${on ? 'text-blue-700' : 'text-gray-300'}">${on ? (T.dir > 0 ? '▲' : '▼') : '↕'}</span></th>`;
+                    return `<th class="px-3 py-2 ${align(c)} whitespace-nowrap cursor-pointer select-none hover:text-gray-900" aria-sort="${on ? (T.dir > 0 ? 'ascending' : 'descending') : 'none'}" onclick="app.vulnSort('${tab}', '${c.key}', ${c.dir})" title="${c.key === 'rank' ? 'Back to the ranked order' : 'Sort by ' + esc(c.label)}">${c.label}<span class="ml-1 text-[9px] ${on ? 'text-blue-700' : 'text-gray-300'}">${on ? (T.dir > 0 ? '▲' : '▼') : '↕'}</span>${this.cfVulnBtn(tab, c)}</th>`;
                 }).join('');
                 const body = page.length ? page.map(r => `<tr class="cursor-pointer hover:bg-blue-50 ${cfg.rowClass(r)}" ${cfg.attr(r)}>${cfg.cols.map(c => `<td class="px-3 py-2 ${align(c)} overflow-hidden">${c.cell(r)}</td>`).join('')}</tr>${cfg.expand ? cfg.expand(r, align) : ''}`).join('')
-                    : `<tr><td colspan="${cfg.cols.length}" class="px-3 py-10 text-center text-gray-500 italic">${q ? 'Nothing matches your search.' : 'Nothing at this urgency for the machines shown.'}</td></tr>`;
+                    : `<tr><td colspan="${cfg.cols.length}" class="px-3 py-10 text-center text-gray-500 italic">${cfHid ? 'Nothing matches the column filters.' : q ? 'Nothing matches your search.' : 'Nothing at this urgency for the machines shown.'}</td></tr>`;
                 const from = total ? T.page * size + 1 : 0, to = Math.min(total, T.page * size + size);
                 const more = T.size !== 'all' && total > size && T.page === 0 ? ` <button onclick="app.vulnPageSize('${tab}', 'all')" class="ml-2 text-blue-700 underline">Show all ${fmtNum(total)}</button>` : '';
                 el.innerHTML = `
                     <table class="w-full table-fixed text-sm"><colgroup>${cfg.cols.map(c => `<col style="width:${c.w}%">`).join('')}</colgroup>
                         <thead class="bg-gray-100 text-gray-600 text-xs uppercase"><tr>${head}</tr></thead><tbody class="divide-y">${body}</tbody></table>
                     <div class="flex items-center justify-between px-4 py-2 border-t bg-gray-50 text-xs text-gray-600 rounded-b-lg">
-                        <span>${total ? `${fmtNum(from)}–${fmtNum(to)} of ${fmtNum(total)}` : 'None'}${q ? ` (searched from ${fmtNum(cfg.rows.length)})` : ''}${T.key ? ' · sorted by a column (click # for the ranked order)' : ''}${cfg.rows.some(r => r.family) ? ` · ${fmtNum(cfg.rows.reduce((n, r) => n + (r.family ? r.members.length : 1), 0))} fixes folded into ${fmtNum(cfg.rows.length)} rows` : ''}${more}</span>
+                        <span>${total ? `${fmtNum(from)}–${fmtNum(to)} of ${fmtNum(total)}` : 'None'}${q ? ` (searched from ${fmtNum(cfg.rows.length)})` : ''}${cfHid ? ` · <strong>🔎 ${fmtNum(cfHid)} hidden by column filters</strong> <button class="underline text-blue-700 print-hide" onclick="app.cfClearKeys('${(this._cfVuln[tab].keys || []).map(k => encodeURIComponent(k)).join(',')}')">clear</button>` : ''}${T.key ? ' · sorted by a column (click # for the ranked order)' : ''}${cfg.rows.some(r => r.family) ? ` · ${fmtNum(cfg.rows.reduce((n, r) => n + (r.family ? r.members.length : 1), 0))} fixes folded into ${fmtNum(cfg.rows.length)} rows` : ''}${more}</span>
                         ${pages > 1 ? `<span class="flex items-center gap-2"><button ${T.page <= 0 ? 'disabled' : ''} onclick="app.vulnPage('${tab}', -1)" class="px-2 py-1 border rounded bg-white ${T.page <= 0 ? 'opacity-40' : 'hover:bg-gray-100'}">← Prev</button>Page ${T.page + 1} of ${pages}<button ${T.page >= pages - 1 ? 'disabled' : ''} onclick="app.vulnPage('${tab}', 1)" class="px-2 py-1 border rounded bg-white ${T.page >= pages - 1 ? 'opacity-40' : 'hover:bg-gray-100'}">Next →</button></span>` : ''}</div>`;
                 if (tab === 'assets') this.updateVulnBulkLabel();
             }

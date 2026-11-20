@@ -27,6 +27,7 @@ CyberView turns your scanner output into a short, ranked to-do list, team by tea
 - **Services** come from a list (Organisation setup → Services, first built from your data); merge stray spellings there.
 - **HA sides:** tiers are 1A/1B, 2A/2B, 3A/3B: patch side A one day and side B the next; machine lists offer each side as its own download. Priorities ignore the side.
 - **Spot a wrong owner?** Press **✎** next to the machine's name (or right-click it) to change its team there and then. **Click any column heading** to sort a table.
+- **▾ Filter any list by its columns:** tick values, give a range or type a search. A filter follows the column to every page (an OS filter on the register also filters Vuln Management, End of Life…) and every machine list or CSV you download; a strip at the top of the page shows what's on, with Clear all.
 - **💬 Comments:** note what you know about a machine (or one finding on it) on the machine's page; a **💬 n** marker shows it wherever the machine appears. Each comment shows who wrote it and when; edits keep the earlier wording.
 - **Data Health:** every data source with when it last synced, when it syncs next and a **Sync now** button, plus the machines with no team, tier or service.
 - **Vuln Management:** *Machines to fix first* and *Fixes that clear the most*, with one-click machine lists ready for Ansible.

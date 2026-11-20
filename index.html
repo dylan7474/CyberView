@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.25.2 · 19 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.26.0 · 20 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -277,7 +277,7 @@
                     <div class="flex-1 min-w-[14rem]">
                         <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Keyword <span class="normal-case font-normal text-gray-400" title="Plain words: contains. * any characters, ? one character: the pattern must match a whole value (web01* = starts with). /regex/ for a regular expression.">· wildcards * ? · /regex/ ⓘ</span></label>
                         <div class="flex gap-1">
-                            <select id="reg-f-field" onchange="app.renderRegister()" title="Which field to search" class="border-gray-300 rounded text-sm"><option value="ALL">All fields</option><option value="Name">Name</option><option value="IP">IP</option><option value="OS">OS</option><option value="Tags">Tags</option><option value="Service">Service</option><option value="Owner">Owner</option></select>
+                            <select id="reg-f-field" onchange="app.renderRegister()" title="Which field to search" class="border-gray-300 rounded text-sm"><option value="ALL">All fields</option><option value="Name">Name</option><option value="IP">IP</option><option value="OS">OS</option><option value="Tags">Tags</option><option value="Service">Service</option><option value="Owner">Owner</option><option value="Comments">Comments</option></select>
                             <input type="text" id="register-search" placeholder="e.g. web, web01*, /^(lon|man)1.*web/" class="border-gray-300 rounded text-sm w-full" oninput="app.renderRegisterSoon()">
                         </div>
                         <p id="register-search-err" class="text-[11px] text-red-700 mt-0.5 hidden"></p>
@@ -1185,10 +1185,11 @@
                 SCAN_DATES: 'gov_scan_dates',
                 PLAN_FORECAST: 'gov_plan_forecast',
                 CVE_WATCH: 'gov_cve_watch',
-                ORG_SETTINGS: 'gov_org_settings'
+                ORG_SETTINGS: 'gov_org_settings',
+                ASSET_NOTES: 'gov_asset_notes'
             };
-            // Saved record by record through api/tasks in server mode, never as a whole collection.
-            static PER_RECORD = new Set(['gov_remediation']);
+            // Saved record by record through api/tasks and api/notes in server mode, never as a whole collection.
+            static PER_RECORD = new Set(['gov_remediation', 'gov_asset_notes']);
 
             // Two modes. 'server': the page is served by the portal container, data lives in MariaDB and is
             // mirrored in memory so the rest of the code can stay synchronous. 'local': no server (GitHub Pages,
@@ -1398,6 +1399,7 @@
                     riskAcceptances: this.load(this.KEYS.RISK_ACCEPTANCES),
                     eolDates: this.load(this.KEYS.EOL_DATES),
                     remediation: this.load(this.KEYS.REMEDIATION),
+                    assetNotes: this.load(this.KEYS.ASSET_NOTES),
                     remediationSettings: this.load(this.KEYS.REMEDIATION_SETTINGS),
                     automoxLinks: this.load(this.KEYS.AUTOMOX_LINKS),
                     statusSettings: this.load(this.KEYS.STATUS_SETTINGS),
@@ -1414,7 +1416,7 @@
                 a.click();
             }
 
-            static BACKUP_KEYS = { assetRegister: 'ASSET_REGISTER', reviewQueue: 'REVIEW_QUEUE', ownershipLedger: 'OWNERSHIP_LEDGER', platformInventory: 'PLATFORM_INVENTORY', vulnAssetSummary: 'VULN_ASSET_SUMMARY', vulnServiceSummary: 'VULN_SERVICE_SUMMARY', vulnCveSummary: 'VULN_CVE_SUMMARY', vulnDetails: 'VULN_DETAILS', vulnMeta: 'VULN_META', riskAcceptances: 'RISK_ACCEPTANCES', eolDates: 'EOL_DATES', remediation: 'REMEDIATION', remediationSettings: 'REMEDIATION_SETTINGS', automoxLinks: 'AUTOMOX_LINKS', statusSettings: 'STATUS_SETTINGS', statusHistory: 'STATUS_HISTORY', scanDates: 'SCAN_DATES', planForecast: 'PLAN_FORECAST', cveWatch: 'CVE_WATCH', orgSettings: 'ORG_SETTINGS' };
+            static BACKUP_KEYS = { assetRegister: 'ASSET_REGISTER', reviewQueue: 'REVIEW_QUEUE', ownershipLedger: 'OWNERSHIP_LEDGER', platformInventory: 'PLATFORM_INVENTORY', vulnAssetSummary: 'VULN_ASSET_SUMMARY', vulnServiceSummary: 'VULN_SERVICE_SUMMARY', vulnCveSummary: 'VULN_CVE_SUMMARY', vulnDetails: 'VULN_DETAILS', vulnMeta: 'VULN_META', riskAcceptances: 'RISK_ACCEPTANCES', eolDates: 'EOL_DATES', remediation: 'REMEDIATION', remediationSettings: 'REMEDIATION_SETTINGS', automoxLinks: 'AUTOMOX_LINKS', statusSettings: 'STATUS_SETTINGS', statusHistory: 'STATUS_HISTORY', scanDates: 'SCAN_DATES', planForecast: 'PLAN_FORECAST', cveWatch: 'CVE_WATCH', orgSettings: 'ORG_SETTINGS', assetNotes: 'ASSET_NOTES' };
 
             // Replace everything with the contents of a backup made by exportDatabase. Fields the backup lacks are cleared, so the result matches the backup.
             static async importDatabase(db) {
@@ -1970,6 +1972,16 @@
                 if (esx) whole(esx, new Date(now + 150 * day).toISOString().slice(0, 10), 'Vendor-certified appliance host; replacement hardware on order.');
                 StorageService.save(StorageService.KEYS.ASSET_REGISTER, regA);
                 StorageService.save(StorageService.KEYS.RISK_ACCEPTANCES, ra);
+                // v4.26 sample comments: on two machines and on one finding (one of them edited, so the history shows)
+                try {
+                    const at = (d, h) => new Date(now - d * day + h * 3600e3).toISOString(), notes = [], N = (asset, qid, text, by, when, extra = {}) => notes.push({ id: 'N-' + String(notes.length + 1).padStart(6, '0'), asset, qid, text, at: when, by, rev: 1, ...extra });
+                    const w = regA.find(r => /2012 R2/.test(r.os)), d1 = top[0] && top[0][1][0];
+                    if (w) { N(w.normalizedName, '', 'Owner (Finance systems) only allows reboots on Sunday mornings. Book changes through CHG-4021.', 'j.patel', at(12, 9));
+                        N(w.normalizedName, '', 'Upgrade to Server 2022 is booked for the end of next month.', 'm.okafor', at(3, 14), { rev: 2, editedAt: at(2, 10), editedBy: 'm.okafor', hist: [{ text: 'Upgrade to Server 2022 is booked for next month.', at: at(3, 14), by: 'm.okafor' }] }); }
+                    if (esx) N(esx.normalizedName, '', 'Replacement hardware due on 12 Jan; do not patch this host before then (vendor support).', 'j.patel', at(6, 11));
+                    if (d1) N(d1.asset, d1.qid, 'Vendor confirmed the fix needs a service restart: do it in the Tuesday window.', 'm.okafor', at(1, 16));
+                    StorageService.save(StorageService.KEYS.ASSET_NOTES, notes);
+                } catch (e) { console.error('[Demo] comments', e); }
                 app.invalidateVulnData();
                 // 30 days of history leading up to today (made from today's figures, improving towards now)
                 try {
@@ -3640,6 +3652,83 @@
             }
         }
 
+        // ---- Comments on machines and on findings (v4.26). One record per comment in gov_asset_notes:
+        // {id, asset, qid ('' = the machine), text, at, by, rev, editedAt, editedBy, hist[{text, at, by}], deleted...}.
+        // Server mode: saved one at a time through api/notes, stamped with the signed-in user, in the activity log.
+        // Local mode (no server, the demo): kept in this browser like everything else.
+        class AssetNotes {
+            static KEY = 'gov_asset_notes';
+            static server() { return StorageService.mode === 'server'; }
+            static all() { const l = StorageService.peek(this.KEY); return Array.isArray(l) ? l : []; }
+            static _ix = null;
+            static index() {
+                if (this._ix && this._ix.rev === StorageService.rev) return this._ix;
+                const byAsset = new Map(), byFinding = new Map();
+                this.all().forEach(n => {
+                    if (n.deleted) return;
+                    (byAsset.get(n.asset) || byAsset.set(n.asset, []).get(n.asset)).push(n);
+                    if (n.qid) { const k = n.asset + '|' + n.qid; (byFinding.get(k) || byFinding.set(k, []).get(k)).push(n); }
+                });
+                return (this._ix = { rev: StorageService.rev, byAsset, byFinding });
+            }
+            static forAsset(asset) { return this.index().byAsset.get(asset) || []; }                       // the machine's own + its findings'
+            static forFinding(asset, qid) { return this.index().byFinding.get(asset + '|' + qid) || []; }
+            static count(asset) { return this.forAsset(asset).length; }
+            static texts(asset) { const l = this.forAsset(asset); return l.length ? l.map(n => n.text) : undefined; }
+            static me() { return (StorageService.me && !StorageService.me.open && StorageService.me.user) || ''; }
+            static canWrite() { return !StorageService.me || StorageService.me.role !== 'viewer'; }
+            static canDelete(n) { const m = StorageService.me; return !m || m.open || m.role === 'admin' || (m.role !== 'viewer' && n.by === m.user); }
+            static who(by) { return by || (Demo.ON ? 'demo user' : 'you (this browser)'); }
+            static put(note) {
+                const l = StorageService.load(this.KEY), list = Array.isArray(l) ? l : [], i = list.findIndex(x => x.id === note.id);
+                if (i >= 0) list[i] = note; else list.push(note);
+                StorageService.save(this.KEY, list);
+            }
+            static _last = 0;
+            static async refresh(maxAgeMs = 0) {
+                if (!this.server() || Date.now() - this._last < maxAgeMs) return false;
+                this._last = Date.now();
+                // saved only when something changed: a save makes every page's cached data stale (StorageService.rev)
+                try { const r = await fetch('api/notes', { cache: 'no-store' }); if (!r.ok) return false; const l = await r.json(); if (JSON.stringify(l) === JSON.stringify(this.all())) return false; StorageService.save(this.KEY, l); return true; } catch (e) { return false; }
+            }
+            static async _send(url, method, body) {
+                const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+                let j = {}; try { j = await r.json(); } catch (e) { }
+                if (r.status === 409 && j.note) { this.put(j.note); const e = new Error(`Someone else changed that comment meanwhile (${this.who(j.note.editedBy || j.note.by)}); their version is shown now. Repeat your change.`); e.conflict = true; throw e; }
+                if (!r.ok) throw new Error(j.detail || j.error || ('server answered ' + r.status));
+                this.put(j.note);
+                return j.note;
+            }
+            static async add(asset, qid, text) {
+                text = String(text || '').trim(); if (!text) throw new Error('Write something first');
+                if (this.server()) return this._send('api/notes', 'POST', { asset, qid: qid || '', text });
+                const l = this.all(), n = Math.max(0, ...l.map(x => parseInt(String(x.id).split('-')[1]) || 0)) + 1;
+                const note = { id: 'N-' + String(n).padStart(6, '0'), asset, qid: qid || '', text, at: new Date().toISOString(), by: this.me(), rev: 1 };
+                this.put(note); return note;
+            }
+            static async edit(note, text) {
+                text = String(text || '').trim(); if (!text) throw new Error('Write something first');
+                if (this.server()) return this._send('api/notes/' + encodeURIComponent(note.id), 'PUT', { text, baseRev: note.rev });
+                if (text === note.text) return note;
+                const now = new Date().toISOString();
+                const n = { ...note, hist: [...(note.hist || []), { text: note.text, at: note.editedAt || note.at, by: note.editedBy || note.by }], text, editedAt: now, editedBy: this.me(), rev: (note.rev || 0) + 1 };
+                this.put(n); return n;
+            }
+            static async remove(note) {
+                if (this.server()) return this._send('api/notes/' + encodeURIComponent(note.id) + '/delete', 'POST', {});
+                const n = { ...note, deleted: true, deletedAt: new Date().toISOString(), deletedBy: this.me(), rev: (note.rev || 0) + 1 };
+                this.put(n); return n;
+            }
+            static when(iso) {
+                const d = new Date(iso); if (isNaN(d)) return '';
+                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            }
+            // The 💬 marker: a symbol AND a number (never colour alone).
+            static icon(n, title, js, extraCls = '') {
+                return `<button type="button" class="note-icon print-hide inline-flex items-center gap-0.5 ml-1 px-1 rounded border border-slate-300 bg-white text-[11px] font-semibold text-slate-700 hover:bg-indigo-50 hover:border-indigo-400 ${extraCls}" title="${esc(title)}" aria-label="${esc(title)}" onclick="event.stopPropagation(); event.preventDefault(); ${js}">💬 ${fmtNum(n)}</button>`;
+            }
+        }
+
         // Step 2: imports check tracked assets. A finding counts as gone only when the export could have shown it:
         // the asset is in the file, the file is not cut off (Qualys row caps), the asset's own rows are below the
         // per-asset cap, and the QID appears somewhere in the file (filtered exports leave whole QIDs out).
@@ -4502,6 +4591,7 @@
                 
                 target.classList.add('active');
                 this.currentView = viewId;
+                AssetNotes.refresh(120000).then(ch => { if (ch) this.afterNoteChange(true); });     // v4.26 other people's comments, now and then
                 this.accNote(null);
                 OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
                 this.applyTeamSwitch(); this.applyTeam(viewId);
@@ -4615,6 +4705,14 @@
                         const first = c.firstElementChild && c.firstElementChild.tagName === 'DIV' ? c.firstElementChild : c; first.insertAdjacentHTML(first === c ? 'afterbegin' : 'beforeend', ''); (first === c ? c : first).insertAdjacentHTML('beforeend', pen); }
                     else el.insertAdjacentHTML('afterend', pen);
                 });
+                // v4.26 💬 n next to every machine that has comments (the machine's own and its findings'); not in tables that show finding comments themselves
+                view.querySelectorAll('[data-n][onclick*="openAssetDetail"]:not([data-notes]), [data-n][onclick*="inspectAsset"]:not([data-notes]), [data-n][data-machine]:not([data-notes])').forEach(el => {
+                    el.dataset.notes = '1'; if (el.closest('[data-own-notes]')) return;
+                    const n = el.dataset.n, c = AssetNotes.count(n); if (!c) return;
+                    const ic = AssetNotes.icon(c, `${c} comment${c === 1 ? '' : 's'} on ${n}: click to read`, `app.openNotes(${JSON.stringify(n).replace(/"/g, '&quot;')})`, 'note-m');
+                    if (el.tagName === 'TR') { const pen = el.querySelector('.m-edit'); if (pen) pen.insertAdjacentHTML('afterend', ic); else { const short = n.split('.')[0].toLowerCase(), c2 = [...el.cells].find(td => !td.querySelector('input') && App.cellText(td).toLowerCase().includes(short)); if (c2) c2.insertAdjacentHTML('beforeend', ic); } }
+                    else { const nx = el.nextElementSibling; (nx && nx.classList.contains('m-edit') ? nx : el).insertAdjacentHTML('afterend', ic); }
+                });
             }
             initDecorate() {
                 const main = document.querySelector('main'); if (!main || this._mo) return;
@@ -4640,6 +4738,7 @@
                 m.className = 'fixed z-50 bg-white border border-slate-300 rounded-lg shadow-lg py-1 text-sm min-w-[220px]';
                 m.innerHTML = `<div class="px-3 py-1 text-xs text-gray-500 border-b">${esc(r.originalName || r.normalizedName)} · ${esc(r.owner || 'no team')}</div>`
                     + item('Open its page', 'app.openAssetDetail(this.dataset.n)') + (canWrite ? item('✎ Edit team, service, tier…', 'app.editAsset(this.dataset.n)') : '')
+                    + item('💬 Comments' + (AssetNotes.count(r.normalizedName) ? ` (${fmtNum(AssetNotes.count(r.normalizedName))})` : (canWrite ? ': add one' : '')), 'app.openNotes(this.dataset.n)')
                     + item('📋 Copy name', `navigator.clipboard && navigator.clipboard.writeText(${JSON.stringify(r.originalName || r.normalizedName).replace(/"/g, '&quot;')}).then(() => StorageService.toast('Copied'))`);
                 m.style.left = Math.min(x, window.innerWidth - 240) + 'px'; m.style.top = Math.min(y, window.innerHeight - 140) + 'px';
                 m.querySelector('button')?.focus();
@@ -7009,7 +7108,7 @@
                     rows.push(`
                         <tr class="cursor-pointer ${isSelected ? 'bg-blue-50/60' : 'hover:bg-gray-50'}" data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)">
                             <td class="px-6 py-2 text-center" onclick="event.stopPropagation()"><input type="checkbox" value="${r.normalizedName}" ${isSelected ? 'checked' : ''} onchange="app.toggleRegisterAsset(this.value, this.checked)" class="rounded border-gray-300"></td>
-                            <td class="px-6 py-2 font-medium text-gray-800">${r.normalizedName}${r.osOverride ? ' ' + Lifecycle.editedBadge(r) : ''}${this.registerMatched?.has(r.normalizedName) ? ` <span class="text-[10px] font-normal text-gray-400" title="The search matched this field, not the name">matched: ${esc(this.registerMatched.get(r.normalizedName).join(', ').toLowerCase())}</span>` : ''}${r.unrecognised ? ' <span class="bg-purple-100 text-purple-800 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded" title="Seen in the vulnerability report, not in the inventory. Waiting for an owner in the Review Queue">⚑ Unrecognised</span>' : ''}</td>
+                            <td class="px-6 py-2 font-medium text-gray-800">${r.normalizedName}${AssetNotes.count(r.normalizedName) ? AssetNotes.icon(AssetNotes.count(r.normalizedName), AssetNotes.count(r.normalizedName) + ' comment(s) on this machine: click to read', `app.openNotes(${JSON.stringify(r.normalizedName).replace(/"/g, '&quot;')})`) : ''}${r.osOverride ? ' ' + Lifecycle.editedBadge(r) : ''}${this.registerMatched?.has(r.normalizedName) ? ` <span class="text-[10px] font-normal text-gray-400" title="The search matched this field, not the name">matched: ${esc(this.registerMatched.get(r.normalizedName).join(', ').toLowerCase())}</span>` : ''}${r.unrecognised ? ' <span class="bg-purple-100 text-purple-800 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded" title="Seen in the vulnerability report, not in the inventory. Waiting for an owner in the Review Queue">⚑ Unrecognised</span>' : ''}</td>
                             <td class="px-6 py-2">${esc(r.owner)}</td>
                             <td class="px-6 py-2">${esc(r.service)}</td>
                             ${Lifecycle.osCell(r, 'px-6 py-2')}
@@ -7069,7 +7168,7 @@
                     if (f.crit !== 'ALL' && (f.crit.length === 2 ? StatusEngine.tierCode(r) : String(StatusEngine.tierOf(r))) !== f.crit) return false;
                     if (f.risk !== 'ALL' && (r.riskStatus || 'Open') !== f.risk) return false;
                     if (!search.empty) {
-                        const all = { Name: [r.normalizedName, r.originalName, r.originalAssetName], IP: [r.ipv4Address, r.ipv6Address], OS: [r.os, Lifecycle.osFamily(r.os), r.osVersion, r.qualysOs], Tags: r.tags, Service: r.service, Owner: r.owner };
+                        const all = { Name: [r.normalizedName, r.originalName, r.originalAssetName], IP: [r.ipv4Address, r.ipv6Address], OS: [r.os, Lifecycle.osFamily(r.os), r.osVersion, r.qualysOs], Tags: r.tags, Service: r.service, Owner: r.owner, Comments: AssetNotes.texts(r.normalizedName) };
                         const hit = TextSearch.match(search, field === 'ALL' ? all : { [field]: all[field] });
                         if (!hit) return false;
                         if (field === 'ALL' && !hit.includes('Name')) this.registerMatched.set(r.normalizedName, hit);
@@ -8043,6 +8142,100 @@
             }
 
             // Asset detail: the remediation tasks this asset is in.
+            // ---------- Comments on machines and findings (v4.26)
+            assetNotesPanelHTML(name) {
+                return `<div class="bg-white rounded-lg shadow border p-5"><h4 class="font-semibold text-gray-800 mb-2">💬 Comments <span class="font-normal text-gray-400 text-sm">on this machine and its findings</span></h4><div class="notes-box" data-asset="${esc(name)}" data-qid="">${this.notesBoxHTML(name, '')}</div></div>`;
+            }
+            noteFindingTd(asset, qid) { return `<td class="px-3 py-2 text-center print-hide" data-note-f="${esc(asset + '|' + qid)}" onclick="event.stopPropagation()">${this.noteFindingBtn(asset, qid)}</td>`; }
+            noteFindingBtn(asset, qid) {
+                const c = AssetNotes.forFinding(asset, String(qid)).length, js = `app.openNotes(${JSON.stringify(asset).replace(/"/g, '&quot;')}, '${esc(qid)}')`;
+                if (c) return AssetNotes.icon(c, `${c} comment${c === 1 ? '' : 's'} on QID ${qid} on ${asset}: click to read`, js);
+                return AssetNotes.canWrite() ? `<button type="button" class="write-only text-[11px] text-gray-400 hover:text-indigo-800 px-1 rounded hover:bg-indigo-50" title="Add a comment on this finding on ${esc(asset)}" aria-label="Add a comment on QID ${esc(qid)} on ${esc(asset)}" onclick="event.stopPropagation(); ${js}">＋💬</button>` : '';
+            }
+            notesBoxHTML(asset, qid) {
+                const list = (qid ? AssetNotes.forFinding(asset, qid) : AssetNotes.forAsset(asset)).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+                const qmap = this.vulnData?.qmap || this.inspectCtx?.vd?.qmap, title = (q) => (qmap && qmap.get(String(q))?.title) || '';
+                const item = (n) => {
+                    const mine = AssetNotes.canDelete(n), editing = this._noteEditing === n.id, idA = esc(n.id);
+                    const about = !qid && n.qid ? `<a href="#" class="ml-2 text-[11px] px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-800 hover:underline" data-q="${esc(n.qid)}" onclick="app.closeModals(); app.inspectQid(this.dataset.q); return false;" title="${esc(title(n.qid))}">about QID ${esc(n.qid)}${title(n.qid) ? ': ' + esc(plain(title(n.qid)).slice(0, 60)) : ''}</a>` : (!qid ? '<span class="ml-2 text-[11px] text-gray-500">about the machine</span>' : '');
+                    const edited = n.editedAt ? `<details class="mt-1 text-[11px] text-gray-500"><summary class="cursor-pointer">✎ edited by ${esc(AssetNotes.who(n.editedBy))}, ${esc(AssetNotes.when(n.editedAt))} · earlier wording (${(n.hist || []).length})</summary>${(n.hist || []).slice().reverse().map(h => `<div class="mt-1 pl-2 border-l-2 border-gray-300"><div class="whitespace-pre-wrap break-words text-gray-600">${esc(h.text)}</div><div>${esc(AssetNotes.who(h.by))}, ${esc(AssetNotes.when(h.at))}</div></div>`).join('')}</details>` : '';
+                    const body = editing
+                        ? `<textarea class="note-edit-text w-full border border-gray-300 rounded p-2 text-sm mt-1" rows="3" aria-label="Edit the comment">${esc(n.text)}</textarea><div class="flex gap-2 mt-1"><button class="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700" data-id="${idA}" onclick="app.noteEditSave(this.dataset.id, this)">Save</button><button class="px-3 py-1 text-xs rounded border" onclick="app.noteEdit(null)">Cancel</button></div>`
+                        : `<div class="whitespace-pre-wrap break-words text-sm text-gray-800 mt-1">${esc(n.text)}</div>`;
+                    const btns = editing ? '' : `<span class="write-only ml-auto flex gap-2 text-[11px] print-hide">${AssetNotes.canWrite() ? `<button class="text-blue-700 hover:underline" data-id="${idA}" onclick="app.noteEdit(this.dataset.id)">✎ Edit</button>` : ''}${mine ? `<button class="text-red-700 hover:underline" data-id="${idA}" onclick="app.noteDelete(this.dataset.id)">✕ Delete</button>` : ''}</span>`;
+                    return `<li class="py-2"><div class="flex flex-wrap items-center gap-1 text-xs text-gray-600"><strong class="text-gray-800">${esc(AssetNotes.who(n.by))}</strong><span>· ${esc(AssetNotes.when(n.at))}</span>${about}${btns}</div>${body}${edited}</li>`;
+                };
+                const form = AssetNotes.canWrite()
+                    ? `<div class="write-only mt-2 print-hide"><textarea class="note-new-text w-full border border-gray-300 rounded p-2 text-sm" rows="2" maxlength="4000" placeholder="${qid ? 'A comment on this finding on this machine, e.g. vendor fix due in March' : 'A comment on this machine, e.g. owner only allows reboots on Sundays'}" aria-label="New comment"></textarea>
+                        <div class="flex flex-wrap items-center gap-3 mt-1"><button class="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 font-medium" onclick="app.noteAdd(this)">💬 Add comment</button><span class="text-[11px] text-gray-500">${StorageService.me && !StorageService.me.open ? 'Saved as ' + esc(StorageService.me.user) + ', with the date and time.' : 'Saved in this browser.'}${qid ? '' : ' To comment on one finding, use ＋💬 on its row.'}</span></div></div>`
+                    : '<p class="text-[11px] text-gray-500 mt-2">Read-only account: you can read comments but not add them.</p>';
+                return (list.length ? `<ul class="divide-y">${list.map(item).join('')}</ul>` : `<p class="text-sm text-gray-500 italic">No comments yet.</p>`) + form;
+            }
+            async openNotes(asset, qid = '') {
+                qid = qid ? String(qid) : '';
+                let m = document.getElementById('modal-notes');
+                if (!m) {
+                    m = document.createElement('div'); m.id = 'modal-notes';
+                    m.className = 'hidden fixed inset-0 bg-gray-900 bg-opacity-50 z-50 flex items-center justify-center p-4';
+                    m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-labelledby', 'notes-title');
+                    m.innerHTML = `<div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"><div class="px-5 py-3 border-b flex items-start justify-between gap-3"><div><h3 id="notes-title" class="text-lg font-bold text-gray-800"></h3><p id="notes-sub" class="text-xs text-gray-500"></p></div><button onclick="app.closeModals()" class="text-gray-500 hover:text-gray-800 text-xl leading-none" aria-label="Close">✕</button></div><div id="notes-modal-box" class="notes-box px-5 py-3 overflow-y-auto"></div></div>`;
+                    m.addEventListener('click', (e) => { if (e.target === m) this.closeModals(); });
+                    document.body.appendChild(m);
+                }
+                this._noteEditing = null;
+                const box = document.getElementById('notes-modal-box'); box.dataset.asset = asset; box.dataset.qid = qid;
+                const qmap = this.vulnData?.qmap || this.inspectCtx?.vd?.qmap, t = qid && qmap ? (qmap.get(qid)?.title || '') : '';
+                document.getElementById('notes-title').textContent = '💬 ' + asset;
+                document.getElementById('notes-sub').textContent = qid ? `Comments on QID ${qid}${t ? ': ' + plain(t) : ''}, on this machine` : 'Comments on this machine and on its findings';
+                box.innerHTML = this.notesBoxHTML(asset, qid);
+                m.classList.remove('hidden');
+                box.querySelector('.note-new-text')?.focus();
+                if (await AssetNotes.refresh(5000)) this.afterNoteChange(true);
+            }
+            _noteBox(el) { const b = el.closest('.notes-box'); return b ? { asset: b.dataset.asset, qid: b.dataset.qid || '', box: b } : null; }
+            async noteAdd(btn) {
+                const c = this._noteBox(btn); if (!c) return;
+                const ta = c.box.querySelector('.note-new-text'), text = ta.value.trim();
+                if (!text) { ta.focus(); StorageService.toast('Write the comment first'); return; }
+                btn.disabled = true;
+                try { await AssetNotes.add(c.asset, c.qid, text); ta.value = ''; StorageService.toast('Comment added'); this.afterNoteChange(); }
+                catch (e) { StorageService.toast('Not saved: ' + e.message); }
+                finally { btn.disabled = false; }
+            }
+            noteEdit(id) { this._noteEditing = id; this.renderNoteBoxes(); const t = document.querySelector('.notes-box .note-edit-text'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
+            async noteEditSave(id, btn) {
+                const n = AssetNotes.all().find(x => x.id === id), ta = btn.closest('li').querySelector('.note-edit-text'); if (!n || !ta) return;
+                btn.disabled = true;
+                try { await AssetNotes.edit(n, ta.value); this._noteEditing = null; StorageService.toast('Comment saved'); }
+                catch (e) { if (e.conflict) this._noteEditing = null; StorageService.toast(e.conflict ? e.message : 'Not saved: ' + e.message); }
+                finally { btn.disabled = false; this.afterNoteChange(); }
+            }
+            async noteDelete(id) {
+                const n = AssetNotes.all().find(x => x.id === id); if (!n) return;
+                if (!confirm(`Delete this comment by ${AssetNotes.who(n.by)}?\n\n"${n.text.slice(0, 200)}"`)) return;
+                try { await AssetNotes.remove(n); StorageService.toast('Comment deleted'); }
+                catch (e) { StorageService.toast('Not deleted: ' + e.message); }
+                this.afterNoteChange();
+            }
+            renderNoteBoxes(keepTyping) {
+                document.querySelectorAll('.notes-box').forEach(b => {
+                    if (!b.dataset.asset) return;
+                    const typed = b.querySelector('.note-new-text')?.value || '', edit = b.querySelector('.note-edit-text')?.value;
+                    if (keepTyping && edit != null) return;      // a background refresh never throws away an edit in progress
+                    b.innerHTML = this.notesBoxHTML(b.dataset.asset, b.dataset.qid || '');
+                    if (keepTyping && typed) { const t = b.querySelector('.note-new-text'); if (t) t.value = typed; }
+                });
+            }
+            // After a comment changes (or a refresh): the comment lists, the finding 💬 cells, the machine 💬 markers and the register.
+            afterNoteChange(quiet) {
+                this.renderNoteBoxes(quiet);
+                document.querySelectorAll('[data-note-f]').forEach(td => { const v = td.dataset.noteF, i = v.lastIndexOf('|'); td.innerHTML = this.noteFindingBtn(v.slice(0, i), v.slice(i + 1)); });
+                document.querySelectorAll('.note-m').forEach(b => b.remove());
+                document.querySelectorAll('[data-notes]').forEach(el => delete el.dataset.notes);
+                try { this.decorate(); } catch (e) { console.error('[notes] decorate', e); }
+                if (this.currentView === 'register' && !quiet) this.renderRegister();
+            }
+
             assetTasksHTML(name) {
                 const tasks = RemediationService.list().filter(t => (t.assets || []).some(a => a.name === name && a.state !== 'moved'));
                 const rows = tasks.sort((a, b) => (RemediationService.isOpen(b) - RemediationService.isOpen(a)) || String(a.due).localeCompare(String(b.due))).map(t => {
@@ -9259,13 +9452,14 @@
                         <div class="overflow-auto max-h-[28rem]">
                             <table class="min-w-full text-left text-sm whitespace-nowrap">
                                 <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr>
-                                    <th class="px-3 py-2">Priority</th><th class="px-3 py-2 text-center">Sev</th><th class="px-3 py-2 text-right">QVS</th><th class="px-3 py-2">QID</th><th class="px-3 py-2 w-full">Title</th><th class="px-3 py-2">CVE</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2 text-right">Age</th><th class="px-3 py-2 text-center">Patch</th>
+                                    <th class="px-3 py-2 text-center" title="Comments on this finding on this machine">💬</th><th class="px-3 py-2">Priority</th><th class="px-3 py-2 text-center">Sev</th><th class="px-3 py-2 text-right">QVS</th><th class="px-3 py-2">QID</th><th class="px-3 py-2 w-full">Title</th><th class="px-3 py-2">CVE</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2 text-right">Age</th><th class="px-3 py-2 text-center">Patch</th>
                                 </tr></thead>
                                 <tbody id="insp-rows" class="divide-y"></tbody>
                             </table>
                         </div>
                     </div>`;
-                body.firstElementChild.insertAdjacentHTML('afterend', '<div id="insp-ax" class="print-hide"></div>' + this.assetTasksHTML(name));
+                body.firstElementChild.insertAdjacentHTML('afterend', this.assetNotesPanelHTML(name) + '<div id="insp-ax" class="print-hide"></div>' + this.assetTasksHTML(name));
+                AssetNotes.refresh(30000).then(ch => { if (ch) this.afterNoteChange(true); });
                 this.fillAutomoxAsset(name);
                 const cached = this.aiCache.get('asset:' + name);
                 const out = document.getElementById('ai-out');
@@ -9298,6 +9492,7 @@
                     const qr = ctx.vd.qmap.get(d.qid) || {};
                     const more = d.cves.length > 1 ? ` <span class="text-gray-400">+${d.cves.length - 1}</span>` : '';
                     return `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(d.qid)}" onclick="app.inspectQid(this.dataset.q)">
+                        ${this.noteFindingTd(ctx.name, d.qid)}
                         <td class="px-3 py-2 whitespace-nowrap">${d.p ? StatusEngine.pBadge(d.p) + ' ' : ''}${PriorityEngine.tierBadge(d.tier)}${d.due ? `<div class="text-[10px] text-gray-600 mt-0.5 ${d.overdue ? 'font-bold' : ''}">${esc(StatusEngine.dueText(d))}</div>` : ''}</td>
                         <td class="px-3 py-2 text-center">${PriorityEngine.sevBadge(d.sev)}</td>
                         <td class="px-3 py-2 text-right font-mono">${d.qvs || '-'}</td>
@@ -9309,8 +9504,8 @@
                         <td class="px-3 py-2 text-right text-xs font-mono">${d.age}d</td>
                         <td class="px-3 py-2 text-center whitespace-nowrap">${d.patchable ? '✅' : '—'}${axCell(d)}</td>
                     </tr>`;
-                }).join('') + (rows.length > LIMIT ? `<tr><td colspan="10" class="px-3 py-2 text-xs text-gray-500 text-center">Showing the first ${LIMIT}. Use the filters to narrow down.</td></tr>` : '')
-                    : '<tr><td colspan="10" class="px-3 py-8 text-center text-gray-500 italic">No detections match.</td></tr>';
+                }).join('') + (rows.length > LIMIT ? `<tr><td colspan="11" class="px-3 py-2 text-xs text-gray-500 text-center">Showing the first ${LIMIT}. Use the filters to narrow down.</td></tr>` : '')
+                    : '<tr><td colspan="11" class="px-3 py-8 text-center text-gray-500 italic">No detections match.</td></tr>';
             }
 
             async renderInspectQid(qid, entry = {}) {
@@ -9383,13 +9578,13 @@
                     <div class="bg-white rounded-lg shadow border overflow-hidden">
                         <div class="bg-gray-50 px-4 py-3 border-b font-semibold text-sm text-gray-700 flex items-center justify-between gap-3"><span>Affected machines (${fmtNum(assets.length)})</span><span class="flex gap-2"><button id="insp-accept-btn" onclick="app.inspAccept()" class="write-only hidden print-hide font-normal text-xs border border-amber-300 bg-amber-50 text-amber-900 px-3 py-1 rounded hover:bg-amber-100" title="Accept the risk of this finding on the ticked machines only">⚖️ Accept risk: 0 selected</button><button onclick="app.inspectQidCsv()" class="print-hide font-normal text-xs border border-gray-300 bg-white px-3 py-1 rounded hover:bg-gray-100" title="Download these machines' names, one per line (an Ansible inventory)">⬇ Machine list</button></span></div>
                         <div class="overflow-auto max-h-[28rem]">
-                            <table class="min-w-full text-left text-sm whitespace-nowrap">
-                                <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.inspTickAll(this.checked)" aria-label="Select every machine"></th><th class="px-3 py-2">Machine</th><th class="px-3 py-2">Team</th><th class="px-3 py-2">Service</th><th class="px-3 py-2">OS</th><th class="px-3 py-2 text-center">Tier</th><th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>
+                            <table class="min-w-full text-left text-sm whitespace-nowrap" data-own-notes="1">
+                                <thead class="bg-gray-100 text-gray-600 border-b sticky top-0"><tr><th class="px-3 py-2 print-hide"><input type="checkbox" class="rounded border-gray-300" onchange="app.inspTickAll(this.checked)" aria-label="Select every machine"></th><th class="px-3 py-2">Machine</th><th class="px-3 py-2 text-center" title="Comments on this finding on that machine">💬</th><th class="px-3 py-2">Team</th><th class="px-3 py-2">Service</th><th class="px-3 py-2">OS</th><th class="px-3 py-2 text-center">Tier</th><th class="px-3 py-2">TruRisk</th><th class="px-3 py-2">Port</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">First detected</th><th class="px-3 py-2 text-right">Age</th></tr></thead>
                                 <tbody class="divide-y">${list.slice().sort((a, b) => ((StatusEngine.tierOf(reg.get(a.asset)) || 2) - (StatusEngine.tierOf(reg.get(b.asset)) || 2)) || ((sums.get(b.asset)?.truRisk || 0) - (sums.get(a.asset)?.truRisk || 0))).map(d => {
                                     const r = reg.get(d.asset) || {}, s = sums.get(d.asset) || {};
                                     return `<tr class="cursor-pointer hover:bg-blue-50" data-n="${esc(d.asset)}" onclick="app.inspectAsset(this.dataset.n)">
                                         <td class="px-3 py-2 print-hide" onclick="event.stopPropagation()"><input type="checkbox" class="insp-tick rounded border-gray-300" data-n="${esc(d.asset)}" onchange="app.inspTick(this.dataset.n, this.checked)" aria-label="Select ${esc(d.asset)}"></td>
-                                        <td class="px-3 py-2 font-medium text-gray-800">${esc(d.asset)}${d.accF ? ' ' + RiskView.flag(d.accF, true) : ''}</td><td class="px-3 py-2">${esc(r.owner || 'Unknown')}</td><td class="px-3 py-2">${esc(r.service || 'Unclassified')}</td>${Lifecycle.osCell(r, 'px-3 py-2')}
+                                        <td class="px-3 py-2 font-medium text-gray-800">${esc(d.asset)}${d.accF ? ' ' + RiskView.flag(d.accF, true) : ''}</td>${this.noteFindingTd(d.asset, d.qid)}<td class="px-3 py-2">${esc(r.owner || 'Unknown')}</td><td class="px-3 py-2">${esc(r.service || 'Unclassified')}</td>${Lifecycle.osCell(r, 'px-3 py-2')}
                                         <td class="px-3 py-2 text-center text-xs">${StatusEngine.tierCell(r)}</td><td class="px-3 py-2">${PriorityEngine.truRiskBadge(s.truRisk || 0)}</td>
                                         <td class="px-3 py-2 text-xs">${esc(d.port || '-')}</td><td class="px-3 py-2 text-xs">${esc(d.status)}</td><td class="px-3 py-2 text-xs">${esc(d.first)}</td><td class="px-3 py-2 text-right text-xs font-mono">${d.age}d</td></tr>`;
                                 }).join('')}</tbody>

@@ -316,6 +316,48 @@ st, r = admin.call("POST", "/api/restore", {"assetRegister": [], "orgSettings": 
 s5 = admin.call("GET", "/api/state")[1]
 check("org setup: a backup brings it back (restore)", st == 200 and s5.get("gov_org_settings", {}).get("data", {}).get("mainTeam") == "Team B", (st, s5.get("gov_org_settings")))
 
+# Comments on machines and findings (v4.26): saved one at a time, stamped with the signed-in user, edits keep the earlier wording
+admin.call("POST", "/api/users", {"username": "ed2", "password": "password-ed2", "role": "editor"})
+ed2, _, _ = sign_in("ed2", "password-ed2")
+st, r = ed.call("POST", "/api/notes", {"asset": "web01.example.net", "text": "Reboots on Sundays only", "by": "someone-else"})
+n1 = (r or {}).get("note", {})
+check("notes: editor adds a machine comment, stamped with their name (not what the page sent)", st == 200 and n1.get("by") == "ed1" and n1.get("qid") == "" and n1.get("at"), (st, r))
+st, r = ed.call("POST", "/api/notes", {"asset": "web01.example.net", "qid": "38170", "text": "Vendor fix due in March"})
+n2 = (r or {}).get("note", {})
+check("notes: editor adds a finding comment", st == 200 and n2.get("qid") == "38170" and n2.get("id") != n1.get("id"), (st, r))
+check("notes: empty text refused", ed.call("POST", "/api/notes", {"asset": "web01.example.net", "text": "  "})[0] == 400)
+check("notes: a QID must be a number", ed.call("POST", "/api/notes", {"asset": "web01.example.net", "qid": "x1", "text": "a"})[0] == 400)
+check("notes: viewer cannot add", vw.call("POST", "/api/notes", {"asset": "web01.example.net", "text": "hi"})[0] == 403)
+check("notes: cannot be saved as a whole collection", ed.call("PUT", "/api/collections/gov_asset_notes", {"data": [], "baseRevision": None})[0] == 400)
+st, lst = vw.call("GET", "/api/notes")
+check("notes: viewer reads them", st == 200 and {n["id"] for n in lst} >= {n1.get("id"), n2.get("id")}, (st, lst))
+check("notes: in /api/state", any(n["id"] == n1.get("id") for n in vw.call("GET", "/api/state")[1].get("gov_asset_notes", {}).get("data", [])))
+st, r = ed2.call("PUT", f"/api/notes/{n1.get('id')}", {"text": "Reboots on Sunday mornings only", "baseRev": n1.get("rev")})
+e1 = (r or {}).get("note", {})
+check("notes: another editor can edit; earlier wording kept", st == 200 and e1.get("editedBy") == "ed2" and e1.get("by") == "ed1" and e1.get("hist", [{}])[0].get("text") == "Reboots on Sundays only" and e1.get("rev") == 2, (st, r))
+st, r = ed.call("PUT", f"/api/notes/{n1.get('id')}", {"text": "stale edit", "baseRev": 1})
+check("notes: an edit from an old copy gets 409 with the current one", st == 409 and r.get("note", {}).get("text") == "Reboots on Sunday mornings only", (st, r))
+check("notes: viewer cannot edit", vw.call("PUT", f"/api/notes/{n1.get('id')}", {"text": "x", "baseRev": 2})[0] == 403)
+check("notes: someone else's comment cannot be deleted by an editor", ed2.call("POST", f"/api/notes/{n2.get('id')}/delete")[0] == 403)
+st, r = ed.call("POST", f"/api/notes/{n2.get('id')}/delete")
+check("notes: the author can delete (kept, marked deleted)", st == 200 and r["note"].get("deleted") is True and r["note"].get("deletedBy") == "ed1", (st, r))
+check("notes: a deleted comment cannot be edited", ed.call("PUT", f"/api/notes/{n2.get('id')}", {"text": "x", "baseRev": r["note"]["rev"]})[0] == 404)
+check("notes: an administrator can delete anyone's", admin.call("POST", f"/api/notes/{n1.get('id')}/delete")[0] == 200)
+acts = [a["action"] for a in admin.call("GET", "/api/audit?limit=50")[1]]
+check("notes: activity log has added, edited and deleted", {"comment-added", "comment-edited", "comment-deleted"} <= set(acts), acts[:12])
+# parallel adds never lose one
+res = []
+def add_one(i):
+    res.append(ed.call("POST", "/api/notes", {"asset": "db01.example.net", "text": f"parallel {i}"})[0])
+th = [threading.Thread(target=add_one, args=(i,)) for i in range(8)]
+[t.start() for t in th]; [t.join() for t in th]
+ids = [n["id"] for n in vw.call("GET", "/api/notes")[1] if n["text"].startswith("parallel")]
+check("notes: 8 parallel adds, 8 comments with different ids", res.count(200) == 8 and len(set(ids)) == 8, (res, ids))
+st, r = admin.call("POST", "/api/restore", {"assetRegister": [], "assetNotes": [{"id": "N-000099", "asset": "x", "qid": "", "text": "from backup", "at": "2026-11-01T00:00:00Z", "by": "ed1", "rev": 1}]})
+check("notes: a backup brings them back (restore)", st == 200 and [n["text"] for n in vw.call("GET", "/api/notes")[1]] == ["from backup"])
+st, r = ed.call("POST", "/api/notes", {"asset": "x", "text": "after restore"})
+check("notes: new ids continue after a restore", st == 200 and r["note"]["id"] == "N-000100", r)
+
 # logout ends the session
 check("logout", admin.call("POST", "/api/logout")[0] == 200 and admin.call("GET", "/api/state")[0] == 401)
 print("\n%d failed" % len(fails) if fails else "\nall passed")

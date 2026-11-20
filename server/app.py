@@ -42,6 +42,7 @@ FIELD_MAP = {
     "eolDates": "gov_eol_dates", "remediation": "gov_remediation", "remediationSettings": "gov_remediation_settings",
     "automoxLinks": "gov_automox_links", "statusSettings": "gov_status_settings", "statusHistory": "gov_status_history", "scanDates": "gov_scan_dates",
     "orgSettings": "gov_org_settings", "planForecast": "gov_plan_forecast", "cveWatch": "gov_cve_watch",
+    "assetNotes": "gov_asset_notes",
 }
 # collections whose edits are written to the change history, and the field that identifies a record
 TRACKED = {"gov_asset_register": ("normalizedName", "normalizedName"), "gov_risk_acceptances": ("id", "asset"),
@@ -53,10 +54,10 @@ COLLECTIONS = {
     "gov_vuln_asset_summary", "gov_vuln_service_summary", "gov_vuln_cve_summary", "gov_vuln_details",
     "gov_vuln_meta", "gov_risk_acceptances", "gov_eol_dates", "gov_remediation", "gov_remediation_settings",
     "gov_automox_links", "gov_status_settings", "gov_status_history", "gov_scan_dates", "gov_org_settings", "gov_plan_forecast",
-    "gov_cve_watch",
+    "gov_cve_watch", "gov_asset_notes",
 }
-# Saved one record at a time through /api/tasks, never as a whole collection (a stale page would wipe other people's work).
-PER_RECORD = {"gov_remediation"}
+# Saved one record at a time (/api/tasks, /api/notes), never as a whole collection (a stale page would wipe other people's work).
+PER_RECORD = {"gov_remediation", "gov_asset_notes"}
 
 SCHEMA = [
     """CREATE TABLE IF NOT EXISTS collections (
@@ -562,7 +563,7 @@ def log_changes(cur, user, name, old_docs, new_data):
 def put_collection(name: str, request: Request, body: dict = Body(...)):
     check_name(name)
     if name in PER_RECORD:
-        raise HTTPException(400, "Remediation tasks are saved one at a time (api/tasks)")
+        raise HTTPException(400, "Tasks and comments are saved one at a time (api/tasks, api/notes)")
     data = body.get("data")
     base = body.get("baseRevision")  # None = overwrite whatever is there
     if isinstance(data, list):
@@ -689,17 +690,17 @@ def clean_task(t, cur):
             "reopened": bool(t.get("reopened")), "lastCheck": _txt(t.get("lastCheck"), 300)}
 
 
-def lock_tasks(cur, user):
-    """Lock the task collection (creating its row on first use, or /api/state would not return it).
+def lock_tasks(cur, user, name=TASKS):
+    """Lock a per-record collection (creating its row on first use, or /api/state would not return it).
     Lock first and insert only when missing: an INSERT IGNORE on every call deadlocks under parallel saves."""
-    cur.execute("SELECT revision FROM collections WHERE name=%s FOR UPDATE", (TASKS,))
+    cur.execute("SELECT revision FROM collections WHERE name=%s FOR UPDATE", (name,))
     if cur.fetchone() is None:
         try:
-            cur.execute("INSERT INTO collections (name, kind, revision, updated_at, updated_by) VALUES (%s,'array',0,NOW(3),%s)", (TASKS, user))
+            cur.execute("INSERT INTO collections (name, kind, revision, updated_at, updated_by) VALUES (%s,'array',0,NOW(3),%s)", (name, user))
         except pymysql.err.IntegrityError:
             pass                                    # someone else created it a moment ago
-        cur.execute("SELECT revision FROM collections WHERE name=%s FOR UPDATE", (TASKS,))
-    cur.execute("SELECT seq, doc FROM records WHERE collection=%s ORDER BY seq", (TASKS,))
+        cur.execute("SELECT revision FROM collections WHERE name=%s FOR UPDATE", (name,))
+    cur.execute("SELECT seq, doc FROM records WHERE collection=%s ORDER BY seq", (name,))
     return [(seq, json.loads(doc)) for seq, doc in cur.fetchall()]
 
 
@@ -715,8 +716,8 @@ def retry_deadlock(fn, tries=4):
             raise
 
 
-def bump_tasks(cur, user):
-    cur.execute("UPDATE collections SET revision=revision+1, updated_at=NOW(3), updated_by=%s WHERE name=%s", (user, TASKS))
+def bump_tasks(cur, user, name=TASKS):
+    cur.execute("UPDATE collections SET revision=revision+1, updated_at=NOW(3), updated_by=%s WHERE name=%s", (user, name))
 
 
 def for_log(t):
@@ -838,6 +839,112 @@ def _add_comment(user, task_id, text):
         cur.execute("UPDATE records SET doc=%s WHERE collection=%s AND seq=%s", (json.dumps(t, separators=(",", ":")), TASKS, seq))
         bump_tasks(cur, user)
     return {"task": t}
+
+
+# ------------------------------------------------------------------ comments on machines and findings (v4.26)
+# One record per comment: {id, asset, qid ('' = the machine itself), text, at, by, rev, editedAt, editedBy,
+# hist [{text, at, by}] (earlier wordings), deleted, deletedAt, deletedBy}. The server stamps who and when from the sign-in.
+# Deleting only hides a comment (kept in the database and the activity log); its author or an administrator may delete it.
+
+NOTES = "gov_asset_notes"
+NOTE_MAX = 4000
+
+
+def _note_text(body):
+    text = _txt((body or {}).get("text"), NOTE_MAX).strip()
+    if not text:
+        raise HTTPException(400, "Write something first")
+    return text
+
+
+def _note_at(rows, note_id):
+    hit = next(((s, d) for s, d in rows if d.get("id") == note_id), None)
+    if not hit or hit[1].get("deleted"):
+        raise HTTPException(404, "No such comment (it may have been deleted)")
+    return hit
+
+
+def _note_label(n):
+    return n["asset"] + (" QID " + n["qid"] if n.get("qid") else "")
+
+
+@app.get("/api/notes")
+def list_notes():
+    with conn_ctx() as c, c.cursor() as cur:
+        cur.execute("SELECT doc FROM records WHERE collection=%s ORDER BY seq", (NOTES,))
+        body = "[" + ",".join(r[0] for r in cur.fetchall()) + "]"
+    return Response(body, media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/notes")
+def add_note(request: Request, body: dict = Body(...)):
+    """A new comment on a machine (qid empty) or on one finding on it (machine + QID)."""
+    user = current_user(request)
+    asset = _txt(body.get("asset"), 255).strip()
+    qid = _txt(body.get("qid"), 20).strip()
+    if not asset:
+        raise HTTPException(400, "Which machine?")
+    if qid and not qid.isdigit():
+        raise HTTPException(400, "A QID is a number")
+    text = _note_text(body)
+    return retry_deadlock(lambda: _add_note(user, asset, qid, text))
+
+
+def _add_note(user, asset, qid, text):
+    with conn_ctx() as c, c.cursor() as cur:
+        rows = lock_tasks(cur, user, NOTES)
+        n = max([int(str(d.get("id", "N-0")).split("-")[1]) for _, d in rows if str(d.get("id", "")).split("-")[-1].isdigit()], default=0) + 1
+        seq = max((s for s, _ in rows), default=-1) + 1
+        note = {"id": f"N-{n:06d}", "asset": asset, "qid": qid, "text": text, "at": now_iso(), "by": user, "rev": 1}
+        cur.execute("INSERT INTO records (collection, seq, doc) VALUES (%s,%s,%s)", (NOTES, seq, json.dumps(note, separators=(",", ":"))))
+        bump_tasks(cur, user, NOTES)
+        audit(cur, user, "comment-added", f"{note['id']} on {_note_label(note)}: {short(text, 200)}")
+    return {"note": note}
+
+
+@app.put("/api/notes/{note_id}")
+def edit_note(note_id: str, request: Request, body: dict = Body(...)):
+    """Change a comment's wording (any editor). The earlier wording is kept in hist. baseRev must match, otherwise 409."""
+    user = current_user(request)
+    text = _note_text(body)
+    return retry_deadlock(lambda: _edit_note(user, note_id, text, body.get("baseRev")))
+
+
+def _edit_note(user, note_id, text, base):
+    with conn_ctx() as c, c.cursor() as cur:
+        seq, note = _note_at(lock_tasks(cur, user, NOTES), note_id)
+        if base != note.get("rev"):
+            c.rollback()
+            return JSONResponse({"conflict": True, "note": note}, status_code=409)
+        if text == note.get("text"):
+            return {"note": note}
+        when = now_iso()
+        note["hist"] = (note.get("hist") or []) + [{"text": note.get("text", ""), "at": note.get("editedAt") or note.get("at"), "by": note.get("editedBy") or note.get("by")}]
+        note.update({"text": text, "editedAt": when, "editedBy": user, "rev": note.get("rev", 0) + 1})
+        cur.execute("UPDATE records SET doc=%s WHERE collection=%s AND seq=%s", (json.dumps(note, separators=(",", ":")), NOTES, seq))
+        bump_tasks(cur, user, NOTES)
+        audit(cur, user, "comment-edited", f"{note_id} on {_note_label(note)}: {short(text, 200)}")
+    return {"note": note}
+
+
+@app.post("/api/notes/{note_id}/delete")
+def delete_note(note_id: str, request: Request):
+    u = getattr(request.state, "user", None) or {}
+    user = current_user(request)
+    return retry_deadlock(lambda: _delete_note(user, u.get("role") == "admin" or bool(u.get("open")), note_id))
+
+
+def _delete_note(user, admin, note_id):
+    with conn_ctx() as c, c.cursor() as cur:
+        seq, note = _note_at(lock_tasks(cur, user, NOTES), note_id)
+        if not admin and note.get("by") != user:
+            c.rollback()
+            return JSONResponse({"error": "Only the person who wrote a comment, or an administrator, can delete it"}, status_code=403)
+        note.update({"deleted": True, "deletedAt": now_iso(), "deletedBy": user, "rev": note.get("rev", 0) + 1})
+        cur.execute("UPDATE records SET doc=%s WHERE collection=%s AND seq=%s", (json.dumps(note, separators=(",", ":")), NOTES, seq))
+        bump_tasks(cur, user, NOTES)
+        audit(cur, user, "comment-deleted", f"{note_id} on {_note_label(note)} (by {note.get('by')}): {short(note.get('text', ''), 200)}")
+    return {"note": note}
 
 
 # ------------------------------------------------------------------ End-of-life dates (endoflife.date, fetched by the server, v4.12)

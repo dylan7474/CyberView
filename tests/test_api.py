@@ -187,11 +187,12 @@ vw = sign_in("view2", "password-view2")[0]       # the earlier viewer had its pa
 check("tasks: editor reads people", ed.call("GET", "/api/people")[0] == 200 and "ed1" in [p["username"] for p in ed.call("GET", "/api/people")[1]])
 check("tasks: viewer reads people", vw.call("GET", "/api/people")[0] == 200)
 check("tasks: whole-collection save refused", ed.call("PUT", "/api/collections/gov_remediation", {"baseRevision": None, "data": []})[0] == 400)
-st, r = ed.call("POST", "/api/tasks", {"tasks": [{"type": "vuln", "title": "Patch <b>x</b>", "assets": [{"name": "host-1", "state": "open"}, {"name": "host-2"}], "team": "Platform",
+st, r = ed.call("POST", "/api/tasks", {"tasks": [{"type": "vuln", "title": "Patch <b>x</b>", "assets": [{"name": "host-1", "state": "open", "team": "Platform"}, {"name": "host-2"}], "team": "Platform",
                                                 "assignee": "view1", "due": "2026-12-01", "status": "Open", "ticket": "CHG1", "comment": "first", "id": "TASK-9999", "rev": 77,
                                                 "source": {"kind": "qid", "key": "123", "qids": ["123"]}}]})
 check("tasks: create", st == 200 and r["tasks"][0]["id"] == "TASK-0001" and r["tasks"][0]["rev"] == 1 and r["tasks"][0]["createdBy"] == "ed1", (st, r))
 t1 = r["tasks"][0] if st == 200 else {}
+check("tasks: each machine keeps the team it had when added (v4.29)", [a.get("team") for a in t1.get("assets", [])] == ["Platform", ""], t1.get("assets"))
 check("tasks: server owns id/rev and keeps the first comment", t1.get("comments", [{}])[0].get("text") == "first" and t1.get("comments")[0].get("by") == "ed1", t1)
 check("tasks: unknown assignee refused", ed.call("POST", "/api/tasks", {"task": {"title": "x", "assignee": "nobody"}})[0] == 400)
 check("tasks: bad status refused", ed.call("POST", "/api/tasks", {"task": {"title": "x", "status": "Done!"}})[0] == 400)

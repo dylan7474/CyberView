@@ -677,6 +677,8 @@ def clean_task(t, cur):
         ok = a.get("ok") if isinstance(a.get("ok"), dict) else {}
         assets.append({"name": _txt(a["name"], 255), "state": st, "at": _txt(a.get("at"), 40), "by": _txt(a.get("by"), 60),
                        "note": _txt(a.get("note"), 300), "movedTo": _txt(a.get("movedTo"), 20),
+                       # v4.29: the machine's team when it was added; it leaves the task when its team changes
+                       "team": _txt(a.get("team"), 40),
                        # what a scan or asset import must show for this asset to count as fixed, and the last results
                        "chk": {k: v for k, v in {"os": _txt(chk.get("os"), 200), "hw": _txt(chk.get("hw"), 200),
                                                   "qids": [_txt(q, 20) for q in (chk.get("qids") or [])[:200]]}.items() if v},

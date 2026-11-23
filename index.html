@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.28.0 · 20 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.29.0 · 23 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -970,7 +970,7 @@
                         <p id="edit-asset-os-note" class="text-[11px] text-gray-500 mt-1"></p></div>
                 </div>
                 <div class="flex justify-end space-x-3 mt-4 pt-4 border-t">
-                    <button onclick="app.closeModals()" class="px-4 py-2 border rounded">Cancel</button>
+                    <button onclick="app.cancelAssetEdit()" class="px-4 py-2 border rounded">Cancel</button>
                     <button onclick="app.saveAssetEdit()" class="px-4 py-2 bg-blue-600 text-white rounded">Save Changes</button>
                 </div>
             </div>
@@ -1940,20 +1940,24 @@
                 // tasks: two on P1 fixes, one overdue, one fixed awaiting scan, one end-of-life upgrade
                 const vd = await app.getVulnData(), byQid = new Map(); vd.dets.forEach(d => { if (!byQid.has(d.qid)) byQid.set(d.qid, []); byQid.get(d.qid).push(d); });
                 const top = [...byQid].filter(([q]) => (vd.qmap.get(q) || {}).rti?.length).sort((a, b) => b[1].length - a[1].length).slice(0, 4);
+                // v4.29: a task belongs to one team, like ＋ Track's "one task per team": the biggest team among the machines
+                const regBy = new Map(reg.map(r => [r.normalizedName, r]));
+                const ofTeam = (names) => { const c = new Map(); names.forEach(n => { const o = regBy.get(n)?.owner || 'Unknown'; c.set(o, (c.get(o) || 0) + 1); });
+                    const team = [...c].filter(([o]) => o !== 'Unknown').sort((a, b) => b[1] - a[1])[0]?.[0] || 'Unknown'; return { team, names: names.filter(n => (regBy.get(n)?.owner || 'Unknown') === team) }; };
                 const mk = (q, list, extra) => {
-                    const t = vd.qmap.get(q) || {}, names = [...new Set(list.map(d => d.asset))].slice(0, 25);
+                    const t = vd.qmap.get(q) || {}, own = ofTeam([...new Set(list.map(d => d.asset))]), names = own.names.slice(0, 25);
                     const source = { kind: 'qid', key: q, label: 'QID ' + q, qids: [q] };
-                    return { type: 'vuln', title: 'Fix: ' + t.title, source, priority: 'P1', priorityRank: 1, assignee: '', ticket: 'CHG-' + (4100 + Number(q) % 900), team: 'Platform',
-                        assets: names.map(n => ({ name: n, state: 'open', chk: RemediationVerifier.reasons({ source }, {}) })), comment: 'Sample task created for the demo.', ...extra };
+                    return { type: 'vuln', title: 'Fix: ' + t.title, source, priority: 'P1', priorityRank: 1, assignee: '', ticket: 'CHG-' + (4100 + Number(q) % 900), team: own.team,
+                        assets: names.map(n => ({ name: n, state: 'open', chk: RemediationVerifier.reasons({ source }, {}), team: own.team })), comment: 'Sample task created for the demo.', ...extra };
                 };
                 const tasks = [];
                 if (top[0]) tasks.push(mk(...top[0], { status: 'In progress', due: RemediationService.addDays(9) }));
                 if (top[1]) tasks.push(mk(...top[1], { status: 'Planned', due: RemediationService.addDays(-4) }));
                 if (top[2]) tasks.push(mk(...top[2], { status: 'Open', due: RemediationService.addDays(21) }));
-                const w12 = reg.filter(r => /2012 R2/.test(r.os));
+                const w12own = ofTeam(reg.filter(r => /2012 R2/.test(r.os)).map(r => r.normalizedName)), w12 = reg.filter(r => w12own.names.includes(r.normalizedName));
                 if (w12.length) tasks.push({ type: 'eol', title: 'Upgrade Windows Server 2012 R2 (no security fixes)', source: { kind: 'os', key: 'Windows Server 2012 R2', label: 'Windows Server 2012 R2', match: 'Windows Server 2012 R2' },
-                    priority: 'Unsupported', priorityRank: 0, assignee: '', ticket: 'CHG-4021', team: 'Platform', status: 'Planned', due: RemediationService.addDays(30),
-                    assets: w12.map(r => ({ name: r.normalizedName, state: 'open', chk: RemediationVerifier.reasons({ source: { kind: 'os' } }, r) })), comment: 'Sample end-of-life upgrade.' });
+                    priority: 'Unsupported', priorityRank: 0, assignee: '', ticket: 'CHG-4021', team: w12own.team, status: 'Planned', due: RemediationService.addDays(30),
+                    assets: w12.map(r => ({ name: r.normalizedName, state: 'open', chk: RemediationVerifier.reasons({ source: { kind: 'os' } }, r), team: w12own.team })), comment: 'Sample end-of-life upgrade.' });
                 try { await RemediationService.create(tasks); } catch (e) { console.error('[Demo] tasks', e); }
                 // exceptions: one in date (per finding), one expired (counts again, shows as a problem)
                 const tls = E.catalog.find(c => c.title.startsWith('TLS')), log4 = E.catalog.find(c => c.title.startsWith('SMB Signing'));
@@ -2819,7 +2823,7 @@
                 (ctx.tasks || []).forEach(t => {
                     if (t.type !== 'vuln' || !RemediationService.isOpen(t)) return;
                     const qs = (t.source && t.source.qids) || [];
-                    (t.assets || []).forEach(a => { if (!RemediationVerifier.live(a)) return; let s = tracked.get(a.name); if (!s) tracked.set(a.name, s = new Set()); qs.forEach(q => s.add(String(q))); });
+                    (t.assets || []).forEach(a => { if (!RemediationVerifier.live(a, t)) return; let s = tracked.get(a.name); if (!s) tracked.set(a.name, s = new Set()); qs.forEach(q => s.add(String(q))); });
                 });
                 const ex = ctx.vd.ex || this.exIndex();
                 const auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
@@ -3713,16 +3717,32 @@
             }
             static isOpen(t) { return this.OPEN.has(t.status); }
             static overdue(t) { return this.isOpen(t) && t.due && EolDates.days(t.due) < 0; }
+            // v4.29: a machine leaves a task when its team changes (reclassified). It is not deleted: the task lists it under
+            // "now in another team", and it comes back if its team is changed back. Compared with the team it had when it was
+            // added (a.team, v4.29 on); older tasks did not record that, so with the task's own team.
+            static _own = null;
+            static regRec(name) {
+                if (!this._own || this._own.rev !== StorageService.rev) this._own = { rev: StorageService.rev, m: new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r])) };
+                return this._own.m.get(name);
+            }
+            static gone(t, a) {
+                if (!a || a.state === 'moved' || a.state === 'excluded') return false;
+                const was = a.team || (t && t.team) || '';
+                if (!was || (!a.team && was === 'Unknown')) return false;
+                const r = this.regRec(a.name);
+                return !!(r && r.owner && r.owner !== was);
+            }
+            static counts(t, a) { return a.state !== 'moved' && a.state !== 'excluded' && !this.gone(t, a); }
             static progress(t) {
-                const live = (t.assets || []).filter(a => a.state !== 'moved' && a.state !== 'excluded');
+                const live = (t.assets || []).filter(a => this.counts(t, a));
                 const done = live.filter(a => a.state === 'fixed' || a.state === 'verified').length;
-                return { done, total: live.length, verified: live.filter(a => a.state === 'verified').length };
+                return { done, total: live.length, verified: live.filter(a => a.state === 'verified').length, gone: (t.assets || []).filter(a => this.gone(t, a)).length };
             }
             // Open tasks already covering this fix, by asset name -> task id.
             static trackedAssets(kind, key) {
                 const m = new Map();
                 this.list().filter(t => this.isOpen(t) && t.source?.kind === kind && t.source?.key === key)
-                    .forEach(t => (t.assets || []).forEach(a => { if (a.state !== 'moved' && a.state !== 'excluded') m.set(a.name, t.id); }));
+                    .forEach(t => (t.assets || []).forEach(a => { if (this.counts(t, a)) m.set(a.name, t.id); }));
                 return m;
             }
             static statusBadge(st) {
@@ -3834,7 +3854,7 @@
                 if (['qid', 'family', 'eolsw', 'cve'].includes(src.kind) && (src.qids || []).length) return { qids: src.qids };
                 return {};
             }
-            static live(a) { return a.state !== 'moved' && a.state !== 'excluded'; }
+            static live(a, t) { return RemediationService.counts(t, a); }      // v4.29: a reclassified machine no longer counts
 
             // results: Map(assetName -> { key: 'qids'|'os'|'hw', ok: bool, note, last }) per task asset. Saves changed tasks.
             static async apply(judge, label) {
@@ -3847,7 +3867,7 @@
                     let changed = false, back = false;
                     const notes = [];
                     for (const a of t.assets || []) {
-                        if (!this.live(a)) continue;
+                        if (!this.live(a, t)) continue;
                         const why = this.reasons(t, a);
                         const verdicts = judge(t, a, why);           // [{key, ok|null, note, last}]  ok null = no proof either way
                         if (!verdicts.length) continue;
@@ -3869,7 +3889,7 @@
                         if (done && a.state !== 'verified') { a.state = 'verified'; a.at = now; a.by = 'import'; a.note = verdicts.map(v => v.note).filter(Boolean).join('; '); sum.verified++; changed = true; }
                     }
                     if (!changed) continue;
-                    const live = t.assets.filter(a => this.live(a));
+                    const live = t.assets.filter(a => this.live(a, t));
                     let comment = '';
                     if (live.length && live.every(a => a.state === 'verified') && t.status !== 'Verified') {
                         t.status = 'Verified'; t.reopened = false; sum.closed.push(t.id);
@@ -3947,7 +3967,7 @@
                     const k = (t.source?.kind || '') + '|' + (t.source?.key || '');
                     if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(t);
                     (t.source?.qids || []).forEach(q => { if (!byQid.has(q)) byQid.set(q, []); byQid.get(q).push(t); });
-                    (t.assets || []).forEach(a => { if (!this.live(a)) return; if (!byAsset.has(a.name)) byAsset.set(a.name, []); byAsset.get(a.name).push(t); });
+                    (t.assets || []).forEach(a => { if (!this.live(a, t)) return; if (!byAsset.has(a.name)) byAsset.set(a.name, []); byAsset.get(a.name).push(t); });
                 });
                 return { byKey, byQid, byAsset };
             }
@@ -3956,7 +3976,7 @@
                 const uniq = [...new Map((tasks || []).map(t => [t.id, t])).values()];
                 if (!uniq.length) return '';
                 const names = assetNames ? new Set(assetNames) : null;
-                const covered = names ? new Set(uniq.flatMap(t => (t.assets || []).filter(a => this.live(a) && names.has(a.name)).map(a => a.name))).size : 0;
+                const covered = names ? new Set(uniq.flatMap(t => (t.assets || []).filter(a => this.live(a, t) && names.has(a.name)).map(a => a.name))).size : 0;
                 const t = uniq[0], over = RemediationService.overdue(t);
                 const tip = uniq.map(x => `${x.id} · ${x.status} · due ${x.due || '-'}${x.assignee ? ' · ' + x.assignee : ''}`).join('\n') + (names ? `\n${covered} of ${names.size} assets tracked` : '');
                 return `<button class="text-[10px] font-semibold rounded border px-1 py-0.5 whitespace-nowrap ${over ? 'border-red-400 text-red-800 bg-red-50' : 'border-teal-400 text-teal-800 bg-teal-50'}" data-id="${esc(t.id)}" onclick="event.stopPropagation(); app.openTask(this.dataset.id)" title="${esc(tip)}">${over ? '⚠' : '✓'} ${esc(t.id)}${uniq.length > 1 ? ' +' + (uniq.length - 1) : ''}${names && covered < names.size ? ` <span class="font-normal">${covered}/${names.size}</span>` : ''}</button>`;
@@ -4249,7 +4269,7 @@
                 if (!AutomoxService.match()) return [];
                 const ids = new Set();
                 RemediationService.list().filter(t => RemediationService.isOpen(t)).forEach(t => (t.assets || []).forEach(a => {
-                    if (a.state !== 'open') return;
+                    if (a.state !== 'open' || RemediationService.gone(t, a)) return;
                     if (!(RemediationVerifier.reasons(t, a).qids || []).length) return;
                     const d = AutomoxService.devFor(a.name); if (d) ids.add(d.id);
                 }));
@@ -4271,7 +4291,7 @@
                     if (!['Open', 'Planned', 'In progress'].includes(t0.status)) continue;
                     const t = structuredClone(t0); let changed = false; const notes = [];
                     for (const a of t.assets || []) {
-                        if (a.state !== 'open') continue;
+                        if (a.state !== 'open' || RemediationService.gone(t, a)) continue;
                         const qids = RemediationVerifier.reasons(t, a).qids || [];
                         if (!qids.length) continue;
                         const dev = AutomoxService.devFor(a.name); if (!dev) continue;
@@ -4302,7 +4322,7 @@
                         notes.push(`${a.name}: ${a.note}`); sum.fixed++; changed = true;
                     }
                     if (!changed) continue;
-                    const live = t.assets.filter(a => RemediationVerifier.live(a));
+                    const live = t.assets.filter(a => RemediationVerifier.live(a, t));
                     const detail = notes.slice(0, 5).join('; ') + (notes.length > 5 ? '…' : '');
                     let comment = detail ? `${label}: ${detail}` : '';
                     if (live.length && live.every(a => a.state === 'fixed' || a.state === 'verified')) {
@@ -7311,7 +7331,9 @@
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 const idx = reg.findIndex(r => r.normalizedName === this.registerState.editingAsset);
                 if (idx > -1) {
-                    reg[idx].owner = document.getElementById('edit-asset-owner').value;
+                    const ownNew = document.getElementById('edit-asset-owner').value;
+                    if (ownNew !== reg[idx].owner) { reg[idx].ownerAt = new Date().toISOString(); reg[idx].ownerBy = RemediationService.me(); }      // v4.29: shown in tasks it left
+                    reg[idx].owner = ownNew;
                     reg[idx].service = document.getElementById('edit-asset-service').value;
                     reg[idx].status = document.getElementById('edit-asset-status').value;
                     reg[idx].environment = document.getElementById('edit-asset-env').value;
@@ -7330,6 +7352,7 @@
                     if (this.currentView === 'register') this.renderRegister();
                     else if (this.currentView === 'inspect') this.renderInspect();
                     else this.switchView(this.currentView || 'dashboard');
+                    if (this._tkReturn) { const d = this._tkReturn; this._tkReturn = null; this.openTask(d.t.id, d); }
                 }
             }
 
@@ -7510,7 +7533,7 @@
                         if (k === 'os') Lifecycle.setOs(r, val.startsWith('(back to') ? '' : val);
                         else if (k === 'tier') StatusEngine.setTier(r, (val.match(/^Tier ?(\d[AB]?)/) || [])[1] || 0);
                         else if (k === 'patchNA') { if (/^Cannot/.test(val)) r.patchNA = true; else delete r.patchNA; }
-                        else r[k] = val;
+                        else { if (k === 'owner' && r.owner !== val) { r.ownerAt = new Date().toISOString(); r.ownerBy = RemediationService.me(); } r[k] = val; }
                     });
                     n++;
                 });
@@ -8131,7 +8154,7 @@
                     const p = RemediationService.progress(t), pct = p.total ? Math.round(p.done / p.total * 100) : 0;
                     return `<tr class="cursor-pointer hover:bg-blue-50 align-top ${RemediationService.overdue(t) ? 'bg-red-50/40' : ''}" data-id="${esc(t.id)}" onclick="app.openTask(this.dataset.id)">
                         <td class="px-3 py-2" onclick="event.stopPropagation()"><input type="checkbox" class="write-only" data-id="${esc(t.id)}" ${this.remSel.has(t.id) ? 'checked' : ''} onchange="app.remToggleSel(this.dataset.id, this.checked)"></td>
-                        <td class="px-3 py-2 max-w-[380px]"><span class="font-mono text-xs text-gray-500">${esc(t.id)}</span> ${t.reopened ? '<span class="text-[10px] font-bold text-red-800 border border-red-400 bg-red-50 rounded px-1">⚠ REOPENED</span> ' : ''}<span class="font-medium text-gray-800">${esc(t.title)}</span><div class="text-[11px] text-gray-500">${esc(typeLabel[t.type] || t.type)}${t.source?.label ? ' · ' + esc(t.source.label) : ''}${t.splitFrom ? ' · split from ' + esc(t.splitFrom) : ''}${(t.comments || []).length ? ` · 💬 ${t.comments.length}` : ''}</div></td>
+                        <td class="px-3 py-2 max-w-[380px]"><span class="font-mono text-xs text-gray-500">${esc(t.id)}</span> ${t.reopened ? '<span class="text-[10px] font-bold text-red-800 border border-red-400 bg-red-50 rounded px-1">⚠ REOPENED</span> ' : ''}<span class="font-medium text-gray-800">${esc(t.title)}</span><div class="text-[11px] text-gray-500">${esc(typeLabel[t.type] || t.type)}${t.source?.label ? ' · ' + esc(t.source.label) : ''}${t.splitFrom ? ' · split from ' + esc(t.splitFrom) : ''}${(t.comments || []).length ? ` · 💬 ${t.comments.length}` : ''}${p.gone ? ` · <span class="text-gray-700" title="Their team was changed, so they no longer count in this task">⇄ ${p.gone} machine${p.gone === 1 ? '' : 's'} now in another team</span>` : ''}</div></td>
                         <td class="px-3 py-2 text-xs">${esc(t.team || '-')}</td>
                         <td class="px-3 py-2 text-xs">${t.assignee ? esc(t.assignee) : '<span class="text-gray-400">Unassigned</span>'}</td>
                         <td class="px-3 py-2 text-xs">${esc(RemediationService.prioLabel(t))}</td>
@@ -8220,7 +8243,7 @@
                 const head = ['ID', 'Title', 'Type', 'Source', 'Team', 'Assignee', 'Priority', 'Due', 'Overdue', 'Status', 'Assets', 'Fixed', 'Asset names', 'Ticket', 'Created', 'Created by', 'Updated', 'Updated by', 'Last comment'];
                 const rows = list.map(t => { const p = RemediationService.progress(t), c = (t.comments || []).slice(-1)[0];
                     return [t.id, t.title, t.type, t.source?.label || '', t.team, t.assignee, RemediationService.prioLabel(t), t.due, RemediationService.overdue(t) ? 'yes' : '', t.status, p.total, p.done,
-                        (t.assets || []).filter(a => a.state !== 'moved').map(a => `${a.name} (${a.state})`).join('; '), t.ticket, t.createdAt, t.createdBy, t.updatedAt, t.updatedBy, c ? `${c.by || ''} ${c.at}: ${c.text}` : ''].map(safe); });
+                        (t.assets || []).filter(a => a.state !== 'moved').map(a => RemediationService.gone(t, a) ? `${a.name} (left: now ${RemediationService.regRec(a.name).owner})` : `${a.name} (${a.state})`).join('; '), t.ticket, t.createdAt, t.createdBy, t.updatedAt, t.updatedBy, c ? `${c.by || ''} ${c.at}: ${c.text}` : ''].map(safe); });
                 const blob = new Blob(['﻿' + Papa.unparse([head, ...rows])], { type: 'text/csv;charset=utf-8' });
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = App.cfCsvName(`remediation_tasks_${new Date().toISOString().slice(0, 10)}.csv`); a.click();
                 setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -8286,9 +8309,9 @@
                     : `<label class="block"><span class="text-xs font-semibold text-gray-600">Team</span> <select id="tk-team" class="border-gray-300 rounded text-sm">${opts.map(o => `<option ${o === (list[0]?.[0] || 'Unknown') ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`;
             }
 
-            async openTask(id) {
+            async openTask(id, draft = null) {
                 const $ = (i) => document.getElementById(i);
-                const t = RemediationService.get(id);
+                const t = draft?.t || RemediationService.get(id);
                 if (!t) return;
                 const people = await RemediationService.people();
                 const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
@@ -8301,6 +8324,16 @@
                 const assigneeOpts = [['', 'Unassigned'], ...people.map(p => [p, p])];
                 if (t.assignee && !people.includes(t.assignee)) assigneeOpts.push([t.assignee, t.assignee + ' (no longer a user)']);
                 const p = RemediationService.progress(t);
+                // v4.29: ✎ edits the machine without leaving the task; a machine moved to another team drops out (listed below).
+                const pen = (n) => reg.has(n) ? `<button type="button" class="write-only ml-1 px-1 rounded text-gray-400 hover:text-indigo-800 hover:bg-indigo-50" data-n="${esc(n)}" title="Edit this machine: team, service, tier, exposure, OS" aria-label="Edit ${esc(n)}" onclick="app.tkEditAsset(this.dataset.n)">✎</button>` : '';
+                const goneL = (t.assets || []).filter(a => RemediationService.gone(t, a));
+                const goneBy = new Map(); goneL.forEach(a => { const o = reg.get(a.name)?.owner || '?'; goneBy.set(o, (goneBy.get(o) || 0) + 1); });
+                const whenD = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                const goneHTML = goneL.length ? `<details class="mt-2 border rounded bg-gray-50"><summary class="cursor-pointer px-2 py-1.5 text-xs font-semibold text-gray-700">⇄ ${fmtNum(goneL.length)} machine${goneL.length === 1 ? '' : 's'} now in another team (${[...goneBy].map(([o, n]) => esc(o) + ' ' + n).join(', ')}): no longer part of this task</summary>
+                    <p class="px-2 text-[11px] text-gray-500">Their team was changed after they were added, so they do not count here or in ${esc(t.team || 'this team')}'s figures. Change a machine's team back and it returns to the task.</p>
+                    <table class="min-w-full text-xs mt-1"><thead class="text-gray-500"><tr><th class="px-2 py-1 text-left">Asset</th><th class="px-2 py-1 text-left">Was</th><th class="px-2 py-1 text-left">Now</th><th class="px-2 py-1 text-left">Changed</th><th class="px-2 py-1 text-left">State when it left</th></tr></thead><tbody class="divide-y">
+                    ${goneL.map(a => { const r = reg.get(a.name) || {}; return `<tr><td class="px-2 py-1 font-mono whitespace-nowrap"><button class="underline decoration-dotted" data-n="${esc(a.name)}" onclick="app.closeTask(); app.openAssetDetail(this.dataset.n)">${esc(a.name)}</button>${pen(a.name)}</td><td class="px-2 py-1">${esc(a.team || t.team || '-')}</td><td class="px-2 py-1 font-semibold">${esc(r.owner || '-')}</td><td class="px-2 py-1 text-gray-600">${r.ownerAt ? esc(whenD(r.ownerAt)) + (r.ownerBy ? ' by ' + esc(r.ownerBy) : '') : '<span class="text-gray-400" title="Changed by an import, or before v4.29 recorded who changed a team">-</span>'}</td><td class="px-2 py-1 text-gray-600">${esc(a.state === 'fixed' ? 'fixed (awaiting scan)' : a.state)}</td></tr>`; }).join('')}
+                    </tbody></table></details>` : '';
                 const stateSel = (a, i) => (a.state === 'moved' || a.state === 'verified')
                     ? `<span class="text-xs ${a.state === 'verified' ? 'text-green-800 font-semibold' : 'text-gray-500'}">${a.state === 'verified' ? '✔ verified' : '→ moved to ' + esc(a.movedTo || '')}</span>`
                     : `<select class="tk-state border-gray-300 rounded text-xs py-0.5" data-i="${i}">${['open', 'fixed', 'excluded'].map(s => `<option value="${s}" ${a.state === s ? 'selected' : ''}>${s === 'fixed' ? 'fixed (awaiting scan)' : s}</option>`).join('')}</select>`;
@@ -8319,27 +8352,44 @@
                     <div><div class="flex justify-between items-center mb-1"><span class="text-xs font-semibold text-gray-600">Assets: ${fmtNum(p.done)} of ${fmtNum(p.total)} fixed${p.verified ? `, ${fmtNum(p.verified)} verified by scan` : ''}</span>
                         <span class="write-only text-xs flex gap-2 items-center">Selected: <button class="text-blue-700 underline" onclick="app.tkSetSelected('fixed')">mark fixed</button><button class="text-blue-700 underline" onclick="app.tkSetSelected('open')">reopen</button><button class="text-blue-700 underline" onclick="app.tkSplit()">split into a new task</button></span></div>
                         <div class="max-h-64 overflow-y-auto border rounded"><table class="min-w-full text-xs"><thead class="bg-gray-50 text-gray-500 sticky top-0"><tr><th class="px-2 py-1 w-6"><input type="checkbox" onchange="document.querySelectorAll('.tk-pick').forEach(c=>c.checked=this.checked)"></th><th class="px-2 py-1 text-left">Asset</th><th class="px-2 py-1 text-left">Owner</th><th class="px-2 py-1 text-left">State</th></tr></thead><tbody class="divide-y">
-                        ${(t.assets || []).map((a, i) => `<tr class="${a.state === 'moved' ? 'opacity-60' : ''}"><td class="px-2 py-1">${a.state === 'moved' ? '' : `<input type="checkbox" class="tk-pick" data-i="${i}">`}</td><td class="px-2 py-1 font-mono"><button class="underline decoration-dotted" data-n="${esc(a.name)}" onclick="app.closeTask(); app.openAssetDetail(this.dataset.n)">${esc(a.name)}</button></td><td class="px-2 py-1">${esc(reg.get(a.name)?.owner || '-')}</td><td class="px-2 py-1">${stateSel(a, i)}${a.note ? `<div class="text-[10px] text-gray-500">${esc(a.note)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="px-2 py-3 text-gray-500 italic">No assets.</td></tr>'}
-                        </tbody></table></div></div>
+                        ${(t.assets || []).map((a, i) => [a, i]).filter(([a]) => !RemediationService.gone(t, a)).map(([a, i]) => `<tr class="${a.state === 'moved' ? 'opacity-60' : ''}"><td class="px-2 py-1">${a.state === 'moved' ? '' : `<input type="checkbox" class="tk-pick" data-i="${i}">`}</td><td class="px-2 py-1 font-mono whitespace-nowrap"><button class="underline decoration-dotted" data-n="${esc(a.name)}" onclick="app.closeTask(); app.openAssetDetail(this.dataset.n)">${esc(a.name)}</button>${pen(a.name)}</td><td class="px-2 py-1">${esc(reg.get(a.name)?.owner || '-')}</td><td class="px-2 py-1">${stateSel(a, i)}${a.note ? `<div class="text-[10px] text-gray-500">${esc(a.note)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="px-2 py-3 text-gray-500 italic">No assets.</td></tr>'}
+                        </tbody></table></div>${goneHTML}</div>
                     <div><span class="text-xs font-semibold text-gray-600">Comments</span>
                         <div class="space-y-2 mt-1">${(t.comments || []).map(c => `<div class="bg-gray-50 border rounded p-2"><p class="text-[11px] text-gray-500">${esc(c.by || (RemediationService.server() ? 'someone' : 'you'))} · ${esc(when(c.at))}</p><p class="whitespace-pre-wrap break-words">${esc(c.text)}</p></div>`).join('') || '<p class="text-gray-500 italic text-xs">No comments yet.</p>'}</div>
                         <textarea id="tk-comment" rows="2" maxlength="4000" placeholder="Add a comment (saved with Save)" class="write-only w-full border rounded p-2 mt-2"></textarea></div>`;
                 $('task-save').textContent = 'Save';
+                if (draft?.comment) $('tk-comment').value = draft.comment;
                 this.taskErr('');
                 $('modal-task').classList.remove('hidden');
+            }
+            // v4.29: edit a machine from the task. The task stays open; unsaved changes in it are kept, and it redraws after
+            // the save (a machine moved to another team drops out at once).
+            tkEditAsset(name) {
+                if (!this.taskCtx || this.taskCtx.mode !== 'edit') return;
+                this._tkReturn = { t: this.tkDraft(), comment: document.getElementById('tk-comment')?.value || '' };
+                this.editAsset(name);
+            }
+            cancelAssetEdit() {
+                document.getElementById('modal-edit-asset').classList.add('hidden');
+                this._tkReturn = null;
             }
             tkSetSelected(state) { document.querySelectorAll('.tk-pick').forEach(c => { if (!c.checked) return; const s = document.querySelector(`.tk-state[data-i="${c.dataset.i}"]`); if (s) s.value = state; }); }
 
             // The edited copy of the open task, from the dialog fields.
-            tkEdited() {
+            // The task as the form shows it now (not saved).
+            tkDraft() {
                 const $ = (i) => document.getElementById(i);
                 const t = structuredClone(RemediationService.get(this.taskCtx.id));
                 const by = RemediationService.me(), now = new Date().toISOString();
                 t.title = $('tk-title').value.trim(); t.status = $('tk-status').value; t.team = $('tk-team').value; t.due = $('tk-due').value; t.ticket = $('tk-ticket').value.trim();
                 if ($('tk-assignee')) t.assignee = $('tk-assignee').value;
                 document.querySelectorAll('.tk-state').forEach(s => { const a = t.assets[+s.dataset.i]; if (a && a.state !== s.value) { a.state = s.value; a.at = now; a.by = by; } });
+                return t;
+            }
+            tkEdited() {
+                const t = this.tkDraft();
                 // Every asset done by hand: the task waits for the next scan (unless someone chose another status just now).
-                const live = t.assets.filter(a => RemediationVerifier.live(a)), orig = RemediationService.get(t.id);
+                const live = t.assets.filter(a => RemediationVerifier.live(a, t)), orig = RemediationService.get(t.id);
                 if (live.length && live.every(a => a.state === 'fixed' || a.state === 'verified') && ['Open', 'Planned', 'In progress'].includes(t.status) && t.status === orig.status)
                     t.status = live.every(a => a.state === 'verified') ? 'Verified' : 'Fixed, awaiting scan';
                 return t;
@@ -8368,7 +8418,7 @@
                         const base = { type: ctx.spec.type, title, source: ctx.spec.source, priority: ctx.spec.priority || '', priorityRank: ctx.spec.priorityRank ?? 9,
                             assignee: $('tk-assignee') ? $('tk-assignee').value : '', due: $('tk-due').value, status: $('tk-status').value, ticket: $('tk-ticket').value.trim(), comment: $('tk-comment').value };
                         const chkOf = (n) => ctx.spec.chkFor ? ctx.spec.chkFor(n) : (ctx.spec.chk || RemediationVerifier.reasons({ source: ctx.spec.source }, {}));
-                        const asA = (list) => list.map(a => ({ name: a.name, state: 'open', chk: chkOf(a.name) }));
+                        const asA = (list) => list.map(a => ({ name: a.name, state: 'open', chk: chkOf(a.name), team: a.owner || 'Unknown' }));
                         const perTeam = $('tk-perteam') && $('tk-perteam').checked;
                         let tasks;
                         if (perTeam) {
@@ -8389,7 +8439,7 @@
                         // A task closed as "Risk accepted" needs an exception record (approver, expiry), or its findings keep counting.
                         if (t.status === 'Risk accepted' && t.type === 'vuln') {
                             StorageService.toast('Record the exception (approver, review and expiry dates): until then the findings still count.');
-                            this.openRiskModal((t.assets || []).filter(a => RemediationVerifier.live(a)).map(a => a.name), 'task', [], (t.source && t.source.qids) || []);
+                            this.openRiskModal((t.assets || []).filter(a => RemediationVerifier.live(a, t)).map(a => a.name), 'task', [], (t.source && t.source.qids) || []);
                         }
                     }
                 } catch (e) {
@@ -8404,10 +8454,10 @@
                 const idx = [...document.querySelectorAll('.tk-pick')].filter(c => c.checked).map(c => +c.dataset.i);
                 if (!idx.length) { this.taskErr('Tick the assets to split out first.'); return; }
                 const t = this.tkEdited();
-                if (idx.length >= t.assets.filter(a => a.state !== 'moved').length) { this.taskErr('Leave at least one asset in this task.'); return; }
+                if (idx.length >= t.assets.filter(a => a.state !== 'moved' && !RemediationService.gone(t, a)).length) { this.taskErr('Leave at least one asset in this task.'); return; }
                 try {
                     const [nt] = await RemediationService.create([{ type: t.type, title: t.title + ' (split)', source: t.source, priority: t.priority, priorityRank: t.priorityRank, team: t.team, assignee: t.assignee,
-                        due: t.due, status: t.status === 'Verified' ? 'Open' : t.status, ticket: t.ticket, splitFrom: t.id, assets: idx.map(i => ({ name: t.assets[i].name, state: t.assets[i].state === 'verified' ? 'verified' : 'open', chk: t.assets[i].chk, ok: t.assets[i].ok })),
+                        due: t.due, status: t.status === 'Verified' ? 'Open' : t.status, ticket: t.ticket, splitFrom: t.id, assets: idx.map(i => ({ name: t.assets[i].name, state: t.assets[i].state === 'verified' ? 'verified' : 'open', chk: t.assets[i].chk, ok: t.assets[i].ok, team: t.assets[i].team || t.team })),
                         comment: `Split from ${t.id}.` }]);
                     const now = new Date().toISOString(), by = RemediationService.me();
                     idx.forEach(i => { Object.assign(t.assets[i], { state: 'moved', movedTo: nt.id, at: now, by }); });
@@ -8516,7 +8566,7 @@
                 const tasks = RemediationService.list().filter(t => (t.assets || []).some(a => a.name === name && a.state !== 'moved'));
                 const rows = tasks.sort((a, b) => (RemediationService.isOpen(b) - RemediationService.isOpen(a)) || String(a.due).localeCompare(String(b.due))).map(t => {
                     const a = t.assets.find(x => x.name === name);
-                    return `<tr class="cursor-pointer hover:bg-blue-50" data-id="${esc(t.id)}" onclick="app.openTask(this.dataset.id)"><td class="px-3 py-1.5 font-mono text-xs">${esc(t.id)}</td><td class="px-3 py-1.5">${esc(t.title)}</td><td class="px-3 py-1.5">${RemediationService.statusBadge(t.status)}</td><td class="px-3 py-1.5 text-xs">${RemediationService.dueCell(t)}</td><td class="px-3 py-1.5 text-xs">${esc(a.state)}${a.note ? `<div class="text-[10px] text-gray-500">${esc(a.note)}</div>` : ''}</td></tr>`;
+                    return `<tr class="cursor-pointer hover:bg-blue-50" data-id="${esc(t.id)}" onclick="app.openTask(this.dataset.id)"><td class="px-3 py-1.5 font-mono text-xs">${esc(t.id)}</td><td class="px-3 py-1.5">${esc(t.title)}</td><td class="px-3 py-1.5">${RemediationService.statusBadge(t.status)}</td><td class="px-3 py-1.5 text-xs">${RemediationService.dueCell(t)}</td><td class="px-3 py-1.5 text-xs">${RemediationService.gone(t, a) ? `<span class="text-gray-600">⇄ left this task: now ${esc(RemediationService.regRec(name).owner)}</span>` : esc(a.state)}${a.note ? `<div class="text-[10px] text-gray-500">${esc(a.note)}</div>` : ''}</td></tr>`;
                 }).join('');
                 return `<div class="bg-white rounded-lg shadow border p-5"><h4 class="font-semibold text-gray-800 mb-2">Remediation tasks <span class="font-normal text-gray-400 text-sm">(${fmtNum(tasks.length)})</span></h4>${rows
                     ? `<table class="min-w-full text-sm"><thead class="text-xs text-gray-500 bg-gray-50"><tr><th class="px-3 py-1.5 text-left">Task</th><th class="px-3 py-1.5 text-left">Title</th><th class="px-3 py-1.5 text-left">Status</th><th class="px-3 py-1.5 text-left">Due</th><th class="px-3 py-1.5 text-left">This asset</th></tr></thead><tbody class="divide-y">${rows}</tbody></table>`

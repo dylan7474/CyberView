@@ -75,7 +75,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.29.0 · 23 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.30.0 · 23 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -285,7 +285,7 @@
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Team</label><select id="reg-f-owner" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Service</label><select id="reg-f-service" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Services</option></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Environment</label><select id="reg-f-env" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Environments</option><option value="Production">Production</option><option value="Non-Prod">Non-Prod</option><option value="DR">DR</option></select></div>
-                    <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label><select id="reg-f-status" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Statuses</option><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending</option></select></div>
+                    <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label><select id="reg-f-status" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Statuses</option><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending</option><option value="NOTSEEN">🕳 Not seen (maybe gone)</option></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Exposure</label><select id="reg-f-exposure" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Exposures</option><option value="Internal">Internal</option><option value="DMZ">DMZ</option><option value="Internet Facing">Internet Facing</option><option value="Unknown">Unknown</option></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Tier</label><select id="reg-f-crit" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"></select></div>
                     <div>
@@ -303,6 +303,7 @@
                     <div id="reg-count" class="text-xs text-gray-500 pb-2 ml-auto"></div>
                 </div>
 
+                <div id="reg-notseen" class="hidden mb-3"></div>
                 <div id="reg-bulk" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm">
                     <div class="flex items-center gap-3 mb-2"><strong id="reg-bulk-count"></strong><span class="text-xs text-gray-600">Choose only the fields to change; &ldquo;no change&rdquo; leaves a field alone.</span><button onclick="app.clearRegisterSelection()" class="text-xs text-blue-700 underline ml-auto">Clear selection</button></div>
                     <div class="flex flex-wrap gap-3 items-end">
@@ -1272,6 +1273,16 @@
                 this._peek[key] = { rev: this.rev, v };
                 return v;
             }
+            // v4.30: the register without Retired machines (decommissioned). Every count, report, list and new task uses this;
+            // the Asset Register, the sync's name matching and editing use the whole register (peek), so a retired machine
+            // stays retired after a sync and comes back when its status is changed.
+            static live() {
+                const all = this.peek(this.KEYS.ASSET_REGISTER);
+                if (!this._live || this._live.src !== all) this._live = { src: all, v: all.filter(r => r.status !== 'Retired'), names: new Set(all.filter(r => r.status === 'Retired').map(r => r.normalizedName)) };
+                return this._live.v;
+            }
+            static isRetired(name) { this.live(); return this._live.names.has(name); }
+            static retiredKey() { this.live(); return this._live.key ??= [...this._live.names].sort().join('\n'); }
             static STRICT = /[?&]strict\b/.test(location.search);
             static deepFreeze(o) { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); Object.values(o).forEach(x => this.deepFreeze(x)); } return o; }
 
@@ -1751,6 +1762,7 @@
                     if (m.osk === 'w2016' && i % 2 === 0) m.axk = 'w2019';                       // different system
                     else if (m.osk === 'rhel86' && i % 3 === 0) m.axk = 'rhel810';                // different release
                     else if (m.osk === 'u2204' && m.service === 'Containers' && i % 4 === 0) { m.os = 'Linux 2.6'; m.life = ''; }   // Qualys could not tell
+                    if (m.inRegister && !m.appliance && i % 53 === 17) { m.gone = true; m.scanAgo = 65 + (i % 50); }      // v4.30: switched off months ago, still in Qualys (Not seen)
                 });
                 // a handful Qualys finds that nobody has registered yet (they land in the Review Queue as Unrecognised)
                 ['lon1-web25', 'man1-k8s17', 'edi1-test09', 'CORP-L-25-7731', 'lon1-tmp-build01', 'man1-db15', '10.21.9.44', 'edi1-relay04'].forEach((s, i) => {
@@ -1844,11 +1856,12 @@
                 const at = new Date().toISOString(), hosts = [];
                 let n = 0;
                 pkg.hosts.forEach(h => {
+                    if (h.gone) return;                                      // switched off: no new scans
                     const rows = h.d.filter(r => Q.has(String(r[0]))).map(r => (r[3] !== 'FIXED' && (++n + S.cveRuns) % 6 === 0) ? [...r.slice(0, 3), 'FIXED', ...r.slice(4, 8), at, r[9], at] : r);
                     if (rows.length) hosts.push({ ...h, n: h.n, scan: at, d: rows });
                 });
                 const template = hosts.find(h => h.d.length)?.d[0];
-                if (template) pkg.hosts.filter(h => !hosts.some(x => x.a === h.a) && /Cloud Agent/.test(h.tags || '')).slice(S.cveRuns * 2 % 7, S.cveRuns * 2 % 7 + 2)
+                if (template) pkg.hosts.filter(h => !h.gone && !hosts.some(x => x.a === h.a) && /Cloud Agent/.test(h.tags || '')).slice(S.cveRuns * 2 % 7, S.cveRuns * 2 % 7 + 2)
                     .forEach(h => hosts.push({ ...h, scan: at, d: [[template[0], 'Confirmed', template[2], 'NEW', template[4], template[5], template[6], at, at, 1, '']] }));
                 return { at, cves: [...want], kb: 'ok', kbQids: kbQ, qids: pkg.qids.filter(q => Q.has(String(q.qid))), hosts, seconds: 1.2 };
             }
@@ -1868,7 +1881,7 @@
                     const mx = Math.max(0, ...open.map(r => r[6]));
                     const cr = m.tier === 1 ? 5 : (m.tier === 2 ? 3 : (m.tier === 3 ? 2 : 3));
                     return { a: m.id, n: m.fqdn, os: m.os, tags: m.team ? 'Cloud Agent,' + m.team : 'Cloud Agent', ip: m.ip, tr: Math.min(1000, Math.round(mx * (cr + 2) * 1.3 + open.length * 2)), cr,
-                        scan: new Date(this.now() - m.scanAgo * dayMs).toISOString(), d: rows };
+                        scan: new Date(this.now() - m.scanAgo * dayMs).toISOString(), d: rows, gone: !!m.gone };
                 });
                 const qids = E.catalog.map(c => ({ qid: c.qid, title: c.title, sev: c.sev, solution: c.solution, threat: 'Sample data: a made-up check for the CyberView demo.', category: c.cat,
                     rti: c.rti, patchable: c.patch, published: c.pub.toISOString(), patchReleased: '', cvss: 0, cveCount: c.cves.length, cves: c.cves }));
@@ -1889,12 +1902,12 @@
                     if (R() < 0.07) { R(); return; }                                  // no agent on this one
                     const stale = R() < 0.05, fail = R() < 0.12, reboot = R() < 0.08, did = String(5000 + i);
                     devices.push({ id: did, name: m.fqdn, display: m.short, os: (this.AXOS[m.axk || m.osk] || ['', m.os, ''])[1], osFamily: (this.AXOS[m.axk || m.osk] || [m.fam.startsWith('win') ? 'Windows' : 'Linux'])[0], osVersion: (this.AXOS[m.axk || m.osk] || ['', '', ''])[2], serial: '', ips: [m.ip],
-                        agent: '2.4.33', lastSeen: new Date(now - (stale ? 12 : R()) * dayMs).toISOString(), lastDisconnect: '', connected: !stale, needsReboot: reboot, pending: 0, upToDate: false,
+                        agent: '2.4.33', lastSeen: new Date(now - (m.gone ? m.scanAgo + 2 : stale ? 12 : R()) * dayMs).toISOString(), lastDisconnect: '', connected: !stale && !m.gone, needsReboot: reboot, pending: 0, upToDate: false,
                         needsAttention: fail, lastLoggedIn: '', nextPatch: '', compliant: !fail,
                         policies: [{ id: i % 23 === 0 ? 'px' : (i % 11 === 0 ? 'pm' : 'pw' + (i % 7)), name: '', type: 'patch', compliant: !fail, lastRun: new Date(now - 2 * dayMs).toISOString(), pendingCount: null, willReboot: reboot },
                             { id: 'p2', name: 'Required agents', type: 'required_software', compliant: true, lastRun: new Date(now - 6 * dayMs).toISOString(), pendingCount: null, willReboot: false }]
                             .filter(p => !(i % 19 === 7 && p.type === 'patch')),          // a few machines in no patch policy at all (⊘ on Patch Coverage)
-                        deviceStatus: stale ? 'disconnected' : 'ready', agentStatus: stale ? 'disconnected' : 'connected', group: '1', tags: [], created: '' });
+                        deviceStatus: stale || m.gone ? 'disconnected' : 'ready', agentStatus: stale || m.gone ? 'disconnected' : 'connected', group: '1', tags: [], created: '' });
                     (byId.get(m.id).d || []).forEach(r => {
                         const q = cat.get(r[0]); if (!q.patch) return;
                         const pk = (q.title.match(/Update for ([\w.+-]+)/i) || [])[1];
@@ -2255,7 +2268,7 @@
                 if (!D || !(D.devices || []).length) return null;                // no Automox data: nothing to compare
                 const m = AutomoxService.match(), out = [], exO = StatusEngine.exIndex(), show = RiskView.on();
                 this._osHidden = { machines: 0, findings: 0, expiring: 0 };
-                StorageService.peek(StorageService.KEYS.ASSET_REGISTER).forEach(r => {
+                StorageService.live().forEach(r => {
                     if (r.unrecognised) return;
                     const acc = RiskView.machine(r, exO);
                     const x = m.byAsset.get(r.normalizedName); if (!x || !x.dev) return;
@@ -2289,7 +2302,7 @@
             // Machines accepted as a whole, by name.
             static machineSet(ex) {
                 ex = ex || StatusEngine.exIndex();
-                return new Set(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => this.machine(r, ex)).map(r => r.normalizedName));
+                return new Set(StorageService.live().filter(r => this.machine(r, ex)).map(r => r.normalizedName));
             }
             static expiring(a) { if (!a || !a.expDate) return false; const d = Math.floor((Date.parse(a.expDate) - Date.parse(this.today())) / 864e5); return d >= 0 && d <= this.SOON; }
             static flag(a, small = false) {
@@ -2313,7 +2326,7 @@
             // Count what a machine-level page leaves out, for names in scope.
             static machineHidden(names, ex) {
                 ex = ex || StatusEngine.exIndex();
-                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const reg = new Map(StorageService.live().map(r => [r.normalizedName, r]));
                 let machines = 0, expiring = 0;
                 names.forEach(nm => { const a = this.machine(reg.get(nm), ex); if (a) { machines++; if (this.expiring(a)) expiring++; } });
                 return { machines, findings: 0, expiring };
@@ -2688,7 +2701,7 @@
                 highSevP2: false,                                                    // severity 4-5 with a patch is at least P2 (Cyber Essentials: critical and high within 14 days)
                 goLive: '',                                                          // findings first found before it are the Backlog
                 backlogTargets: { 1: 60, 2: 90, 3: 90, 4: 180 },                     // backlog due: days after go-live
-                scanOkDays: 14, scanStaleDays: 30,
+                scanOkDays: 14, scanStaleDays: 30, notSeenDays: 60,     // v4.30: not seen by Qualys or Automox this long = maybe decommissioned
                 eolWatchMonths: 12, eolActionMonths: 6,
                 automoxTeams: null, rebootDays: 7, agentStaleDays: 7, patchPlanDays: 7,      // Patch Plan: how far ahead "will be patched" looks               // null = the main team (Organisation setup)
                 team: { onTrack: 95, slipping: 80, coverageMin: 80, tierGapMax: 20 },
@@ -3727,6 +3740,7 @@
             }
             static gone(t, a) {
                 if (!a || a.state === 'moved' || a.state === 'excluded') return false;
+                if (this.regRec(a.name)?.status === 'Retired') return true;           // v4.30: decommissioned
                 const was = a.team || (t && t.team) || '';
                 if (!was || (!a.team && was === 'Unknown')) return false;
                 const r = this.regRec(a.name);
@@ -5056,7 +5070,7 @@
 
             // ---------- Status (phase B): every source joined into one status per asset and per team.
             async statusData() {
-                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
+                const reg = StorageService.live();
                 const own = StorageService.peek(StorageService.KEYS.EOL_DATES) || [];
                 const products = reg.map(r => EolDates.match(r.os)?.product).filter(Boolean);
                 const [vd, dates] = await Promise.all([this.getVulnData(), EolDates.load(products).catch(() => ({ data: {}, failed: products })), RemediationService.refreshQuiet()]);
@@ -5791,7 +5805,7 @@
             async cveData(ids, team, official = false) {
                 const vd = await this.getVulnData();
                 const S = StatusEngine.settings(), end = Demo.now() + (+S.patchPlanDays || 7) * 864e5;
-                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), regMap = new Map(reg.map(r => [r.normalizedName, r]));
+                const reg = StorageService.live(), regMap = new Map(reg.map(r => [r.normalizedName, r]));
                 const want = new Set(ids), idOf = (c) => String(typeof c === 'string' ? c : (c && c.id) || '').toUpperCase();
                 // The Qualys checks naming the CVE: from the KnowledgeBase entry, and from any finding that lists it
                 const qidHits = new Map();
@@ -6216,7 +6230,7 @@
                 const sel = (k, v) => `<select data-k="${k}" class="sr-in border-gray-300 rounded text-sm" ${dis}>${[1, 2, 3, 4].map(p => `<option value="${p}" ${+v === p ? 'selected' : ''}>P${p}</option>`).join('')}</select>`;
                 const matrix = `<table class="text-sm border"><thead class="bg-gray-50"><tr><th class="px-3 py-1 text-left">Finding tier \\ Asset tier</th><th class="px-3 py-1">Tier 1</th><th class="px-3 py-1">Tier 2 / not set</th><th class="px-3 py-1">Tier 3</th></tr></thead>
                     <tbody>${[1, 2, 3, 4].map(f => `<tr class="border-t"><td class="px-3 py-1">${FT[f]}</td>${[0, 1, 2].map(i => `<td class="px-3 py-1 text-center">${sel(`m.${f}.${i}`, S.matrix[f][i])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => !r.unrecognised);
+                const reg = StorageService.live().filter(r => !r.unrecognised);
                 const noTier = reg.filter(r => !StatusEngine.tierOf(r)), noExp = reg.filter(r => !r.exposure || r.exposure === 'Unknown');
                 const oldCrit = reg.filter(r => r.criticality && r.criticality !== 'Medium' && !StatusEngine.tierOf(r));
                 const pct = (n) => reg.length ? Math.round(n * 100 / reg.length) + '%' : '-';
@@ -6250,7 +6264,7 @@
                     </div>
                     <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Status checks</h4>
                         <div class="flex flex-wrap gap-4 items-end text-xs">
-                            <label>Scan OK within (days)<br>${num('scanOkDays', S.scanOkDays)}</label><label>Scan too old after (days)<br>${num('scanStaleDays', S.scanStaleDays)}</label>
+                            <label>Scan OK within (days)<br>${num('scanOkDays', S.scanOkDays)}</label><label>Scan too old after (days)<br>${num('scanStaleDays', S.scanStaleDays)}</label><label title="Machines with no Qualys scan and no Automox check-in for this long are listed in the Asset Register as Not seen, to retire">Not seen (maybe gone) after (days)<br>${num('notSeenDays', S.notSeenDays)}</label>
                             <label>EOL watch (months)<br>${num('eolWatchMonths', S.eolWatchMonths)}</label><label>EOL action (months)<br>${num('eolActionMonths', S.eolActionMonths)}</label>
                             <label>Patch Plan looks ahead (days)<br>${num('patchPlanDays', S.patchPlanDays || 7, 'w-20', 1, 90)}</label>
                             <label>Reboot pending too long (days)<br>${num('rebootDays', S.rebootDays)}</label><label>Agent stale after (days)<br>${num('agentStaleDays', S.agentStaleDays)}</label>
@@ -6626,7 +6640,7 @@
 
                 const qEl = document.getElementById('ax-q'), hadFocus = !!qEl && document.activeElement === qEl, caret = qEl ? qEl.selectionStart : 0;
                 const m = AutomoxService.match(), scope = document.getElementById('ax-scope').value;
-                let reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => scope === 'ALL' || (r.owner || 'Unknown') === scope);
+                let reg = StorageService.live().filter(r => scope === 'ALL' || (r.owner || 'Unknown') === scope);
                 { const exA = StatusEngine.exIndex(); this.accNote(RiskView.machineHidden(reg.map(r => r.normalizedName), exA));      // v4.13 Risk-accepted switch
                   if (!RiskView.on()) { const acc = RiskView.machineSet(exA); reg = reg.filter(r => !acc.has(r.normalizedName)); } }
                 S.scope = scope;   // a fix opened from here shows this team's assets (v3.18.3)
@@ -6927,7 +6941,7 @@
             // The Simple view's Dashboard panels (team status is the existing panel above them).
             async renderDashSimple() {
                 const el = document.getElementById('dash-simple'); if (!el) return;      // both views since v4.15
-                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER) || [];
+                const reg = StorageService.live() || [];
                 if (StorageService.mode !== 'server' && !Demo.ON && !reg.length) { el.innerHTML = Demo.welcomeHTML(); return; }
                 const card = (title, body, link, linkText) => `<div class="bg-white rounded-lg shadow p-5 space-y-3"><div class="flex justify-between items-baseline gap-3"><h3 class="text-lg font-semibold">${title}</h3>${link ? `<a href="#" onclick="app.switchView('${link}'); return false;" class="text-sm text-blue-700 underline whitespace-nowrap">${linkText} →</a>` : ''}</div>${body}</div>`;
                 const row = (sym, label, value, sub = '') => `<div class="flex justify-between items-baseline gap-3 border rounded-lg px-3 py-2"><span>${sym} ${label}${sub ? ` <span class="text-xs text-gray-500">${sub}</span>` : ''}</span><span class="font-semibold text-right text-sm">${value}</span></div>`;
@@ -6964,7 +6978,7 @@
             }
 
             renderDashboard() {
-                const register = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
+                const register = StorageService.live();
                 this.renderDashSimple();
                 this.renderDashStatus();
                 const drawRem = () => { const el = document.getElementById('dash-remediation'); if (el) el.innerHTML = RemediationStats.html(RemediationStats.compute(RemediationService.list(), App.team())); };
@@ -7335,7 +7349,7 @@
                     if (ownNew !== reg[idx].owner) { reg[idx].ownerAt = new Date().toISOString(); reg[idx].ownerBy = RemediationService.me(); }      // v4.29: shown in tasks it left
                     reg[idx].owner = ownNew;
                     reg[idx].service = document.getElementById('edit-asset-service').value;
-                    reg[idx].status = document.getElementById('edit-asset-status').value;
+                    App.setStatus(reg[idx], document.getElementById('edit-asset-status').value);
                     reg[idx].environment = document.getElementById('edit-asset-env').value;
                     reg[idx].exposure = document.getElementById('edit-asset-exposure').value;
                     StatusEngine.setTier(reg[idx], document.getElementById('edit-asset-criticality').value);
@@ -7392,6 +7406,7 @@
                     ? `Showing the first ${fmtNum(shown)} of ${fmtNum(filtered.length)} matching (${fmtNum(all.length)} assets in total)`
                     : `Showing ${fmtNum(filtered.length)} of ${fmtNum(all.length)} assets`;
                 this.updateBulkBar(filtered);
+                this.renderNotSeenBanner(filtered);
 
                 // One string, one DOM update: building the table with "innerHTML +=" re-parsed everything already drawn on every row.
                 const rows = [];
@@ -7408,7 +7423,7 @@
                             <td class="px-6 py-2">${esc(r.service)}</td>
                             ${Lifecycle.osCell(r, 'px-6 py-2')}
                             <td class="px-6 py-2">${esc(r.environment)}</td>
-                            <td class="px-6 py-2">${esc(r.status || 'Approved')}</td>
+                            <td class="px-6 py-2">${this.regStatusCell(r)}</td>
                             <td class="px-6 py-2">${esc(r.exposure || 'Unknown')}</td>
                             <td class="px-6 py-2">${StatusEngine.tierCell(r, this._regSums?.get(r.normalizedName))}</td>
                             <td class="px-6 py-2"><span class="${rsBadge} text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm">${rs}</span></td>
@@ -7424,6 +7439,83 @@
                     rows.push(`<tr><td colspan="11" class="px-6 py-3 text-center text-sm bg-gray-50"><button onclick="app.registerShowMore(200)" class="text-blue-600 font-semibold hover:underline mr-4">Show 200 more</button><button onclick="app.registerShowMore(1e9)" class="text-blue-600 hover:underline">Show all ${fmtNum(rest)} remaining</button></td></tr>`);
                 }
                 tbody.innerHTML = rows.join('');
+            }
+
+            // v4.30: machines that look decommissioned: no Qualys scan and no Automox check-in for notSeenDays (Status rules).
+            // A machine never scanned and with no agent counts only once its register record is that old (new machines wait).
+            // Retired and Unrecognised machines are not listed. ax = Automox was checked too; axPending = its data is still loading.
+            notSeen() {
+                const S = StatusEngine.settings(), N = +S.notSeenDays || 60, now = Demo.now(), cut = now - N * 864e5;
+                const sd = StorageService.peek(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
+                const axOn = AutomoxService.on() && (AutomoxService.status ? !!AutomoxService.status.configured : !this._nsAxTried);    // status not known yet: load it once
+                const m = axOn && AutomoxService.data ? AutomoxService.match() : null;
+                const list = new Map();
+                StorageService.live().forEach(r => {
+                    if (r.unrecognised) return;
+                    const q = StatusEngine.time(scans[r.normalizedName] || r.lastScan);
+                    if (q >= cut) return;
+                    const dev = m ? m.byAsset.get(r.normalizedName)?.dev : null, a = dev ? AutomoxService.time(dev.lastSeen) : 0;
+                    if (a >= cut) return;
+                    if (!q && !a && StatusEngine.time(r.lastSeen) >= cut) return;
+                    list.set(r.normalizedName, { q, a, dev: !!dev, days: q || a ? Math.floor((now - Math.max(q, a)) / 864e5) : null });
+                });
+                return { list, N, ax: !!m, axPending: axOn && !m && !this._nsAxTried };     // tried once: Qualys only from then on
+            }
+            notSeenLoadAx() {
+                if (this._regAxLoading) return;
+                this._regAxLoading = true; this._nsAxTried = true;
+                AutomoxService.ensure().catch(e => StorageService.toast(e.message)).finally(() => { this._regAxLoading = false; if (this.currentView === 'register') this.renderRegister(); else if (this.currentView === 'health') this.renderHealthGaps(StorageService.live()); });
+            }
+            notSeenText(x) {
+                const d = (t) => t ? Math.floor((Demo.now() - t) / 864e5) + ' d ago' : 'never';
+                return `Qualys scan ${d(x.q)} · Automox ${x.dev ? 'check-in ' + d(x.a) : 'no agent'}`;
+            }
+            regStatusCell(r) {
+                if (r.status === 'Retired') {
+                    const when = r.retiredAt ? new Date(r.retiredAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+                    return `<span class="font-semibold text-gray-600">⊘ Retired</span>${when || r.retiredBy ? `<div class="text-[10px] text-gray-500">${esc(when)}${r.retiredBy ? ' by ' + esc(r.retiredBy) : ''}</div>` : ''}`;
+                }
+                const x = this._notSeen?.list.get(r.normalizedName);
+                return esc(r.status || 'Approved') + (x ? `<div class="text-[10px] text-amber-800 whitespace-nowrap" title="${esc(this.notSeenText(x))}">🕳 not seen ${x.days === null ? 'ever' : x.days + ' d'}</div>` : '');
+            }
+            renderNotSeenBanner(filtered) {
+                const el = document.getElementById('reg-notseen'), ns = this._notSeen; if (!el || !ns) return;
+                const on = document.getElementById('reg-f-status').value === 'NOTSEEN', ow = document.getElementById('reg-f-owner').value;
+                const n = ow === 'ALL' ? ns.list.size : StorageService.live().filter(r => ns.list.has(r.normalizedName) && (r.owner || 'Unknown') === ow).length;     // the team the register shows
+                const src = ns.ax ? 'Qualys or Automox' : ns.axPending ? 'Qualys (Automox still loading)' : 'Qualys';
+                if (ns.axPending) this.notSeenLoadAx();          // the count needs Automox too: it draws again when loaded
+                if ((!n || ns.axPending) && !on) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+                el.classList.remove('hidden');
+                const shown = filtered.filter(r => ns.list.has(r.normalizedName)).length;
+                el.innerHTML = `<div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span>🕳 <strong>${fmtNum(n)} machine${n === 1 ? '' : 's'}</strong> ${ow === 'ALL' ? '' : ' in ' + esc(ow)} not seen by ${src} for ${fmtNum(ns.N)}+ days: maybe decommissioned.</span>
+                    ${on ? `<span class="text-xs">Retire the ones that are gone: tick them and set Status → Retired in the bulk bar${shown ? `, or <button class="write-only underline font-semibold" onclick="app.retireNotSeen()">⊘ Retire all ${fmtNum(shown)} shown</button>` : ''}. Retired machines leave every count, report, list and task; change the status back to bring one back.</span>`
+                        : `<button class="underline font-semibold" onclick="document.getElementById('reg-f-status').value='NOTSEEN'; app.renderRegister()">Show them</button>`}
+                    <span class="text-[11px] text-gray-600 ml-auto">Days set in Organisation setup → Status rules</span></div>`;
+            }
+            retireOne(name, val = 'Retired') {
+                if (val === 'Retired' && !confirm(`Retire ${name}?\n\nIt leaves every count, report, list and task. Its findings are kept, and Bring it back undoes this.`)) return;
+                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), r = reg.find(a => a.normalizedName === name); if (!r) return;
+                const ns = val === 'Retired' && this.notSeen().list.get(name);
+                if (!App.setStatus(r, val, ns ? `not seen for ${ns.days === null ? 'ever' : ns.days + ' days'}` : '')) return;
+                StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
+                this.invalidateVulnData(); this._status = null; this._cve = null; this.vulnData = null;
+                StorageService.toast(val === 'Retired' ? `${name} retired` : `${name} is back (${val})`);
+                this.renderInspectAsset(name);
+            }
+            unretire(name) { this.retireOne(name, 'Approved'); }
+            retireNotSeen() {
+                const ns = this._notSeen; if (!ns) return;
+                const names = new Set(this.getRegisterFilteredAssets().filter(r => ns.list.has(r.normalizedName)).map(r => r.normalizedName));
+                if (!names.size || !confirm(`Retire ${names.size} machine${names.size === 1 ? '' : 's'} not seen for ${ns.N}+ days?\n\nThey leave every count, report, list and task. Their findings are kept, and changing a machine's status back brings it back.`)) return;
+                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
+                let n = 0;
+                reg.forEach(r => { if (names.has(r.normalizedName) && App.setStatus(r, 'Retired', `not seen for ${ns.N}+ days`)) n++; });
+                StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
+                this.invalidateVulnData(); this._status = null; this._cve = null; this.vulnData = null;
+                this.registerState.selectedAssets.clear?.();
+                StorageService.toast(`${fmtNum(n)} machine${n === 1 ? '' : 's'} retired`);
+                this.renderRegister();
             }
 
             // Typing in the search box waits for a short pause before redrawing.
@@ -7453,12 +7545,15 @@
                         return [];
                     }
                 }
+                const ns = this._notSeen = this.notSeen();          // v4.30
+                if (f.status === 'NOTSEEN' && ns.axPending) { this.notSeenLoadAx(); return []; }
                 return StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => {
                     if (axm && !this.axCats(r.normalizedName, axm).has(f.ax)) return false;
                     if (f.owner !== 'ALL' && (r.owner || 'Unknown') !== f.owner) return false;
                     if (f.service !== 'ALL' && (r.service || 'Unclassified') !== f.service) return false;
                     if (f.env !== 'ALL' && (r.environment || 'Production') !== f.env) return false;
-                    if (f.status !== 'ALL' && (r.status || 'Approved') !== f.status) return false;
+                    if (f.status === 'NOTSEEN') { if (!ns.list.has(r.normalizedName)) return false; }
+                    else if (f.status !== 'ALL' && (r.status || 'Approved') !== f.status) return false;
                     if (f.exposure !== 'ALL' && (r.exposure || 'Unknown') !== f.exposure) return false;
                     if (f.crit !== 'ALL' && (f.crit.length === 2 ? StatusEngine.tierCode(r) : String(StatusEngine.tierOf(r))) !== f.crit) return false;
                     if (f.risk !== 'ALL' && (r.riskStatus || 'Open') !== f.risk) return false;
@@ -7533,6 +7628,7 @@
                         if (k === 'os') Lifecycle.setOs(r, val.startsWith('(back to') ? '' : val);
                         else if (k === 'tier') StatusEngine.setTier(r, (val.match(/^Tier ?(\d[AB]?)/) || [])[1] || 0);
                         else if (k === 'patchNA') { if (/^Cannot/.test(val)) r.patchNA = true; else delete r.patchNA; }
+                        else if (k === 'status') App.setStatus(r, val);
                         else { if (k === 'owner' && r.owner !== val) { r.ownerAt = new Date().toISOString(); r.ownerBy = RemediationService.me(); } r[k] = val; }
                     });
                     n++;
@@ -7564,7 +7660,7 @@
             // button, the coverage banners (moved from the dashboard), and the register's gaps.
             async renderHealth() {
                 const $ = (id) => document.getElementById(id);
-                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
+                const reg = StorageService.live();
                 $('dash-coverage').innerHTML = (StorageService.mode !== 'server' && !Demo.ON && !reg.length) ? Demo.welcomeHTML() : this.coverageHTML(App.team());
                 this.renderDashAutomox();
                 this.renderHealthGaps(reg);
@@ -7618,7 +7714,7 @@
                 } else rows.push({ name: 'Red Hat Security Data', how: "Red Hat's public API, asked by this browser when a CVE is looked up", last: 0, next: 0, sched: 'when looked up', result: `${fmtNum(RedHat.cache.size)} CVEs asked this session`, warn: false });
                 // Register (asset export) and the live records
                 const seen = reg0 => reg0.filter(r => !r.unrecognised).map(r => StatusEngine.time(r.lastSeen)).filter(Boolean);
-                const sr = seen(StorageService.peek(StorageService.KEYS.ASSET_REGISTER));
+                const sr = seen(StorageService.live());
                 rows.push({ name: 'Asset register', how: 'Qualys asset export, plus the Review Queue and your edits', last: sr.length ? Math.max(...sr) : 0, next: 0, sched: 'with each Qualys sync or asset import', result: sr.length ? '✓ machines last seen ' + W(Math.max(...sr)) : 'no machines yet', warn: !sr.length, link: ['review', 'Review Queue'] });
                 const S = StatusEngine.settings();
                 const ageTxt = (t) => { if (!t) return 'never'; const d = (now - t) / 864e5; return d < 1 / 24 ? 'just now' : d < 1 ? Math.round(d * 24) + ' h ago' : Math.round(d) + ' d ago'; };
@@ -7658,6 +7754,8 @@
                     ['Service not in the list', known.filter(r => !OrgSettings.inList(r.service)), 'A spelling that is not in Organisation setup → Services: merge it there.'],
                     ['Exposure unknown', known.filter(r => !r.exposure || r.exposure === 'Unknown'), 'Internet-facing machines are fixed first: set the exposure.']
                 ];
+                { const ns = this.notSeen(); if (ns.axPending) this.notSeenLoadAx();       // v4.30: maybe decommissioned
+                  gaps.push(['Not seen (maybe gone)', known.filter(r => ns.list.has(r.normalizedName)), `No Qualys scan${ns.ax ? ' and no Automox check-in' : ''} for ${ns.N}+ days. Retire the ones that are decommissioned: Asset Register → Status → 🕳 Not seen.`]); }
                 el.innerHTML = `<div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b"><h3 class="text-lg font-semibold">Register gaps · ${esc(App.teamLabel(tm))}</h3><p class="text-xs text-gray-500">Click a machine to open it. <em>No team</em> lists every machine nobody owns.</p></div>
                     <div class="divide-y">${gaps.map(([label, list, help]) => `<details class="px-5 py-3" ${list.length && list.length <= 10 ? 'open' : ''}><summary class="cursor-pointer flex justify-between gap-3"><span><span class="font-semibold">${list.length ? '?' : '✓'} ${esc(label)}</span> <span class="text-xs text-gray-500">${esc(help)}</span></span><span class="font-semibold">${fmtNum(list.length)}</span></summary>
                         ${list.length ? `<div class="mt-2 flex flex-wrap gap-1">${list.slice(0, 200).map(r => `<button data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)" class="px-2 py-0.5 rounded border text-xs font-mono hover:bg-blue-50">${esc(r.originalName || r.normalizedName)}</button>`).join('')}${list.length > 200 ? `<span class="text-xs text-gray-500">+${fmtNum(list.length - 200)} more</span>` : ''}</div>` : ''}</details>`).join('')}</div></div>`;
@@ -7723,6 +7821,14 @@
             // Vulnerability data access
             // ------------------------------------------
 
+            // v4.30: change a register record's status; Retired stamps when and by whom (shown on the machine page and the register)
+            static setStatus(r, val, why = '') {
+                if (!val || r.status === val) return false;
+                if (val === 'Retired') { r.retiredAt = new Date().toISOString(); r.retiredBy = RemediationService.me(); if (why) r.retiredWhy = why; else delete r.retiredWhy; }
+                else if (r.status === 'Retired') { delete r.retiredAt; delete r.retiredBy; delete r.retiredWhy; }
+                r.status = val;
+                return true;
+            }
             invalidateVulnData() { this._vd = null; }
 
             // Before 3.12.1 the stored per-asset summaries counted Qualys "Fixed" rows as open findings. Recount them once
@@ -7757,7 +7863,9 @@
             }
 
             async getVulnData() {
-                if (this._vd) return this._vd;
+                const retKey = StorageService.retiredKey();       // v4.30: retiring a machine (here or by someone else) recounts
+                if (this._vd && this._vdRet === retKey) return this._vd;
+                this._vdRet = retKey;
                 let dets = [], qs = [];
                 try { [dets, qs] = await Promise.all([VulnStore.all('detections'), VulnStore.all('qids')]); }
                 catch (e) { console.error('[Vuln Store]', e); }
@@ -7767,6 +7875,9 @@
                 const all = dets;
                 const ex = StatusEngine.exIndex(), isEx = (d) => { const e = ex.get(d.asset); return !!(e && e.qids.has(String(d.qid))); };
                 dets = all.filter(d => RemediationVerifier.ACTIVE(d.status));
+                // v4.30: a Retired machine's open findings are kept (its machine page lists them) but never counted
+                const retiredBy = new Map();
+                dets = dets.filter(d => { if (!StorageService.isRetired(d.asset)) return true; if (!retiredBy.has(d.asset)) retiredBy.set(d.asset, []); retiredBy.get(d.asset).push(d); const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); return false; });
                 const excepted = dets.filter(isEx);                 // in-date per-finding exceptions: shown apart, never counted
                 dets = dets.filter(d => !isEx(d));
                 const exBy = new Map();                             // v4.13: listed (flagged ⚑) when the Risk-accepted switch is on
@@ -7780,7 +7891,7 @@
                     if (!byQid.has(d.qid)) byQid.set(d.qid, []);
                     byQid.get(d.qid).push(d);
                 });
-                this._vd = StatusEngine.annotate({ dets, all, excepted, exBy, ex, qmap, byAsset, byQid });
+                this._vd = StatusEngine.annotate({ dets, all, excepted, exBy, ex, qmap, byAsset, byQid, retiredBy });
                 return this._vd;
             }
 
@@ -7794,7 +7905,7 @@
             // The old riskStatus filter is gone; hidden = what the switch leaves out within the other filters.
             async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false } = {}) {
                 const vd = await this.getVulnData();
-                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
+                const reg = StorageService.live();
                 const regMap = new Map(reg.map(r => [r.normalizedName, r]));
                 const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => [s.name, s]));
                 const show = !official && RiskView.on();
@@ -7862,7 +7973,7 @@
                 $('eol-title').textContent = scope === 'ALL' ? 'Estate End of Life Report' : `${scope} Team End of Life Report`;
                 $('eol-date').textContent = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric', day: 'numeric' });
 
-                const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER).filter(r => scope === 'ALL' || r.owner === scope);
+                const reg = StorageService.live().filter(r => scope === 'ALL' || r.owner === scope);
                 const own = StorageService.peek(StorageService.KEYS.EOL_DATES) || [];
                 const products = reg.map(r => EolDates.match(r.os)?.product).filter(Boolean);
                 if (refetch || !this._eolLoaded || EolDates.needsFetch(products)) $('eol-notice').innerHTML = '<div class="rounded-lg border p-4 text-sm bg-gray-50 text-gray-600">Looking up end-of-life dates on endoflife.date…</div>';
@@ -7970,7 +8081,7 @@
                 this.renderEOLAssets(showAll);
 
                 // Section 6: own table + releases with no date
-                const allReg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
+                const allReg = StorageService.live();
                 const used = (e) => allReg.filter(r => String(r.os || '').toLowerCase().includes(String(e.match).toLowerCase())).length;
                 $('eol-own').innerHTML = own.length ? own.map((e, i) => `<tr><td class="px-2 py-2 font-mono text-xs">${esc(e.match)}</td><td class="px-2 py-2">${esc(EolDates.fmt(e.secEnd))} ${EolDates.badge(EolDates.bucketFor(e.secEnd || null, ''))}</td><td class="px-2 py-2 text-xs">${esc(EolDates.fmt(e.mainEnd))}</td><td class="px-2 py-2 text-xs text-gray-600">${esc(e.note || '')}${e.by ? `<div class="text-[10px] text-gray-400">${esc(e.by)}, ${esc(new Date(e.at).toLocaleDateString('en-GB'))}</div>` : ''}</td><td class="px-2 py-2 text-right font-mono">${fmtNum(used(e))}</td><td class="px-2 py-2 text-right"><button class="write-only text-xs text-blue-700 underline mr-2" data-i="${i}" onclick="app.eolEditOwn(+this.dataset.i)">Edit</button><button class="write-only text-xs text-red-700 underline" data-i="${i}" onclick="app.eolDeleteOwn(+this.dataset.i)">Delete</button></td></tr>`).join('')
                     : empty(6, 'No dates of your own yet.');
@@ -8154,7 +8265,7 @@
                     const p = RemediationService.progress(t), pct = p.total ? Math.round(p.done / p.total * 100) : 0;
                     return `<tr class="cursor-pointer hover:bg-blue-50 align-top ${RemediationService.overdue(t) ? 'bg-red-50/40' : ''}" data-id="${esc(t.id)}" onclick="app.openTask(this.dataset.id)">
                         <td class="px-3 py-2" onclick="event.stopPropagation()"><input type="checkbox" class="write-only" data-id="${esc(t.id)}" ${this.remSel.has(t.id) ? 'checked' : ''} onchange="app.remToggleSel(this.dataset.id, this.checked)"></td>
-                        <td class="px-3 py-2 max-w-[380px]"><span class="font-mono text-xs text-gray-500">${esc(t.id)}</span> ${t.reopened ? '<span class="text-[10px] font-bold text-red-800 border border-red-400 bg-red-50 rounded px-1">⚠ REOPENED</span> ' : ''}<span class="font-medium text-gray-800">${esc(t.title)}</span><div class="text-[11px] text-gray-500">${esc(typeLabel[t.type] || t.type)}${t.source?.label ? ' · ' + esc(t.source.label) : ''}${t.splitFrom ? ' · split from ' + esc(t.splitFrom) : ''}${(t.comments || []).length ? ` · 💬 ${t.comments.length}` : ''}${p.gone ? ` · <span class="text-gray-700" title="Their team was changed, so they no longer count in this task">⇄ ${p.gone} machine${p.gone === 1 ? '' : 's'} now in another team</span>` : ''}</div></td>
+                        <td class="px-3 py-2 max-w-[380px]"><span class="font-mono text-xs text-gray-500">${esc(t.id)}</span> ${t.reopened ? '<span class="text-[10px] font-bold text-red-800 border border-red-400 bg-red-50 rounded px-1">⚠ REOPENED</span> ' : ''}<span class="font-medium text-gray-800">${esc(t.title)}</span><div class="text-[11px] text-gray-500">${esc(typeLabel[t.type] || t.type)}${t.source?.label ? ' · ' + esc(t.source.label) : ''}${t.splitFrom ? ' · split from ' + esc(t.splitFrom) : ''}${(t.comments || []).length ? ` · 💬 ${t.comments.length}` : ''}${p.gone ? ` · <span class="text-gray-700" title="Their team was changed or they were retired, so they no longer count in this task">⇄ ${p.gone} machine${p.gone === 1 ? '' : 's'} left this task</span>` : ''}</div></td>
                         <td class="px-3 py-2 text-xs">${esc(t.team || '-')}</td>
                         <td class="px-3 py-2 text-xs">${t.assignee ? esc(t.assignee) : '<span class="text-gray-400">Unassigned</span>'}</td>
                         <td class="px-3 py-2 text-xs">${esc(RemediationService.prioLabel(t))}</td>
@@ -8243,7 +8354,7 @@
                 const head = ['ID', 'Title', 'Type', 'Source', 'Team', 'Assignee', 'Priority', 'Due', 'Overdue', 'Status', 'Assets', 'Fixed', 'Asset names', 'Ticket', 'Created', 'Created by', 'Updated', 'Updated by', 'Last comment'];
                 const rows = list.map(t => { const p = RemediationService.progress(t), c = (t.comments || []).slice(-1)[0];
                     return [t.id, t.title, t.type, t.source?.label || '', t.team, t.assignee, RemediationService.prioLabel(t), t.due, RemediationService.overdue(t) ? 'yes' : '', t.status, p.total, p.done,
-                        (t.assets || []).filter(a => a.state !== 'moved').map(a => RemediationService.gone(t, a) ? `${a.name} (left: now ${RemediationService.regRec(a.name).owner})` : `${a.name} (${a.state})`).join('; '), t.ticket, t.createdAt, t.createdBy, t.updatedAt, t.updatedBy, c ? `${c.by || ''} ${c.at}: ${c.text}` : ''].map(safe); });
+                        (t.assets || []).filter(a => a.state !== 'moved').map(a => RemediationService.gone(t, a) ? `${a.name} (left: ${RemediationService.regRec(a.name).status === 'Retired' ? 'retired' : 'now ' + RemediationService.regRec(a.name).owner})` : `${a.name} (${a.state})`).join('; '), t.ticket, t.createdAt, t.createdBy, t.updatedAt, t.updatedBy, c ? `${c.by || ''} ${c.at}: ${c.text}` : ''].map(safe); });
                 const blob = new Blob(['﻿' + Papa.unparse([head, ...rows])], { type: 'text/csv;charset=utf-8' });
                 const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = App.cfCsvName(`remediation_tasks_${new Date().toISOString().slice(0, 10)}.csv`); a.click();
                 setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -8261,7 +8372,7 @@
                 const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
                 const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(x => [x.name, x]));
                 const tracked = spec.source?.key ? RemediationService.trackedAssets(spec.source.kind, spec.source.key) : new Map();
-                const assets = [...new Set(spec.assets || [])].map(n => { const r = reg.get(n) || {}; return { name: n, owner: r.owner || 'Unknown', crit: sums.get(n)?.criticality || r.qualysCriticality || 0, tracked: tracked.get(n) || '' }; })
+                const assets = [...new Set(spec.assets || [])].filter(n => !StorageService.isRetired(n)).map(n => { const r = reg.get(n) || {}; return { name: n, owner: r.owner || 'Unknown', crit: sums.get(n)?.criticality || r.qualysCriticality || 0, tracked: tracked.get(n) || '' }; })
                     .sort((a, b) => (a.tracked ? 1 : 0) - (b.tracked ? 1 : 0) || a.owner.localeCompare(b.owner) || b.crit - a.crit || a.name.localeCompare(b.name));
                 this.taskCtx = { mode: 'create', spec, assets };
                 const typeLabel = { vuln: 'Vulnerability', eol: 'End of life', other: 'Other' }[spec.type];
@@ -8327,12 +8438,12 @@
                 // v4.29: ✎ edits the machine without leaving the task; a machine moved to another team drops out (listed below).
                 const pen = (n) => reg.has(n) ? `<button type="button" class="write-only ml-1 px-1 rounded text-gray-400 hover:text-indigo-800 hover:bg-indigo-50" data-n="${esc(n)}" title="Edit this machine: team, service, tier, exposure, OS" aria-label="Edit ${esc(n)}" onclick="app.tkEditAsset(this.dataset.n)">✎</button>` : '';
                 const goneL = (t.assets || []).filter(a => RemediationService.gone(t, a));
-                const goneBy = new Map(); goneL.forEach(a => { const o = reg.get(a.name)?.owner || '?'; goneBy.set(o, (goneBy.get(o) || 0) + 1); });
+                const goneBy = new Map(); goneL.forEach(a => { const o = reg.get(a.name)?.status === 'Retired' ? '⊘ Retired' : (reg.get(a.name)?.owner || '?'); goneBy.set(o, (goneBy.get(o) || 0) + 1); });
                 const whenD = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                const goneHTML = goneL.length ? `<details class="mt-2 border rounded bg-gray-50"><summary class="cursor-pointer px-2 py-1.5 text-xs font-semibold text-gray-700">⇄ ${fmtNum(goneL.length)} machine${goneL.length === 1 ? '' : 's'} now in another team (${[...goneBy].map(([o, n]) => esc(o) + ' ' + n).join(', ')}): no longer part of this task</summary>
-                    <p class="px-2 text-[11px] text-gray-500">Their team was changed after they were added, so they do not count here or in ${esc(t.team || 'this team')}'s figures. Change a machine's team back and it returns to the task.</p>
+                const goneHTML = goneL.length ? `<details class="mt-2 border rounded bg-gray-50"><summary class="cursor-pointer px-2 py-1.5 text-xs font-semibold text-gray-700">⇄ ${fmtNum(goneL.length)} machine${goneL.length === 1 ? '' : 's'} left this task (${[...goneBy].map(([o, n]) => esc(o) + ' ' + n).join(', ')})</summary>
+                    <p class="px-2 text-[11px] text-gray-500">Their team was changed, or they were retired (decommissioned), after they were added, so they do not count here or in ${esc(t.team || 'this team')}'s figures. Change a machine's team (or Retired status) back and it returns to the task.</p>
                     <table class="min-w-full text-xs mt-1"><thead class="text-gray-500"><tr><th class="px-2 py-1 text-left">Asset</th><th class="px-2 py-1 text-left">Was</th><th class="px-2 py-1 text-left">Now</th><th class="px-2 py-1 text-left">Changed</th><th class="px-2 py-1 text-left">State when it left</th></tr></thead><tbody class="divide-y">
-                    ${goneL.map(a => { const r = reg.get(a.name) || {}; return `<tr><td class="px-2 py-1 font-mono whitespace-nowrap"><button class="underline decoration-dotted" data-n="${esc(a.name)}" onclick="app.closeTask(); app.openAssetDetail(this.dataset.n)">${esc(a.name)}</button>${pen(a.name)}</td><td class="px-2 py-1">${esc(a.team || t.team || '-')}</td><td class="px-2 py-1 font-semibold">${esc(r.owner || '-')}</td><td class="px-2 py-1 text-gray-600">${r.ownerAt ? esc(whenD(r.ownerAt)) + (r.ownerBy ? ' by ' + esc(r.ownerBy) : '') : '<span class="text-gray-400" title="Changed by an import, or before v4.29 recorded who changed a team">-</span>'}</td><td class="px-2 py-1 text-gray-600">${esc(a.state === 'fixed' ? 'fixed (awaiting scan)' : a.state)}</td></tr>`; }).join('')}
+                    ${goneL.map(a => { const r = reg.get(a.name) || {}; return `<tr><td class="px-2 py-1 font-mono whitespace-nowrap"><button class="underline decoration-dotted" data-n="${esc(a.name)}" onclick="app.closeTask(); app.openAssetDetail(this.dataset.n)">${esc(a.name)}</button>${pen(a.name)}</td><td class="px-2 py-1">${esc(a.team || t.team || '-')}</td><td class="px-2 py-1 font-semibold">${r.status === 'Retired' ? '⊘ Retired' : esc(r.owner || '-')}</td><td class="px-2 py-1 text-gray-600">${r.status === 'Retired' ? esc(whenD(r.retiredAt)) + (r.retiredBy ? ' by ' + esc(r.retiredBy) : '') : r.ownerAt ? esc(whenD(r.ownerAt)) + (r.ownerBy ? ' by ' + esc(r.ownerBy) : '') : '<span class="text-gray-400" title="Changed by an import, or before v4.29 recorded who changed a team">-</span>'}</td><td class="px-2 py-1 text-gray-600">${esc(a.state === 'fixed' ? 'fixed (awaiting scan)' : a.state)}</td></tr>`; }).join('')}
                     </tbody></table></details>` : '';
                 const stateSel = (a, i) => (a.state === 'moved' || a.state === 'verified')
                     ? `<span class="text-xs ${a.state === 'verified' ? 'text-green-800 font-semibold' : 'text-gray-500'}">${a.state === 'verified' ? '✔ verified' : '→ moved to ' + esc(a.movedTo || '')}</span>`
@@ -8566,7 +8677,7 @@
                 const tasks = RemediationService.list().filter(t => (t.assets || []).some(a => a.name === name && a.state !== 'moved'));
                 const rows = tasks.sort((a, b) => (RemediationService.isOpen(b) - RemediationService.isOpen(a)) || String(a.due).localeCompare(String(b.due))).map(t => {
                     const a = t.assets.find(x => x.name === name);
-                    return `<tr class="cursor-pointer hover:bg-blue-50" data-id="${esc(t.id)}" onclick="app.openTask(this.dataset.id)"><td class="px-3 py-1.5 font-mono text-xs">${esc(t.id)}</td><td class="px-3 py-1.5">${esc(t.title)}</td><td class="px-3 py-1.5">${RemediationService.statusBadge(t.status)}</td><td class="px-3 py-1.5 text-xs">${RemediationService.dueCell(t)}</td><td class="px-3 py-1.5 text-xs">${RemediationService.gone(t, a) ? `<span class="text-gray-600">⇄ left this task: now ${esc(RemediationService.regRec(name).owner)}</span>` : esc(a.state)}${a.note ? `<div class="text-[10px] text-gray-500">${esc(a.note)}</div>` : ''}</td></tr>`;
+                    return `<tr class="cursor-pointer hover:bg-blue-50" data-id="${esc(t.id)}" onclick="app.openTask(this.dataset.id)"><td class="px-3 py-1.5 font-mono text-xs">${esc(t.id)}</td><td class="px-3 py-1.5">${esc(t.title)}</td><td class="px-3 py-1.5">${RemediationService.statusBadge(t.status)}</td><td class="px-3 py-1.5 text-xs">${RemediationService.dueCell(t)}</td><td class="px-3 py-1.5 text-xs">${RemediationService.gone(t, a) ? `<span class="text-gray-600">⇄ left this task: ${RemediationService.regRec(name).status === 'Retired' ? 'retired' : 'now ' + esc(RemediationService.regRec(name).owner)}</span>` : esc(a.state)}${a.note ? `<div class="text-[10px] text-gray-500">${esc(a.note)}</div>` : ''}</td></tr>`;
                 }).join('');
                 return `<div class="bg-white rounded-lg shadow border p-5"><h4 class="font-semibold text-gray-800 mb-2">Remediation tasks <span class="font-normal text-gray-400 text-sm">(${fmtNum(tasks.length)})</span></h4>${rows
                     ? `<table class="min-w-full text-sm"><thead class="text-xs text-gray-500 bg-gray-50"><tr><th class="px-3 py-1.5 text-left">Task</th><th class="px-3 py-1.5 text-left">Title</th><th class="px-3 py-1.5 text-left">Status</th><th class="px-3 py-1.5 text-left">Due</th><th class="px-3 py-1.5 text-left">This asset</th></tr></thead><tbody class="divide-y">${rows}</tbody></table>`
@@ -8694,7 +8805,7 @@
 
             coverageHTML(scope = 'ALL') {
                 const exC = StatusEngine.exIndex();
-                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER)
+                const reg = StorageService.live()
                     .filter(r => !r.unrecognised && (scope === 'ALL' || r.owner === scope) && (RiskView.on() || !RiskView.machine(r, exC)));
                 const unrecCount = StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => r.unrecognised).length;
                 const sums = StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || [];
@@ -9020,7 +9131,7 @@
                 const exC = StatusEngine.exIndex();
                 const meta = this.loadVulnMeta();
                 if (!meta.imports.length) return this.coverageHTML(scope);
-                const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER)
+                const reg = StorageService.live()
                     .filter(r => (scope === 'ALL' || r.owner === scope) && (RiskView.on() || !RiskView.machine(r, exC)));
                 const have = new Set((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => s.name));
                 const n = reg.filter(r => have.has(r.normalizedName)).length;
@@ -9718,18 +9829,25 @@
                 const body = document.getElementById('inspect-body');
                 if (!reg) { body.innerHTML = '<p class="p-6 text-gray-600">This asset is not in the register.</p>'; return; }
                 const sum = (StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).find(s => s.name === name) || {};
-                const all = vd.byAsset.get(name) || [];
+                const retired = reg.status === 'Retired';
+                const all = (retired ? vd.retiredBy?.get(name) : vd.byAsset.get(name)) || [];
                 const st = PriorityEngine.blank();
                 all.forEach(d => PriorityEngine.accumulate(st, d));
                 this.inspectCtx = { name, all, vd };
                 const meta = this.loadVulnMeta();
                 const kpi = (label, v, cls = 'bg-gray-50 border') => `<div class="${cls} p-3 rounded"><p class="text-[10px] uppercase font-semibold opacity-70">${label}</p><p class="text-xl font-bold">${v}</p></div>`;
 
-                body.innerHTML = `
+                const ns = !retired && this.notSeen().list.get(name);
+                const retiredHTML = retired ? `<div class="rounded-lg border border-gray-400 bg-gray-100 p-3 text-sm text-gray-800 flex flex-wrap items-center gap-3">
+                        <span>⊘ <strong>Retired</strong>${reg.retiredAt ? ' ' + esc(new Date(reg.retiredAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })) : ''}${reg.retiredBy ? ' by ' + esc(reg.retiredBy) : ''}${reg.retiredWhy ? ' (' + esc(reg.retiredWhy) + ')' : ''}: this machine is left out of every count, report, list and task. Its findings below are kept for reference only.</span>
+                        <button class="write-only underline font-semibold" data-n="${esc(name)}" onclick="app.unretire(this.dataset.n)">Bring it back</button></div>`
+                    : ns ? `<div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 flex flex-wrap items-center gap-3"><span>🕳 Not seen for ${ns.days === null ? 'as long as it has been in the register' : fmtNum(ns.days) + ' days'} (${esc(this.notSeenText(ns))}): maybe decommissioned.</span>
+                        <button class="write-only underline font-semibold" data-n="${esc(name)}" onclick="app.retireOne(this.dataset.n)">⊘ Retire it</button></div>` : '';
+                body.innerHTML = `${retiredHTML}
                     <div class="bg-white rounded-lg shadow border p-5">
                         <div class="flex flex-wrap justify-between gap-4">
                             <div>
-                                <h3 class="text-2xl font-bold text-gray-800">${esc(name)}</h3>
+                                <h3 class="text-2xl font-bold text-gray-800">${esc(name)}${retired ? ' <span class="text-sm font-semibold text-gray-500 align-middle">⊘ Retired</span>' : ''}</h3>
                                 <p class="text-sm text-gray-500">${esc(reg.environment || 'Production')} • ${esc(reg.service || 'Unclassified')} • ${esc(reg.exposure || 'Unknown exposure')}</p>
                                 <p class="text-xs mt-1 text-gray-700"><span class="font-semibold">Owner:</span> <span class="text-blue-600 font-bold">${esc(reg.owner || 'Unknown')}</span> <span class="mx-2 text-gray-300">|</span> <span class="font-semibold">Risk status:</span> <span class="uppercase font-bold">${esc(reg.riskStatus || 'Open')}</span></p>
                                 <p class="text-xs mt-1 text-gray-500">${esc(reg.os || '')}${reg.ipv4Address ? ' • ' + esc(reg.ipv4Address) : ''}</p>

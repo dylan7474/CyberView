@@ -61,6 +61,8 @@
             #printable-report, #printable-eol { box-shadow: none !important; border: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
             .print-break { page-break-before: always; }
         }
+        /* v4.31: the stale marker's word is drawn by CSS, so it never joins the machine name when lists sort, filter or copy */
+        .stale-m::after { content: attr(data-l); margin-left: 2px; }
     </style>
 </head>
 <body class="bg-slate-50 flex h-screen overflow-hidden text-slate-800">
@@ -75,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.30.0 · 23 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.31.0 · 23 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -285,7 +287,7 @@
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Team</label><select id="reg-f-owner" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Service</label><select id="reg-f-service" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Services</option></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Environment</label><select id="reg-f-env" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Environments</option><option value="Production">Production</option><option value="Non-Prod">Non-Prod</option><option value="DR">DR</option></select></div>
-                    <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label><select id="reg-f-status" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Statuses</option><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending</option><option value="NOTSEEN">🕳 Not seen (maybe gone)</option></select></div>
+                    <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Status</label><select id="reg-f-status" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Statuses</option><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending</option><option value="STALE">⏳ Stale (no recent scan)</option><option value="GONE">🕳 Probably gone</option></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Exposure</label><select id="reg-f-exposure" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"><option value="ALL">All Exposures</option><option value="Internal">Internal</option><option value="DMZ">DMZ</option><option value="Internet Facing">Internet Facing</option><option value="Unknown">Unknown</option></select></div>
                     <div><label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Tier</label><select id="reg-f-crit" onchange="app.renderRegister()" class="border-gray-300 rounded text-sm"></select></div>
                     <div>
@@ -303,7 +305,7 @@
                     <div id="reg-count" class="text-xs text-gray-500 pb-2 ml-auto"></div>
                 </div>
 
-                <div id="reg-notseen" class="hidden mb-3"></div>
+                <div id="reg-stale" class="hidden mb-3"></div>
                 <div id="reg-bulk" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm">
                     <div class="flex items-center gap-3 mb-2"><strong id="reg-bulk-count"></strong><span class="text-xs text-gray-600">Choose only the fields to change; &ldquo;no change&rdquo; leaves a field alone.</span><button onclick="app.clearRegisterSelection()" class="text-xs text-blue-700 underline ml-auto">Clear selection</button></div>
                     <div class="flex flex-wrap gap-3 items-end">
@@ -2701,7 +2703,7 @@
                 highSevP2: false,                                                    // severity 4-5 with a patch is at least P2 (Cyber Essentials: critical and high within 14 days)
                 goLive: '',                                                          // findings first found before it are the Backlog
                 backlogTargets: { 1: 60, 2: 90, 3: 90, 4: 180 },                     // backlog due: days after go-live
-                scanOkDays: 14, scanStaleDays: 30, notSeenDays: 60,     // v4.30: not seen by Qualys or Automox this long = maybe decommissioned
+                scanOkDays: 14, scanStaleDays: 30,       // v4.31: scanStaleDays also marks a machine ⏳ Stale (to retire if gone)
                 eolWatchMonths: 12, eolActionMonths: 6,
                 automoxTeams: null, rebootDays: 7, agentStaleDays: 7, patchPlanDays: 7,      // Patch Plan: how far ahead "will be patched" looks               // null = the main team (Organisation setup)
                 team: { onTrack: 95, slipping: 80, coverageMin: 80, tierGapMax: 20 },
@@ -4746,7 +4748,7 @@
 
             // ---------- Edit a machine from anywhere, sort any table (v4.21). One pass after every redraw (MutationObserver):
             // every machine link gets a ✎ (editors), a right-click menu, and every table with headings sorts by a click.
-            static ICON_RE = /^[\s✖▲◐✓?⚠⟳✋⛔🔶⊘⏸↻⧗⚑●○−+±▾·]+/u;
+            static ICON_RE = /^[\s✖▲◐✓?⚠⟳✋⛔🔶⊘⏸↻⧗⚑●○−+±▾·⏳🕳]+/u;
             static sortVal(td) {
                 if (!td) return { n: null, s: '' };
                 const raw = (td.dataset.sort ?? App.cellText(td)).replace(/\s+/g, ' ').trim(), t = raw.replace(App.ICON_RE, '').trim();
@@ -4838,6 +4840,14 @@
                     const ic = AssetNotes.icon(c, `${c} comment${c === 1 ? '' : 's'} on ${n}: click to read`, `app.openNotes(${JSON.stringify(n).replace(/"/g, '&quot;')})`, 'note-m');
                     if (el.tagName === 'TR') { const pen = el.querySelector('.m-edit'); if (pen) pen.insertAdjacentHTML('afterend', ic); else { const short = n.split('.')[0].toLowerCase(), c2 = [...el.cells].find(td => !td.querySelector('input') && App.cellText(td).toLowerCase().includes(short)); if (c2) c2.insertAdjacentHTML('beforeend', ic); } }
                     else { const nx = el.nextElementSibling; (nx && nx.classList.contains('m-edit') ? nx : el).insertAdjacentHTML('afterend', ic); }
+                });
+                // v4.31 ⏳ stale / 🕳 gone? next to every machine with no recent Qualys scan (hover: the scan and Automox; right-click: Retire)
+                const st = this.stale(); if (st.axPending) this.staleLoadAx();
+                if (st.list.size) view.querySelectorAll('[data-n][onclick*="openAssetDetail"]:not([data-stale]), [data-n][onclick*="inspectAsset"]:not([data-stale]), [data-n][data-machine]:not([data-stale])').forEach(el => {
+                    el.dataset.stale = '1';
+                    const n = el.dataset.n, b = this.staleBadge(n, st.list.get(n)); if (!b) return;
+                    if (el.tagName === 'TR') { const after = el.querySelector('.note-m') || el.querySelector('.m-edit'); if (after) after.insertAdjacentHTML('afterend', b); else { const short = n.split('.')[0].toLowerCase(), c2 = [...el.cells].find(td => !td.querySelector('input') && App.cellText(td).toLowerCase().includes(short)); if (c2) c2.insertAdjacentHTML('beforeend', b); } }
+                    else { let at = el; while (at.nextElementSibling && (at.nextElementSibling.classList.contains('m-edit') || at.nextElementSibling.classList.contains('note-m'))) at = at.nextElementSibling; at.insertAdjacentHTML('afterend', b); }
                 });
             }
 
@@ -5026,8 +5036,11 @@
                 m.innerHTML = `<div class="px-3 py-1 text-xs text-gray-500 border-b">${esc(r.originalName || r.normalizedName)} · ${esc(r.owner || 'no team')}</div>`
                     + item('Open its page', 'app.openAssetDetail(this.dataset.n)') + (canWrite ? item('✎ Edit team, service, tier…', 'app.editAsset(this.dataset.n)') : '')
                     + item('💬 Comments' + (AssetNotes.count(r.normalizedName) ? ` (${fmtNum(AssetNotes.count(r.normalizedName))})` : (canWrite ? ': add one' : '')), 'app.openNotes(this.dataset.n)')
+                    + (() => { const x = r.status !== 'Retired' && this.stale().list.get(r.normalizedName);
+                        return (x ? `<div class="px-3 py-1 text-[11px] ${x.gone ? 'text-gray-700' : 'text-amber-900'} border-y bg-amber-50/50">${x.gone ? '🕳 probably gone' : '⏳ stale'}: ${esc(this.staleScan(x))}<br>${esc(this.staleAx(x))}</div>` : '')
+                            + (!canWrite ? '' : r.status === 'Retired' ? item('↺ Bring back (un-retire)', 'app.unretire(this.dataset.n)') : item('⊘ Retire (decommissioned)…', 'app.retireOne(this.dataset.n)', x ? 'font-semibold' : '')); })()
                     + item('📋 Copy name', `navigator.clipboard && navigator.clipboard.writeText(${JSON.stringify(r.originalName || r.normalizedName).replace(/"/g, '&quot;')}).then(() => StorageService.toast('Copied'))`);
-                m.style.left = Math.min(x, window.innerWidth - 240) + 'px'; m.style.top = Math.min(y, window.innerHeight - 140) + 'px';
+                m.style.left = Math.min(x, window.innerWidth - 240) + 'px'; m.style.top = Math.min(y, window.innerHeight - 230) + 'px';
                 m.querySelector('button')?.focus();
             }
 
@@ -6264,7 +6277,7 @@
                     </div>
                     <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Status checks</h4>
                         <div class="flex flex-wrap gap-4 items-end text-xs">
-                            <label>Scan OK within (days)<br>${num('scanOkDays', S.scanOkDays)}</label><label>Scan too old after (days)<br>${num('scanStaleDays', S.scanStaleDays)}</label><label title="Machines with no Qualys scan and no Automox check-in for this long are listed in the Asset Register as Not seen, to retire">Not seen (maybe gone) after (days)<br>${num('notSeenDays', S.notSeenDays)}</label>
+                            <label>Scan OK within (days)<br>${num('scanOkDays', S.scanOkDays)}</label><label title="Also marks the machine ⏳ Stale everywhere, with an option to retire it">Scan too old / stale after (days)<br>${num('scanStaleDays', S.scanStaleDays)}</label>
                             <label>EOL watch (months)<br>${num('eolWatchMonths', S.eolWatchMonths)}</label><label>EOL action (months)<br>${num('eolActionMonths', S.eolActionMonths)}</label>
                             <label>Patch Plan looks ahead (days)<br>${num('patchPlanDays', S.patchPlanDays || 7, 'w-20', 1, 90)}</label>
                             <label>Reboot pending too long (days)<br>${num('rebootDays', S.rebootDays)}</label><label>Agent stale after (days)<br>${num('agentStaleDays', S.agentStaleDays)}</label>
@@ -7406,7 +7419,7 @@
                     ? `Showing the first ${fmtNum(shown)} of ${fmtNum(filtered.length)} matching (${fmtNum(all.length)} assets in total)`
                     : `Showing ${fmtNum(filtered.length)} of ${fmtNum(all.length)} assets`;
                 this.updateBulkBar(filtered);
-                this.renderNotSeenBanner(filtered);
+                this.renderStaleBanner(filtered);
 
                 // One string, one DOM update: building the table with "innerHTML +=" re-parsed everything already drawn on every row.
                 const rows = [];
@@ -7441,79 +7454,104 @@
                 tbody.innerHTML = rows.join('');
             }
 
-            // v4.30: machines that look decommissioned: no Qualys scan and no Automox check-in for notSeenDays (Status rules).
-            // A machine never scanned and with no agent counts only once its register record is that old (new machines wait).
-            // Retired and Unrecognised machines are not listed. ax = Automox was checked too; axPending = its data is still loading.
-            notSeen() {
-                const S = StatusEngine.settings(), N = +S.notSeenDays || 60, now = Demo.now(), cut = now - N * 864e5;
-                const sd = StorageService.peek(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
+            // v4.31 Stale: no Qualys scan for scanStaleDays (Status rules → Scan too old after). Automox is shown beside it as the
+            // hint: seen within that time = the machine is alive (fix the scan); silent too, or no agent = probably gone (retire).
+            // A machine never scanned counts only once its register record is that old (new machines wait). Retired and
+            // Unrecognised machines are not listed. Entry: { q, a, dev, days (since the scan, null = never), gone (true / false /
+            // null = Automox not available) }. axPending = Automox data still loading (gone not known yet). Cached per data change.
+            stale() {
+                const S = StatusEngine.settings(), N = +S.scanStaleDays || 30, now = Demo.now(), cut = now - N * 864e5;
                 const axOn = AutomoxService.on() && (AutomoxService.status ? !!AutomoxService.status.configured : !this._nsAxTried);    // status not known yet: load it once
                 const m = axOn && AutomoxService.data ? AutomoxService.match() : null;
+                const key = [StorageService.rev, N, Math.floor(now / 36e5), m ? 1 : 0, AutomoxService.data ? 1 : 0, this._nsAxTried ? 1 : 0].join('|');
+                if (this._staleC && this._staleC.key === key) return this._staleC.v;
+                const sd = StorageService.peek(StorageService.KEYS.SCAN_DATES), scans = (sd && !Array.isArray(sd)) ? sd : {};
                 const list = new Map();
                 StorageService.live().forEach(r => {
                     if (r.unrecognised) return;
                     const q = StatusEngine.time(scans[r.normalizedName] || r.lastScan);
-                    if (q >= cut) return;
+                    if (q >= cut || (!q && StatusEngine.time(r.lastSeen) >= cut)) return;
                     const dev = m ? m.byAsset.get(r.normalizedName)?.dev : null, a = dev ? AutomoxService.time(dev.lastSeen) : 0;
-                    if (a >= cut) return;
-                    if (!q && !a && StatusEngine.time(r.lastSeen) >= cut) return;
-                    list.set(r.normalizedName, { q, a, dev: !!dev, days: q || a ? Math.floor((now - Math.max(q, a)) / 864e5) : null });
+                    list.set(r.normalizedName, { q, a, dev: !!dev, days: q ? Math.floor((now - q) / 864e5) : null, gone: m ? a < cut : null });
                 });
-                return { list, N, ax: !!m, axPending: axOn && !m && !this._nsAxTried };     // tried once: Qualys only from then on
+                const v = { list, N, ax: !!m, axPending: axOn && !m && !this._nsAxTried, gone: [...list.values()].filter(x => x.gone).length };
+                this._staleC = { key, v };
+                return v;
             }
-            notSeenLoadAx() {
+            staleLoadAx() {
                 if (this._regAxLoading) return;
                 this._regAxLoading = true; this._nsAxTried = true;
-                AutomoxService.ensure().catch(e => StorageService.toast(e.message)).finally(() => { this._regAxLoading = false; if (this.currentView === 'register') this.renderRegister(); else if (this.currentView === 'health') this.renderHealthGaps(StorageService.live()); });
+                AutomoxService.ensure().catch(e => StorageService.toast(e.message)).finally(() => { this._regAxLoading = false; this._staleC = null;
+                    if (this.currentView === 'register') this.renderRegister(); else if (this.currentView === 'health') this.renderHealthGaps(StorageService.live()); else this.restale(); });
             }
-            notSeenText(x) {
-                const d = (t) => t ? Math.floor((Demo.now() - t) / 864e5) + ' d ago' : 'never';
-                return `Qualys scan ${d(x.q)} · Automox ${x.dev ? 'check-in ' + d(x.a) : 'no agent'}`;
+            // Redraw the markers (Automox arrived, or a machine was retired): drop them and decorate again.
+            restale() { document.querySelectorAll('main .stale-m').forEach(b => b.remove()); document.querySelectorAll('main [data-stale]').forEach(e => delete e.dataset.stale); this.decorate(); }
+            staleScan(x) { return x.days === null ? 'never scanned by Qualys' : `no Qualys scan for ${fmtNum(x.days)} days`; }
+            staleAx(x) {
+                const d = (t) => fmtNum(Math.floor((Demo.now() - t) / 864e5));
+                if (x.gone === null) return 'Automox not checked';
+                if (!x.dev) return 'no Automox agent';
+                return x.gone ? `Automox last saw it ${x.a ? d(x.a) + ' days ago' : 'never'}` : `Automox saw it ${d(x.a) === '0' ? 'today' : d(x.a) + ' d ago'}: still running`;
+            }
+            staleText(x) { return `${this.staleScan(x)} · ${this.staleAx(x)}${x.gone ? ': probably decommissioned' : x.gone === false ? ': check its Qualys agent or scan' : ''}`; }
+            // The small marker next to a machine name: ⏳ stale (alive or unknown) or 🕳 probably gone.
+            staleBadge(name, x = this.stale().list.get(name)) {
+                if (!x) return '';
+                return x.gone ? `<span class="stale-m ml-1 inline-block whitespace-nowrap rounded border border-gray-400 bg-gray-100 px-1 text-[10px] font-semibold text-gray-700 print-hide" data-l="gone?" title="${esc(this.staleText(x))}">🕳</span>`
+                    : `<span class="stale-m ml-1 inline-block whitespace-nowrap rounded border border-amber-400 bg-amber-50 px-1 text-[10px] font-semibold text-amber-900 print-hide" data-l="stale" title="${esc(this.staleText(x))}">⏳</span>`;
             }
             regStatusCell(r) {
                 if (r.status === 'Retired') {
                     const when = r.retiredAt ? new Date(r.retiredAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
                     return `<span class="font-semibold text-gray-600">⊘ Retired</span>${when || r.retiredBy ? `<div class="text-[10px] text-gray-500">${esc(when)}${r.retiredBy ? ' by ' + esc(r.retiredBy) : ''}</div>` : ''}`;
                 }
-                const x = this._notSeen?.list.get(r.normalizedName);
-                return esc(r.status || 'Approved') + (x ? `<div class="text-[10px] text-amber-800 whitespace-nowrap" title="${esc(this.notSeenText(x))}">🕳 not seen ${x.days === null ? 'ever' : x.days + ' d'}</div>` : '');
+                const x = this._stale?.list.get(r.normalizedName);
+                if (!x) return esc(r.status || 'Approved');
+                return esc(r.status || 'Approved') + `<div class="text-[10px] whitespace-nowrap ${x.gone ? 'text-gray-700 font-semibold' : 'text-amber-800'}" title="${esc(this.staleText(x))}">${x.gone ? '🕳 probably gone' : '⏳ stale'}: ${x.days === null ? 'never scanned' : 'scan ' + fmtNum(x.days) + ' d'}</div>`
+                    + `<div class="text-[10px] text-gray-500 whitespace-nowrap">${x.gone === null ? '' : !x.dev ? 'no Automox agent' : 'Automox ' + (x.a ? fmtNum(Math.floor((Demo.now() - x.a) / 864e5)) + ' d ago' : 'never')}${x.gone === false ? ' (running)' : ''}</div>`;
             }
-            renderNotSeenBanner(filtered) {
-                const el = document.getElementById('reg-notseen'), ns = this._notSeen; if (!el || !ns) return;
-                const on = document.getElementById('reg-f-status').value === 'NOTSEEN', ow = document.getElementById('reg-f-owner').value;
-                const n = ow === 'ALL' ? ns.list.size : StorageService.live().filter(r => ns.list.has(r.normalizedName) && (r.owner || 'Unknown') === ow).length;     // the team the register shows
-                const src = ns.ax ? 'Qualys or Automox' : ns.axPending ? 'Qualys (Automox still loading)' : 'Qualys';
-                if (ns.axPending) this.notSeenLoadAx();          // the count needs Automox too: it draws again when loaded
-                if ((!n || ns.axPending) && !on) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+            renderStaleBanner(filtered) {
+                const el = document.getElementById('reg-stale'), st = this._stale; if (!el || !st) return;
+                const f = document.getElementById('reg-f-status').value, on = f === 'STALE' || f === 'GONE', ow = document.getElementById('reg-f-owner').value;
+                if (st.axPending) this.staleLoadAx();          // "probably gone" needs Automox: it draws again when loaded
+                const mine = ow === 'ALL' ? [...st.list.values()] : StorageService.live().filter(r => st.list.has(r.normalizedName) && (r.owner || 'Unknown') === ow).map(r => st.list.get(r.normalizedName));
+                const n = mine.length, g = mine.filter(x => x.gone).length;
+                if ((!n || st.axPending) && !on) { el.classList.add('hidden'); el.innerHTML = ''; return; }
                 el.classList.remove('hidden');
-                const shown = filtered.filter(r => ns.list.has(r.normalizedName)).length;
+                const shown = filtered.filter(r => st.list.has(r.normalizedName)).length;
+                const show = (v, label) => `<button class="underline font-semibold" onclick="document.getElementById('reg-f-status').value='${v}'; app.renderRegister()">${label}</button>`;
                 el.innerHTML = `<div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <span>🕳 <strong>${fmtNum(n)} machine${n === 1 ? '' : 's'}</strong> ${ow === 'ALL' ? '' : ' in ' + esc(ow)} not seen by ${src} for ${fmtNum(ns.N)}+ days: maybe decommissioned.</span>
-                    ${on ? `<span class="text-xs">Retire the ones that are gone: tick them and set Status → Retired in the bulk bar${shown ? `, or <button class="write-only underline font-semibold" onclick="app.retireNotSeen()">⊘ Retire all ${fmtNum(shown)} shown</button>` : ''}. Retired machines leave every count, report, list and task; change the status back to bring one back.</span>`
-                        : `<button class="underline font-semibold" onclick="document.getElementById('reg-f-status').value='NOTSEEN'; app.renderRegister()">Show them</button>`}
-                    <span class="text-[11px] text-gray-600 ml-auto">Days set in Organisation setup → Status rules</span></div>`;
+                    <span>⏳ <strong>${fmtNum(n)} stale machine${n === 1 ? '' : 's'}</strong>${ow === 'ALL' ? '' : ' in ' + esc(ow)}: no Qualys scan for ${fmtNum(st.N)}+ days${st.ax ? `, of which <strong>🕳 ${fmtNum(g)} probably gone</strong> (Automox silent too, or no agent)` : ''}.</span>
+                    ${on ? `<span class="text-xs">${f === 'STALE' ? 'Automox seen recently = still running: fix its Qualys agent or scan. ' : ''}Retire the ones that are decommissioned: tick them and set Status → Retired in the bulk bar${shown ? `, or <button class="write-only underline font-semibold" onclick="app.retireStale()">⊘ Retire all ${fmtNum(shown)} shown</button>` : ''}. Retired machines leave every count, report, list and task; change the status back to bring one back.</span>
+                        ${f === 'STALE' && st.ax ? show('GONE', 'Only the probably gone') : f === 'GONE' ? show('STALE', 'All stale') : ''}`
+                        : `${st.ax && g ? show('GONE', `Show the ${fmtNum(g)} probably gone`) : ''} ${show('STALE', 'Show all stale')}`}
+                    <span class="text-[11px] text-gray-600 ml-auto">Days: Organisation setup → Status rules → Scan too old after</span></div>`;
             }
+            // Retire from anywhere (machine page, right-click menu), or bring back (val = 'Approved').
             retireOne(name, val = 'Retired') {
-                if (val === 'Retired' && !confirm(`Retire ${name}?\n\nIt leaves every count, report, list and task. Its findings are kept, and Bring it back undoes this.`)) return;
+                const x = val === 'Retired' && this.stale().list.get(name);
+                const warn = x && x.gone === false ? `\n\nNote: ${this.staleAx(x)}.` : '';
+                if (val === 'Retired' && !confirm(`Retire ${name} (decommissioned)?\n\nIt leaves every count, report, list and task. Its findings are kept, and Bring it back undoes this.${warn}`)) return;
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER), r = reg.find(a => a.normalizedName === name); if (!r) return;
-                const ns = val === 'Retired' && this.notSeen().list.get(name);
-                if (!App.setStatus(r, val, ns ? `not seen for ${ns.days === null ? 'ever' : ns.days + ' days'}` : '')) return;
+                if (!App.setStatus(r, val, x ? this.staleScan(x) : '')) return;
                 StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
-                this.invalidateVulnData(); this._status = null; this._cve = null; this.vulnData = null;
+                this.afterRetire();
                 StorageService.toast(val === 'Retired' ? `${name} retired` : `${name} is back (${val})`);
-                this.renderInspectAsset(name);
+                if (this.currentView === 'inspect') this.renderInspect(); else this.switchView(this.currentView);
             }
             unretire(name) { this.retireOne(name, 'Approved'); }
-            retireNotSeen() {
-                const ns = this._notSeen; if (!ns) return;
-                const names = new Set(this.getRegisterFilteredAssets().filter(r => ns.list.has(r.normalizedName)).map(r => r.normalizedName));
-                if (!names.size || !confirm(`Retire ${names.size} machine${names.size === 1 ? '' : 's'} not seen for ${ns.N}+ days?\n\nThey leave every count, report, list and task. Their findings are kept, and changing a machine's status back brings it back.`)) return;
+            afterRetire() { this.invalidateVulnData(); this._status = null; this._cve = null; this.vulnData = null; this._staleC = null; }
+            retireStale() {
+                const st = this._stale; if (!st) return;
+                const names = new Set(this.getRegisterFilteredAssets().filter(r => st.list.has(r.normalizedName)).map(r => r.normalizedName));
+                const alive = [...names].filter(n => st.list.get(n).gone === false).length;
+                if (!names.size || !confirm(`Retire ${names.size} machine${names.size === 1 ? '' : 's'} with no Qualys scan for ${st.N}+ days?${alive ? `\n\n⚠ Automox saw ${alive} of them recently: they may still be running.` : ''}\n\nThey leave every count, report, list and task. Their findings are kept, and changing a machine's status back brings it back.`)) return;
                 const reg = StorageService.load(StorageService.KEYS.ASSET_REGISTER);
                 let n = 0;
-                reg.forEach(r => { if (names.has(r.normalizedName) && App.setStatus(r, 'Retired', `not seen for ${ns.N}+ days`)) n++; });
+                reg.forEach(r => { if (names.has(r.normalizedName) && App.setStatus(r, 'Retired', this.staleScan(st.list.get(r.normalizedName)))) n++; });
                 StorageService.save(StorageService.KEYS.ASSET_REGISTER, reg);
-                this.invalidateVulnData(); this._status = null; this._cve = null; this.vulnData = null;
-                this.registerState.selectedAssets.clear?.();
+                this.afterRetire();
+                this.registerState.selectedAssets.clear();
                 StorageService.toast(`${fmtNum(n)} machine${n === 1 ? '' : 's'} retired`);
                 this.renderRegister();
             }
@@ -7545,14 +7583,14 @@
                         return [];
                     }
                 }
-                const ns = this._notSeen = this.notSeen();          // v4.30
-                if (f.status === 'NOTSEEN' && ns.axPending) { this.notSeenLoadAx(); return []; }
+                const ns = this._stale = this.stale();          // v4.31
+                if (f.status === 'GONE' && ns.axPending) { this.staleLoadAx(); return []; }
                 return StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => {
                     if (axm && !this.axCats(r.normalizedName, axm).has(f.ax)) return false;
                     if (f.owner !== 'ALL' && (r.owner || 'Unknown') !== f.owner) return false;
                     if (f.service !== 'ALL' && (r.service || 'Unclassified') !== f.service) return false;
                     if (f.env !== 'ALL' && (r.environment || 'Production') !== f.env) return false;
-                    if (f.status === 'NOTSEEN') { if (!ns.list.has(r.normalizedName)) return false; }
+                    if (f.status === 'STALE' || f.status === 'GONE') { const x = ns.list.get(r.normalizedName); if (!x || (f.status === 'GONE' && !x.gone)) return false; }
                     else if (f.status !== 'ALL' && (r.status || 'Approved') !== f.status) return false;
                     if (f.exposure !== 'ALL' && (r.exposure || 'Unknown') !== f.exposure) return false;
                     if (f.crit !== 'ALL' && (f.crit.length === 2 ? StatusEngine.tierCode(r) : String(StatusEngine.tierOf(r))) !== f.crit) return false;
@@ -7754,8 +7792,9 @@
                     ['Service not in the list', known.filter(r => !OrgSettings.inList(r.service)), 'A spelling that is not in Organisation setup → Services: merge it there.'],
                     ['Exposure unknown', known.filter(r => !r.exposure || r.exposure === 'Unknown'), 'Internet-facing machines are fixed first: set the exposure.']
                 ];
-                { const ns = this.notSeen(); if (ns.axPending) this.notSeenLoadAx();       // v4.30: maybe decommissioned
-                  gaps.push(['Not seen (maybe gone)', known.filter(r => ns.list.has(r.normalizedName)), `No Qualys scan${ns.ax ? ' and no Automox check-in' : ''} for ${ns.N}+ days. Retire the ones that are decommissioned: Asset Register → Status → 🕳 Not seen.`]); }
+                { const ns = this.stale(); if (ns.axPending) this.staleLoadAx();       // v4.31: stale, and probably decommissioned
+                  if (ns.ax) gaps.push(['Probably gone', known.filter(r => ns.list.get(r.normalizedName)?.gone), `No Qualys scan for ${ns.N}+ days and Automox silent too (or no agent): probably decommissioned. Retire them: Asset Register → Status → 🕳 Probably gone.`]);
+                  gaps.push(['Stale: no recent scan', known.filter(r => ns.list.has(r.normalizedName)), `No Qualys scan for ${ns.N}+ days. Still running (Automox saw it)? Fix its Qualys agent or scan. Gone? Retire it.`]); }
                 el.innerHTML = `<div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b"><h3 class="text-lg font-semibold">Register gaps · ${esc(App.teamLabel(tm))}</h3><p class="text-xs text-gray-500">Click a machine to open it. <em>No team</em> lists every machine nobody owns.</p></div>
                     <div class="divide-y">${gaps.map(([label, list, help]) => `<details class="px-5 py-3" ${list.length && list.length <= 10 ? 'open' : ''}><summary class="cursor-pointer flex justify-between gap-3"><span><span class="font-semibold">${list.length ? '?' : '✓'} ${esc(label)}</span> <span class="text-xs text-gray-500">${esc(help)}</span></span><span class="font-semibold">${fmtNum(list.length)}</span></summary>
                         ${list.length ? `<div class="mt-2 flex flex-wrap gap-1">${list.slice(0, 200).map(r => `<button data-n="${esc(r.normalizedName)}" onclick="app.openAssetDetail(this.dataset.n)" class="px-2 py-0.5 rounded border text-xs font-mono hover:bg-blue-50">${esc(r.originalName || r.normalizedName)}</button>`).join('')}${list.length > 200 ? `<span class="text-xs text-gray-500">+${fmtNum(list.length - 200)} more</span>` : ''}</div>` : ''}</details>`).join('')}</div></div>`;
@@ -9837,11 +9876,11 @@
                 const meta = this.loadVulnMeta();
                 const kpi = (label, v, cls = 'bg-gray-50 border') => `<div class="${cls} p-3 rounded"><p class="text-[10px] uppercase font-semibold opacity-70">${label}</p><p class="text-xl font-bold">${v}</p></div>`;
 
-                const ns = !retired && this.notSeen().list.get(name);
+                const ns = !retired && this.stale().list.get(name);
                 const retiredHTML = retired ? `<div class="rounded-lg border border-gray-400 bg-gray-100 p-3 text-sm text-gray-800 flex flex-wrap items-center gap-3">
                         <span>⊘ <strong>Retired</strong>${reg.retiredAt ? ' ' + esc(new Date(reg.retiredAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })) : ''}${reg.retiredBy ? ' by ' + esc(reg.retiredBy) : ''}${reg.retiredWhy ? ' (' + esc(reg.retiredWhy) + ')' : ''}: this machine is left out of every count, report, list and task. Its findings below are kept for reference only.</span>
                         <button class="write-only underline font-semibold" data-n="${esc(name)}" onclick="app.unretire(this.dataset.n)">Bring it back</button></div>`
-                    : ns ? `<div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 flex flex-wrap items-center gap-3"><span>🕳 Not seen for ${ns.days === null ? 'as long as it has been in the register' : fmtNum(ns.days) + ' days'} (${esc(this.notSeenText(ns))}): maybe decommissioned.</span>
+                    : ns ? `<div class="rounded-lg border ${ns.gone ? 'border-gray-400 bg-gray-100 text-gray-900' : 'border-amber-300 bg-amber-50 text-amber-950'} p-3 text-sm flex flex-wrap items-center gap-3"><span>${ns.gone ? '🕳 <strong>Probably gone</strong>' : '⏳ <strong>Stale</strong>'}: ${esc(this.staleScan(ns))} · ${esc(this.staleAx(ns))}.${ns.gone ? ' Retire it if it has been decommissioned.' : ns.gone === false ? ' It looks like it is still running: check its Qualys agent or why the scan misses it. If it really has gone, retire it.' : ''}</span>
                         <button class="write-only underline font-semibold" data-n="${esc(name)}" onclick="app.retireOne(this.dataset.n)">⊘ Retire it</button></div>` : '';
                 body.innerHTML = `${retiredHTML}
                     <div class="bg-white rounded-lg shadow border p-5">

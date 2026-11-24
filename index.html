@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.33.0 · 23 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.34.0 · 23 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -218,9 +218,10 @@
             <!-- VIEW: REVIEW QUEUE -->
             <section id="view-review" class="view-section h-full flex flex-col">
                 <div id="os-conflicts" class="mb-4"></div>
+                <div id="review-orphans" class="hidden mb-4"></div>
                 <div class="flex justify-between items-start mb-4">
                     <div class="flex flex-wrap gap-4" id="review-analytics"></div>
-                    <button onclick="app.rebuildQueue()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded text-sm font-medium shadow-sm transition mt-1">🔄 Rebuild Queue</button>
+                    <button onclick="app.rebuildQueue()" title="Re-check waiting items against the ownership rules, and put back any Unrecognised machine that has no review item" class="write-only bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded text-sm font-medium shadow-sm transition mt-1">🔄 Rebuild Queue</button>
                 </div>
                 
                 <div class="bg-white p-4 rounded-lg shadow mb-4 border flex flex-wrap gap-4 items-end">
@@ -7020,17 +7021,38 @@
                         ${row('✖', '<strong>Expired</strong>: their findings count again', expired, 'risk-accept')}${row('⚠', 'Expire within 30 days', soon, 'risk-accept')}${row('✓', 'In date', ras.length - expired - soon, 'risk-accept', true)}</div></div>`;
             }
 
+            // v4.34 Rebuild Queue: re-check every waiting item against the current ownership rules and KEEP it (before v4.34 the
+            // items were re-run through the import, which dropped every machine already in the register as Unrecognised, i.e.
+            // nearly all of them). Also puts back an item for every Unrecognised machine in the register that has none.
+            // Items whose machine has since been given a team in the register are closed (they need no review). One save.
+            static queueOrphans(queue = ReviewQueueService.getQueue()) {
+                const open = new Set(queue.filter(q => q.status !== 'APPROVED' && q.status !== 'REJECTED').map(q => q.normalizedName));
+                return StorageService.peek(StorageService.KEYS.ASSET_REGISTER).filter(r => r.unrecognised && !open.has(r.normalizedName));
+            }
             rebuildQueue() {
-                const queue = ReviewQueueService.getQueue();
-                // Extract all pending items to run them back through reconciliation rules
-                const pendingAssets = queue.filter(q => q.status !== 'APPROVED' && q.status !== 'REJECTED').map(q => q.qualysData);
-                const resolved = queue.filter(q => q.status === 'APPROVED' || q.status === 'REJECTED');
-                
-                // Clear active queue, keeping history intact
-                StorageService.save(StorageService.KEYS.REVIEW_QUEUE, resolved);
-                
-                // Re-evaluate pending items with the updated Rule Engine
-                ReconciliationEngine.run(pendingAssets);
+                if (this.me && this.me.role === 'viewer') return;
+                const queue = ReviewQueueService.getQueue(), platformKeys = new Set(StorageService.load(StorageService.KEYS.PLATFORM_INVENTORY));
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                let rechecked = 0, changed = 0, closed = 0;
+                const keep = [];
+                queue.forEach(q => {
+                    if (q.status === 'APPROVED' || q.status === 'REJECTED') { keep.push(q); return; }
+                    const r = reg.get(q.normalizedName);
+                    if (r && !r.unrecognised) { closed++; return; }              // given a team in the register meanwhile
+                    const a = { ...(q.qualysData || {}), normalizedName: q.normalizedName, inferredService: q.detectedService || q.qualysData?.inferredService };
+                    const { suggestedOwner, ownershipSource } = ReconciliationEngine.suggestOwner(a, platformKeys);
+                    if (suggestedOwner !== q.suggestedOwner || ownershipSource !== q.ownershipSource) { q.suggestedOwner = suggestedOwner; q.ownershipSource = ownershipSource; changed++; }
+                    rechecked++; keep.push(q);
+                });
+                const orphans = App.queueOrphans(keep);
+                orphans.forEach((r, i) => {
+                    const a = { ...r, originalAssetName: r.originalName, inferredService: r.inferredService || (r.service !== 'Unclassified' ? r.service : '') };
+                    const { suggestedOwner, ownershipSource } = ReconciliationEngine.suggestOwner(a, platformKeys);
+                    keep.push({ id: `REQ-${Date.now()}-${i}`, normalizedName: r.normalizedName, originalName: r.originalName, ipAddress: r.ipv4Address, detectedService: a.inferredService || r.service,
+                        suggestedOwner, ownershipSource, status: ReviewQueueService.STATES.PENDING, reason: 'Seen in the vulnerability report, not in the inventory (put back by Rebuild Queue)', qualysData: { ...a, suggestedOwner, ownershipSource } });
+                });
+                StorageService.save(StorageService.KEYS.REVIEW_QUEUE, keep);
+                StorageService.toast(`Queue rebuilt: ${fmtNum(rechecked)} waiting item${rechecked === 1 ? '' : 's'} re-checked (${fmtNum(changed)} new suggestion${changed === 1 ? '' : 's'})${orphans.length ? `, ${fmtNum(orphans.length)} Unrecognised machine${orphans.length === 1 ? '' : 's'} put back` : ''}${closed ? `, ${fmtNum(closed)} closed (their machine now has a team)` : ''}`);
                 this.renderReviewQueue();
                 this.updateGlobalBadges();
             }
@@ -7124,6 +7146,9 @@
             renderReviewQueue() {
                 this.renderOsConflicts();
                 const queue = ReviewQueueService.getQueue();
+                { const el = document.getElementById('review-orphans'), o = App.queueOrphans(queue);       // v4.34
+                  el.classList.toggle('hidden', !o.length);
+                  el.innerHTML = o.length ? `<div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 flex flex-wrap items-center gap-3"><span>⚠ <strong>${fmtNum(o.length)} Unrecognised machine${o.length === 1 ? '' : 's'}</strong> in the register ${o.length === 1 ? 'has' : 'have'} no item in this queue, so nobody is asked to give ${o.length === 1 ? 'it' : 'them'} a team (an older Rebuild Queue dropped them).</span><button class="write-only underline font-semibold" onclick="app.rebuildQueue()">🔄 Rebuild Queue to put ${o.length === 1 ? 'it' : 'them'} back</button></div>` : ''; }
                 this.renderReviewQueueAnalytics(queue);
                 const filtered = queue.filter(q => {
                     const { state, owner, service, search } = this.reviewState.filters;

@@ -262,6 +262,14 @@ check("activity log has sign-ins, locks, user changes, restore", {"login", "logi
 # Automox: status for everyone, never the key; sync for editors only; hand links go through backup + restore
 admin.call("POST", "/api/users", {"username": "axview", "password": "password-axview", "role": "viewer"})
 axv, _, _ = sign_in("axview", "password-axview")
+
+# EPSS exploitation scores (v4.35): status + data for everyone (never a key), refresh for editors only
+st, epps = vw.call("GET", "/api/epss/status")
+check("epss: viewer reads the status", st == 200 and isinstance(epps.get("scheduleHours"), (int, float)) and "last" in epps, (st, epps))
+st, eppd = vw.call("GET", "/api/epss/data")
+check("epss: data is the meta + cves shape", st == 200 and "meta" in eppd and "cves" in eppd and isinstance(eppd["cves"], dict), (st, eppd))
+check("epss: viewer cannot start a refresh", vw.call("POST", "/api/epss/sync", {})[0] == 403, vw.call("POST", "/api/epss/sync", {}))
+
 st, ax = axv.call("GET", "/api/automox/status")
 check("automox: viewer reads the status", st == 200 and isinstance(ax.get("configured"), bool), (st, ax))
 check("automox: status holds no key", "api_key" not in json.dumps(ax).lower() and "apikey" not in json.dumps(ax).lower(), ax)

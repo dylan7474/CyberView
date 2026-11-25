@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.34.0 · 23 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.35.0 · 25 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -650,7 +650,7 @@
                         </div>
                         <div id="rpt-ai-out" class="text-sm text-gray-800"></div>
                     </div>
-                    <p class="mt-6 text-[11px] text-gray-500"><strong>How this is scored.</strong> The same rules and rankings as Vuln Management, Status and Patch Plan. Each open finding gets an action priority P1-P4 from its finding tier and its asset's Tier (set by people; not set counts as Tier 2), with Internet-facing assets more urgent, and a due date counted from when it was first found (findings from before go-live are backlog with their own targets). The exact rules, days and tier names in use are in Organisation setup (Status rules and Organisation). Assets rank by worst priority, then Tier, then TruRisk (0-1000; Low &lt;500, Medium 500-699, High 700-849, Critical 850+). TruRisk is one score per asset, so it is never added up across findings. Finding tiers come from Qualys signals: <em>Fix now</em> = CISA KEV, active attacks, ransomware, wormable or zero-day; <em>This sprint</em> = QVS 70+ or remote code execution with a public exploit; <em>Scheduled</em> = severity 5 or QVS 40+; otherwise <em>Routine</em>. Fixes are grouped by QID and ranked by priority, then assets affected × QVS.</p>
+                    <p class="mt-6 text-[11px] text-gray-500"><strong>How this is scored.</strong> The same rules and rankings as Vuln Management, Status and Patch Plan. Each open finding gets an action priority P1-P4 from its finding tier and its asset's Tier (set by people; not set counts as Tier 2), with Internet-facing assets more urgent, and a due date counted from when it was first found (findings from before go-live are backlog with their own targets). The exact rules, days and tier names in use are in Organisation setup (Status rules and Organisation). Assets rank by worst priority, then Tier, then TruRisk (0-1000; Low &lt;500, Medium 500-699, High 700-849, Critical 850+). TruRisk is one score per asset, so it is never added up across findings. Finding tiers come from Qualys signals: <em>Fix now</em> = CISA KEV, active attacks, ransomware, wormable or zero-day; <em>This sprint</em> = QVS 70+ or remote code execution with a public exploit; <em>Scheduled</em> = severity 5 or QVS 40+; otherwise <em>Routine</em>. An EPSS (FIRST) score at or above the Status-rules threshold moves a finding one tier up, and a CVE on the CISA KEV list counts as known-exploited even without a Qualys flag. Fixes are grouped by QID and ranked by priority, then assets affected × QVS.</p>
                 </div>
             </section>
 
@@ -2576,15 +2576,24 @@
                 'CISA Known Exploited Vulnerabilities': 'CISA KEV', 'Active Attacks': 'Active attacks', 'Ransomware': 'Ransomware',
                 'Wormable': 'Wormable', 'Zero Day': 'Zero day', 'Remote Code Execution': 'RCE', 'Public Exploit': 'Public exploit'
             };
+            // v4.35: the EPSS threshold (Status rules) is cached here so tier() does not read the settings per detection.
+            static _epssTh = 0.97;                       // a finding with a CVE at/above this EPSS moves one tier up; 0 = off
+            static setEpssThreshold(v) { this._epssTh = (+v >= 0 && +v <= 1) ? +v : 0; }
 
-            static isExploited(q) { return (q.rti || []).some(t => this.EXPLOITED.includes(t)); }
+            static isExploited(q) { return !!(q && q.kev) || (q.rti || []).some(t => this.EXPLOITED.includes(t)); }
 
             static tier(d, q) {
                 const rti = q.rti || [];
-                if (this.isExploited(q)) return 1;
-                if (d.qvs >= this.QVS_SPRINT || (rti.includes('Remote Code Execution') && rti.includes('Public Exploit'))) return 2;
-                if (d.sev >= 5 || d.qvs >= this.QVS_SCHEDULED) return 3;
-                return 4;
+                let t;
+                if (this.isExploited(q)) t = 1;
+                else if (d.qvs >= this.QVS_SPRINT || (rti.includes('Remote Code Execution') && rti.includes('Public Exploit'))) t = 2;
+                else if (d.sev >= 5 || d.qvs >= this.QVS_SCHEDULED) t = 3;
+                else t = 4;
+                // v4.35: EPSS (FIRST, a CVE's chance of being exploited in 30 days) — very likely exploited moves one
+                // finding tier more urgent (Routine -> Scheduled -> This sprint, never above Fix now).
+                const e = (q && q.epss) || 0;
+                if (this._epssTh > 0 && e >= this._epssTh) t = Math.max(1, t - 1);
+                return t;
             }
 
             static tierBadge(t) {
@@ -2615,7 +2624,7 @@
                 return list.map(t => `<span class="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold mr-1 mb-1">${esc(this.SHORT_FLAGS[t] || t)}</span>`).join('');
             }
 
-            static blank() { return { detections: 0, sev5: 0, sev4: 0, t1: 0, t2: 0, t3: 0, t4: 0, patchable: 0, exploited: 0, maxQvs: 0, oldest: 0, p1: 0, p2: 0, p3: 0, p4: 0, worstP: 5, overdue: 0 }; }
+            static blank() { return { detections: 0, sev5: 0, sev4: 0, t1: 0, t2: 0, t3: 0, t4: 0, patchable: 0, exploited: 0, epss: 0, maxQvs: 0, oldest: 0, p1: 0, p2: 0, p3: 0, p4: 0, worstP: 5, overdue: 0 }; }
 
             static accumulate(s, d) {
                 s.detections++;
@@ -2623,6 +2632,7 @@
                 s['t' + d.tier]++;
                 if (d.patchable) s.patchable++;
                 if (d.exploited) s.exploited++;
+                if ((d.epss || 0) > s.epss) s.epss = d.epss;
                 s.maxQvs = Math.max(s.maxQvs, d.qvs);
                 s.oldest = Math.max(s.oldest, d.age);
                 if (d.p) { s['p' + d.p]++; s.worstP = Math.min(s.worstP, d.p); if (d.overdue && d.p <= 2) s.overdue++; }
@@ -2630,7 +2640,8 @@
 
             // Assets rank by criticality first, then TruRisk (the earlier order; see vulnAssetCmp for the page).
             // v3.16: worst action priority, then Tier (unset = 2), then TruRisk, then P1 count (docs/vulnerability-status-design.md).
-            static sortAssets(a, b) { return ((a.worstP || 5) - (b.worstP || 5)) || ((a.tierE || 2) - (b.tierE || 2)) || (b.truRisk - a.truRisk) || ((b.p1 || 0) - (a.p1 || 0)) || (b.t1 - a.t1); }
+            // v4.35: within a priority, the machines whose findings are most likely exploited come first.
+            static sortAssets(a, b) { return ((a.worstP || 5) - (b.worstP || 5)) || ((a.tierE || 2) - (b.tierE || 2)) || ((b.epss || 0) - (a.epss || 0)) || (b.truRisk - a.truRisk) || ((b.p1 || 0) - (a.p1 || 0)) || (b.t1 - a.t1); }
 
             // One row per QID: what to fix, how many assets it touches.
             static fixGroups(dets, qmap) {
@@ -2639,19 +2650,20 @@
                     const q = qmap.get(d.qid) || {};
                     let g = m.get(d.qid);
                     if (!g) {
-                        g = { qid: d.qid, title: q.title || ('QID ' + d.qid), tier: 4, qvs: 0, assets: new Set(), detections: 0, patchable: !!q.patchable, exploited: this.isExploited(q), maxAge: 0, cve: (q.cves && q.cves[0] && q.cves[0].id) || '' };
+                        g = { qid: d.qid, title: q.title || ('QID ' + d.qid), tier: 4, qvs: 0, epss: 0, assets: new Set(), detections: 0, patchable: !!q.patchable, exploited: this.isExploited(q), maxAge: 0, cve: (q.cves && q.cves[0] && q.cves[0].id) || '' };
                         m.set(d.qid, g);
                     }
                     g.tier = Math.min(g.tier, d.tier);
                     if (d.p) { g.p = Math.min(g.p || 5, d.p); if (d.due && (!g.due || d.due < g.due)) { g.due = d.due; g.dueBacklog = d.backlog; } if (d.overdue) g.overdue = (g.overdue || 0) + 1; }
                     g.qvs = Math.max(g.qvs, d.qvs);
+                    if ((q.epss || 0) > g.epss) g.epss = q.epss;      // v4.35: tie-break (and chip) by highest EPSS
                     g.assets.add(d.asset);
                     if (!g.need) { g.need = new Set(); g.accN = 0; }
                     if (d.accF || d.accM) g.accN++; else g.need.add(d.asset);     // v4.13: machine lists use need
                     g.detections++;
                     g.maxAge = Math.max(g.maxAge, d.age);
                 }
-                return [...m.values()].sort((a, b) => (a.p || 5) - (b.p || 5) || a.tier - b.tier || (b.assets.size * b.qvs) - (a.assets.size * a.qvs) || b.assets.size - a.assets.size);
+                return [...m.values()].sort((a, b) => (a.p || 5) - (b.p || 5) || a.tier - b.tier || (b.assets.size * b.qvs) - (a.assets.size * a.qvs) || (b.epss || 0) - (a.epss || 0) || b.assets.size - a.assets.size);
             }
 
             // "Red Hat Update for kernel (RHSA-2026:13565)" and its sibling advisories share one family:
@@ -2677,6 +2689,7 @@
                         family: true, key: k, title: k, members: m.slice().sort(cmp), qid: m[0].qid, cve: m[0].cve, need, accN: m.reduce((n, x) => n + (x.accN || 0), 0),
                         tier: Math.min(...m.map(x => x.tier)), p: Math.min(...m.map(x => x.p || 5)), overdue: m.reduce((n, x) => n + (x.overdue || 0), 0),
                         due: (v => isFinite(v) ? v : 0)(Math.min(...m.map(x => x.due || Infinity))), dueBacklog: m.some(x => x.dueBacklog), qvs: Math.max(...m.map(x => x.qvs)), assets,
+                        epss: Math.max(...m.map(x => x.epss || 0)),
                         detections: m.reduce((n, x) => n + x.detections, 0), patchable: m.every(x => x.patchable), patchCount: m.filter(x => x.patchable).length, exploited: m.some(x => x.exploited),
                         maxAge: Math.max(...m.map(x => x.maxAge)),
                         newest: dated[0] ? { title: dated[0].x.title, qid: dated[0].x.qid, date: String((qmap.get(dated[0].x.qid) || {}).patchReleased || '').split(' ').slice(0, 3).join(' ') } : null
@@ -2701,6 +2714,7 @@
                 matrix: { 1: [1, 1, 2], 2: [2, 2, 3], 3: [3, 3, 4], 4: [4, 4, 4] },   // finding tier -> priority on [Tier 1, Tier 2, Tier 3]
                 internetStep: true,                                                  // Internet facing: one step more urgent
                 internetDays: 0,                                                     // Internet facing: P1/P2 due within this many days (0 = off). NCSC: 5
+                epssThreshold: 0.97,                                                 // v4.35: a finding whose highest CVE is at/above this EPSS is one tier more urgent (0 = off)
                 highSevP2: false,                                                    // severity 4-5 with a patch is at least P2 (Cyber Essentials: critical and high within 14 days)
                 goLive: '',                                                          // findings first found before it are the Backlog
                 backlogTargets: { 1: 60, 2: 90, 3: 90, 4: 180 },                     // backlog due: days after go-live
@@ -3485,6 +3499,122 @@
                 // Qualys says ended but the published date is later (a minor release of a longer-lived major): this release has ended.
                 if (bucket === 0 && typeof secEnd === 'string' && this.days(secEnd) >= 0) return { secEnd: true, wider: `${m.label}: ${this.fmt(secEnd)}`, mainEnd, extEnd, source: 'Qualys stage + endoflife.date', link: `https://endoflife.date/${m.product}`, note, bucket, behind, product: m.product, label: m.label };
                 return { secEnd, mainEnd, extEnd, source: 'endoflife.date', link: `https://endoflife.date/${m.product}`, note, bucket, behind, product: m.product, label: m.label };
+            }
+        }
+
+        // EPSS + CISA KEV (v4.35): where the "how likely is this to be exploited?" signal comes from, on top of Qualys's
+        // own real-time intelligence flags. EPSS (FIRST, https://www.first.org/epss/) is a daily 0-1 score per CVE
+        // estimating the chance it is exploited in the wild within 30 days. On a server the scores come from
+        // /api/epss/data (the server asks FIRST on a schedule, like the EOL dates); without a server each browser
+        // fetches the catalogue's CVEs from FIRST and keeps them for a day. CISA KEV (real evidence of exploitation)
+        // is fetched once per session to backfill QIDs whose CVEs are known-exploited even when Qualys has no
+        // threat-intel flag for them. Only CVE ids leave the page. A QA id on the rating lists reads q.epss / q.kev,
+        // attached once per data build (Epss.attach), so the priority engine stays cheap.
+        class Epss {
+            static KEY = 'cyberview.epss.v1';
+            static TTL = 24 * 3600000;
+            static _srv = null;             // server data {meta, cves, got}
+            static _map = new Map();        // cve -> {epss, pct}
+            static _kev = null;             // the resolved CISA KEV Map (same one WebResearch uses), while it loads null
+            static _kevDone = false;
+            static ready = false;
+
+            static server() { return StorageService.mode === 'server'; }
+
+            static _id(c) { return String(typeof c === 'string' ? c : (c && c.id) || '').toUpperCase(); }
+
+            // The score of a QID: the highest EPSS across its CVEs (0 = unknown). Always read from the live map:
+            // never trust a stored q.epss, because QID records are saved on import and a saved score would go stale.
+            static score(q) {
+                if (!q) return 0;
+                let e = 0;
+                for (const c of q.cves || []) { const x = this._map.get(this._id(c)); if (x && x.epss > e) e = x.epss; }
+                return e;
+            }
+
+            // Attach the exploitation signals to every QID once, so tier()/isExploited() read them for free.
+            // Overwrites any stored value. Runs again automatically after EPSS/KEV finish loading (see warm()).
+            static attach(qmap) {
+                if (!qmap || typeof qmap.forEach !== 'function') return;
+                const kev = this._kev;
+                qmap.forEach(q => {
+                    q.epss = this.score(q);
+                    q.kev = !!kev && (q.cves || []).some(c => kev.has(this._id(c)));
+                });
+            }
+
+            static status() { return fetch('api/epss/status', { cache: 'no-store' }).then(r => r.json()).catch(() => ({ job: { running: false } })); }
+
+            static async load(force = false) {
+                if (this.server()) {
+                    if (force && !(window.app && window.app.me && window.app.me.role === 'viewer')) {
+                        try { await fetch('api/epss/sync', { method: 'POST', headers: { 'X-Requested-With': 'portal' } }); } catch (e) { /* refused; read whatever is there */ }
+                        for (let i = 0; i < 40; i++) { await new Promise(z => setTimeout(z, 1500)); if (!(await this.status()).job?.running) break; }
+                    }
+                    try {
+                        const r = await fetch('api/epss/data', { cache: 'no-store' });
+                        if (r.ok) { const j = await r.json(); this._srv = { ...j, got: Date.now() }; this._map = new Map(Object.entries(j.cves || {})); }
+                    } catch (e) { /* keep the copy we have */ }
+                    return;
+                }
+                const c = this.readCache();
+                if (!force && c && Date.now() - c.at < this.TTL) { this._map = new Map(Object.entries(c.cves || {})); return; }
+                const need = Array.from(await this.localCves());
+                const fresh = need.length ? await this.fetchLocal(need) : {};
+                if (need.length) this.writeCache({ at: Date.now(), cves: fresh });
+                this._map = new Map(Object.entries(fresh));
+                if (!need.length && c) this._map = new Map(Object.entries(c.cves || {}));        // offline with no catalogue yet: keep the old copy
+            }
+
+            static readCache() { try { return JSON.parse(localStorage.getItem(this.KEY) || 'null') || null; } catch (e) { return null; } }
+            static writeCache(c) { try { localStorage.setItem(this.KEY, JSON.stringify(c)); } catch (e) { /* private window */ } }
+
+            // Every unique CVE in the QID catalogue (the same list the server refreshes).
+            static async localCves() {
+                const out = new Set();
+                let qs = [];
+                try { qs = await VulnStore.all('qids'); } catch (e) { return []; }
+                qs.forEach(q => (q.cves || []).forEach(c => { const id = this._id(c); if (/^CVE-\d{4}-\d{4,7}$/.test(id)) out.add(id); }));
+                return out;
+            }
+
+            static async fetchLocal(ids) {
+                const out = {}, CH = 100;
+                for (let i = 0; i < ids.length; i += CH) {
+                    const j = await WebResearch.getJSON(`https://api.first.org/data/v1/epss?cve=${ids.slice(i, i + CH).map(encodeURIComponent).join(',')}`, 20000);
+                    (j?.data || []).forEach(d => { const cve = String(d.cve || ''); if (cve) out[cve] = { epss: parseFloat(d.epss), pct: parseFloat(d.percentile) }; });
+                    if (i + CH < ids.length) await new Promise(z => setTimeout(z, 300));
+                }
+                return out;
+            }
+
+            // Called once at start-up (and again after a manual refresh): fill the EPSS/KEV maps, then rebuild the
+            // current page so the priorities that changed are visible.
+            static async warm(force = false) {
+                try {
+                    await this.load(force);
+                    if (!this._kevDone) { this._kev = await WebResearch.kev(); this._kevDone = true; }
+                    this.ready = true;
+                    const a = window.app;
+                    if (a && a.invalidateVulnData) { a.invalidateVulnData(); if (a.currentView) a.switchView(a.currentView); }
+                } catch (e) { console.warn('[EPSS] exploitation scores unavailable; ranking continues on Qualys QVS/RTI:', e); }
+            }
+
+            static fetchedAt() {
+                if (this.server()) { const at = this._srv?.meta?.at; return at ? StatusEngine.time(at) : 0; }
+                const c = this.readCache(); return c?.at || 0;
+            }
+
+            // A small chip next to a fix / QID: empty until a score is known. Fix-group rows carry their own
+            // precomputed `epss` (highest across their machines); a QID record reads the attached value.
+            static chip(q) {
+                const e = (q && typeof q.epss === 'number') ? q.epss : this.score(q);
+                if (!e) return '';
+                const hot = e >= (PriorityEngine._epssTh || 0);
+                const pct = (e * 100).toFixed(0);
+                return hot
+                    ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-fuchsia-100 text-fuchsia-800" title="EPSS ${(e * 100).toFixed(1)}% — at or above the ${PriorityEngine._epssTh} threshold on Status rules, so it is ranked one tier more urgent">⦿ EPSS ${pct}%</span>`
+                    : `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600" title="EPSS ${(e * 100).toFixed(1)}% chance of exploitation in 30 days (FIRST)">EPSS ${pct}%</span>`;
             }
         }
 
@@ -5912,7 +6042,7 @@
                     }
                     return { id, qids: qs, machines: rc.length, hid: (hidBy.get(id) || new Set()).size, axA };
                 });
-                const qinfo = [...qidHits.keys()].map(q => { const k = vd.qmap.get(q) || {}; return { qid: q, title: k.title || 'QID ' + q, patchable: !!k.patchable, open: [...rows.values()].filter(x => x.qids.has(q)).length, exploited: PriorityEngine.isExploited(k) }; })
+                const qinfo = [...qidHits.keys()].map(q => { const k = vd.qmap.get(q) || {}; return { qid: q, title: k.title || 'QID ' + q, patchable: !!k.patchable, open: [...rows.values()].filter(x => x.qids.has(q)).length, exploited: PriorityEngine.isExploited(k), epss: k.epss }; })
                     .sort((a, b) => b.open - a.open);
                 const list = [...rows.values()].sort((a, b) => App.CVE_STATE[a.state.b].order - App.CVE_STATE[b.state.b].order || a.p - b.p || (a.tier || 2) - (b.tier || 2) || a.name.localeCompare(b.name));
                 return { ids, team, list, per, qinfo, axOnly, axUnmatched, fixed: fixed.size, stale, never, hidden, show, ax: !!m, S, days: +S.patchPlanDays || 7, qids: [...qidHits.keys()], asOf: this.loadVulnMeta(), axAt: D?.meta?.at || '' };
@@ -5954,7 +6084,7 @@
                     ${App.cveRhHTML(RH[c.id], c.id, C)}
                     ${this.cvePinHTML(c.id)}
                     <div class="text-xs text-gray-600 mt-1" id="cve-intel-${esc(c.id)}"></div></div>`).join('');
-                const qHTML = C.qinfo.length ? `<div><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">Qualys checks for ${C.ids.length === 1 ? 'it' : 'them'}</p><div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.qinfo.map(q => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(q.qid)}" onclick="app.inspectQid(this.dataset.q, 'cve')"><td class="px-2 py-1.5 font-mono text-xs text-gray-500">${esc(q.qid)}</td><td class="px-2 py-1.5">${esc(q.title)}${q.exploited ? ' <strong class="text-red-800 text-xs">⚑ exploited</strong>' : ''}</td><td class="px-2 py-1.5 text-xs text-gray-600">${q.patchable ? 'patch exists' : 'no patch (configuration or end of life)'}</td><td class="px-2 py-1.5 text-right font-mono text-xs">${fmtNum(q.open)} open</td></tr>`).join('')}</tbody></table></div></div>` : '';
+                const qHTML = C.qinfo.length ? `<div><p class="text-[10px] uppercase font-semibold text-gray-500 mb-1">Qualys checks for ${C.ids.length === 1 ? 'it' : 'them'}</p><div class="bg-white border rounded overflow-x-auto"><table class="min-w-full text-sm"><tbody class="divide-y">${C.qinfo.map(q => `<tr class="cursor-pointer hover:bg-blue-50" data-q="${esc(q.qid)}" onclick="app.inspectQid(this.dataset.q, 'cve')"><td class="px-2 py-1.5 font-mono text-xs text-gray-500">${esc(q.qid)}</td><td class="px-2 py-1.5">${esc(q.title)}${q.exploited ? ' <strong class="text-red-800 text-xs">⚑ exploited</strong>' : ''}${Epss.chip(q)}</td><td class="px-2 py-1.5 text-xs text-gray-600">${q.patchable ? 'patch exists' : 'no patch (configuration or end of life)'}</td><td class="px-2 py-1.5 text-right font-mono text-xs">${fmtNum(q.open)} open</td></tr>`).join('')}</tbody></table></div></div>` : '';
                 const sel = this.cveSel = this.cveSel || new Set();
                 const rowHTML = (x) => { const s = ST[x.state.b];
                     return `<tr class="align-top cursor-pointer hover:bg-blue-50" data-n="${esc(x.name)}" onclick="app.openAssetDetail(this.dataset.n)">
@@ -6240,7 +6370,7 @@
                 const S = StatusEngine.settings(), sla = RemediationService.sla();
                 const admin = !this.me || this.me.role === 'admin';
                 const dis = admin ? '' : 'disabled';
-                const num = (k, v, w = 'w-20', min = 0, max = 3650) => `<input type="number" min="${min}" max="${max}" data-k="${k}" value="${v}" class="sr-in border rounded px-2 py-1 ${w}" ${dis}>`;
+                const num = (k, v, w = 'w-20', min = 0, max = 3650, step = 1) => `<input type="number" min="${min}" max="${max}" step="${step}" data-k="${k}" value="${v}" class="sr-in border rounded px-2 py-1 ${w}" ${dis}>`;
                 const FT = { 1: 'Fix now (known exploited)', 2: 'This sprint', 3: 'Scheduled', 4: 'Routine' };
                 const prof = StatusEngine.profileOf(S, sla);
                 const sel = (k, v) => `<select data-k="${k}" class="sr-in border-gray-300 rounded text-sm" ${dis}>${[1, 2, 3, 4].map(p => `<option value="${p}" ${+v === p ? 'selected' : ''}>P${p}</option>`).join('')}</select>`;
@@ -6270,6 +6400,7 @@
                         <p class="text-xs text-gray-600">Each open finding gets P1-P4 from its finding tier and its asset's tier.</p>${matrix}
                         <label class="flex items-center gap-2"><input type="checkbox" data-k="highSevP2" class="sr-in" ${S.highSevP2 ? 'checked' : ''} ${dis}> A critical or high finding that has a patch counts as <em>This sprint</em> at least (Cyber Essentials). Critical or high = CVSS 7 or above when the data has a CVSS score, otherwise Qualys severity 4 or 5.</label>
                         <label class="flex items-center gap-2"><input type="checkbox" data-k="internetStep" class="sr-in" ${S.internetStep ? 'checked' : ''} ${dis}> Internet-facing assets: one step more urgent (e.g. P2 → P1)</label>
+                        <label class="flex items-center gap-2 text-sm">EPSS (FIRST): a finding whose highest CVE is at/above ${num('epssThreshold', S.epssThreshold ?? 0.97, 'w-24', 0, 1, 0.01)} is one tier more urgent <span class="text-xs text-gray-500">(0 = off; 0.97 ≈ the CVEs most likely to be exploited next)</span></label>
                         <label class="flex items-center gap-2 text-sm">Internet-facing assets: P1 and P2 due within ${num('internetDays', S.internetDays || 0, 'w-16', 0, 365)} days <span class="text-xs text-gray-500">(0 = no special rule; NCSC says 5)</span></label>
                         <div class="flex flex-wrap gap-4 items-end"><span class="text-sm font-semibold">SLA from first found (days):</span>${[1, 2, 3, 4].map(p => `<label class="text-xs">P${p}<br>${num('sla.t' + p, sla['t' + p], 'w-20', 1)}</label>`).join('')}</div>
                     </div>
@@ -6303,6 +6434,7 @@
                 const o = StorageService.load(StorageService.KEYS.STATUS_SETTINGS);
                 StatusEngine.saveSettings({ ...((o && !Array.isArray(o)) ? o : {}), goLive: cur.goLive, matrix: JSON.parse(JSON.stringify(P.matrix)), internetStep: P.internetStep, internetDays: P.internetDays, highSevP2: P.highSevP2 });
                 RemediationService.saveSla({ ...RemediationService.sla(), ...P.sla });
+                PriorityEngine.setEpssThreshold(StatusEngine.settings().epssThreshold);
                 this.invalidateVulnData();
                 StorageService.toast('Rule set: ' + P.label);
                 this.renderStatusRules();
@@ -6321,6 +6453,7 @@
                         else if (k === 'highSevP2') S.highSevP2 = v;
                         else if (k === 'goLive') S.goLive = v;
                         else if (k === 'automoxTeams') S.automoxTeams = String(v).split(',').map(x => x.trim()).filter(Boolean);
+                        else if (k === 'epssThreshold') S.epssThreshold = Math.min(1, Math.max(0, parseFloat(v) || 0));       // v4.35 decimal
                         else if (k.startsWith('m.')) { const [, f, i] = k.split('.'); S.matrix[f][+i] = n; }
                         else if (isNaN(n) || n < 0) bad.push(k);
                         else if (k.startsWith('sla.')) sla[k.slice(4)] = Math.max(1, n);
@@ -6333,6 +6466,7 @@
                 }
                 StatusEngine.saveSettings(S);
                 RemediationService.saveSla(sla);
+                PriorityEngine.setEpssThreshold(S.epssThreshold ?? StatusEngine.DEFAULTS.epssThreshold);
                 this.invalidateVulnData();
                 StorageService.toast(reset ? 'Rules back to the defaults' : 'Rules saved');
                 this.renderStatusRules();
@@ -7826,6 +7960,18 @@
                             warn: !run && (!!rh.job?.error || failed.length > 0), btn: canWrite ? "app.healthSync('rh')" : '' });
                     }
                 } else rows.push({ name: 'Red Hat Security Data', how: "Red Hat's public API, asked by this browser when a CVE is looked up", last: 0, next: 0, sched: 'when looked up', result: `${fmtNum(RedHat.cache.size)} CVEs asked this session`, warn: false });
+                // EPSS exploitation scores (v4.35): the whole CVE catalogue from FIRST, on the server by default
+                if (Epss.server()) {
+                    let es = null; try { const r = await fetch('api/epss/status', { cache: 'no-store' }); if (r.ok) es = await r.json(); } catch (e) { es = null; }
+                    if (es) {
+                        const last = StatusEngine.time(es.last?.at), hrs = +es.scheduleHours || 0, run = !!es.job?.running;
+                        rows.push({ name: 'EPSS exploitation scores', how: `FIRST EPSS, by the server: every CVE in the QID catalogue (kept in the database)`,
+                            last, run, next: hrs && last ? last + hrs * H : 0, sched: hrs ? `every ${hrs} h` : 'on demand only',
+                            result: run ? '⟳ refreshing now' : es.job?.error ? '✗ ' + es.job.error : (es.last?.failed || []).length ? `⚠ ${es.last.failed.length} CVE${es.last.failed.length === 1 ? '' : 's'} could not be refreshed (older copies kept): ${es.last.failed.slice(0, 4).join(', ')}` : `${fmtNum(es.cves || 0)} CVE${es.cves === 1 ? '' : 's'} scored` + (last ? ' · ' + (es.last?.ok || 0) + ' in the last run' : ''),
+                            warn: !run && !!es.job?.error, btn: canWrite ? "app.healthSync('ep')" : '' });
+                    }
+                } else rows.push({ name: 'EPSS exploitation scores', how: 'FIRST EPSS, asked by this browser for the QID catalogue, kept a day', last: Epss.fetchedAt(), next: 0, sched: Epss.fetchedAt() ? 'every 24 h' : 'when data is imported',
+                    result: Epss.ready ? `${fmtNum(Epss._map.size)} CVE${Epss._map.size === 1 ? '' : 's'} scored` : 'scores not loaded yet', warn: false, btn: canWrite ? "app.healthSync('ep')" : '' });
                 // Register (asset export) and the live records
                 const seen = reg0 => reg0.filter(r => !r.unrecognised).map(r => StatusEngine.time(r.lastSeen)).filter(Boolean);
                 const sr = seen(StorageService.live());
@@ -7854,6 +8000,11 @@
                     const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), products = [...new Set(reg.map(r => EolDates.match(r.os)?.product).filter(Boolean))];
                     try { await EolDates.load(products, true); StorageService.toast('End-of-life dates fetched'); } catch (e) { StorageService.toast('Could not fetch the dates: ' + e.message); }
                     this._eolLoaded = false;
+                }
+                else if (k === 'ep') {
+                    StorageService.toast(Epss.server() ? 'Refreshing exploitation scores (FIRST, by the server)…' : 'Refreshing exploitation scores from FIRST…');
+                    try { await Epss.warm(true); StorageService.toast('Exploitation scores refreshed'); }
+                    catch (e) { StorageService.toast('Could not refresh the scores: ' + e.message); }
                 }
                 if (this.currentView === 'health') setTimeout(() => this.renderHealthSources(), 800);
             }
@@ -7985,6 +8136,10 @@
                 try { [dets, qs] = await Promise.all([VulnStore.all('detections'), VulnStore.all('qids')]); }
                 catch (e) { console.error('[Vuln Store]', e); }
                 const qmap = new Map(qs.map(q => [q.qid, q]));
+                // v4.35: the EPSS threshold from Status rules, cached once (not per detection), and the exploitation
+                // signals (EPSS score + CISA KEV flag) attached to every QID.
+                PriorityEngine.setEpssThreshold(StatusEngine.settings().epssThreshold);
+                Epss.attach(qmap);
                 const byAsset = new Map(), byQid = new Map();
                 // Qualys "Fixed" rows are proof for remediation checks only: every count, list and tier uses open findings.
                 const all = dets;
@@ -7992,15 +8147,16 @@
                 dets = all.filter(d => RemediationVerifier.ACTIVE(d.status));
                 // v4.30: a Retired machine's open findings are kept (its machine page lists them) but never counted
                 const retiredBy = new Map();
-                dets = dets.filter(d => { if (!StorageService.isRetired(d.asset)) return true; if (!retiredBy.has(d.asset)) retiredBy.set(d.asset, []); retiredBy.get(d.asset).push(d); const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); return false; });
+                dets = dets.filter(d => { if (!StorageService.isRetired(d.asset)) return true; if (!retiredBy.has(d.asset)) retiredBy.set(d.asset, []); retiredBy.get(d.asset).push(d); const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.epss = q.epss || 0; return false; });
                 const excepted = dets.filter(isEx);                 // in-date per-finding exceptions: shown apart, never counted
                 dets = dets.filter(d => !isEx(d));
                 const exBy = new Map();                             // v4.13: listed (flagged ⚑) when the Risk-accepted switch is on
-                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
+                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.epss = q.epss || 0; d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
                 dets.forEach(d => {
                     const q = qmap.get(d.qid) || {};
                     d.tier = PriorityEngine.tier(d, q);
                     d.exploited = PriorityEngine.isExploited(q);
+                    d.epss = q.epss || 0;
                     if (!byAsset.has(d.asset)) byAsset.set(d.asset, []);
                     byAsset.get(d.asset).push(d);
                     if (!byQid.has(d.qid)) byQid.set(d.qid, []);
@@ -8066,6 +8222,7 @@
                     const q = qmap.get(d.qid) || {};
                     d.tier = PriorityEngine.tier(d, q);
                     d.exploited = PriorityEngine.isExploited(q);
+                    d.epss = q.epss || 0;
                     let s = by.get(d.asset);
                     if (!s) {
                         const info = assetInfo.get(d.asset) || {}, r = regByNorm[d.asset] || {};
@@ -9172,6 +9329,7 @@
                 $('vuln-prog-agg').textContent = detArr.length;
 
                 this.invalidateVulnData();
+                Epss.warm();                                // v4.35: score the newly imported CVEs (server schedule also picks them up)
                 // Remediation: tick off (or reopen) tracked assets from what this import shows.
                 let rs = null;
                 try {
@@ -9273,15 +9431,17 @@
             }
 
             // Ranking (v3.19). Machines: overdue P1/P2 first, then most P1, most P2, Internet facing, Tier 1, most P3, TruRisk.
+            // v4.35: within a priority, machines whose findings are most likely exploited come first.
             static vulnAssetCmp(a, b) {
                 return ((b.overdue > 0) - (a.overdue > 0)) || (b.p1 - a.p1) || (b.p2 - a.p2) || ((b.exposure === 'Internet Facing') - (a.exposure === 'Internet Facing'))
-                    || ((a.tierE || 2) - (b.tierE || 2)) || (b.p3 - a.p3) || (b.truRisk - a.truRisk) || a.name.localeCompare(b.name);
+                    || ((a.tierE || 2) - (b.tierE || 2)) || ((b.epss || 0) - (a.epss || 0)) || (b.p3 - a.p3) || (b.truRisk - a.truRisk) || a.name.localeCompare(b.name);
             }
             // Fixes: urgency category first (CISA SSVC / NCSC / Tenable's "VPR category, then assets affected"), overdue first,
             // then the most machines, then the most Internet-facing or Tier 1 machines among them, then QDS.
+            // v4.35: within the same priority, the fixes most likely exploited come first.
             static vulnFixCmp(a, b) {
                 return ((a.p || 5) - (b.p || 5)) || (((b.overdue || 0) > 0) - ((a.overdue || 0) > 0)) || (b.assets.size - a.assets.size)
-                    || ((b.key1 || 0) - (a.key1 || 0)) || (b.qvs - a.qvs) || String(a.title).localeCompare(String(b.title));
+                    || ((b.key1 || 0) - (a.key1 || 0)) || ((b.epss || 0) - (a.epss || 0)) || (b.qvs - a.qvs) || String(a.title).localeCompare(String(b.title));
             }
             static vulnWhy(a) {
                 const w = [];
@@ -9514,8 +9674,8 @@
                         return `<span class="inline-flex gap-1 items-center">${c}${exBtn}${csvBtn}<button class="write-only text-[10px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-100 whitespace-nowrap" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.trackVulnRow(this.dataset.t)" title="Create a remediation task for ${c ? 'the machines not tracked yet' : 'this fix'}">＋${c ? '' : ' Track'}</button></span>`; } },
                     { key: 'rank', w: 4, label: '#', num: true, dir: 1, align: 'right', sort: (r) => r.rank || 0, cell: (r) => r.rank ? `<span class="text-gray-500">${r.rank}</span>` : '' },
                     { key: 'title', w: 26, label: 'Fix', dir: 1, sort: (r) => r.title.toLowerCase(), cell: (r) => r.family
-                        ? `<span class="flex items-center gap-2 text-gray-900"><span class="text-gray-400 w-3">${this.vulnState.expanded.has(r.key) ? '▾' : '▸'}</span><span class="truncate" title="${esc(r.title)}">${esc(r.title)}</span><span class="shrink-0 px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">${r.members.length} updates</span></span>`
-                        : `<span class="text-gray-800">${trunc(r.title)}</span>` },
+                        ? `<span class="flex items-center gap-2 text-gray-900"><span class="text-gray-400 w-3">${this.vulnState.expanded.has(r.key) ? '▾' : '▸'}</span><span class="truncate" title="${esc(r.title)}">${esc(r.title)}</span><span class="shrink-0 px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">${r.members.length} updates</span>${Epss.chip(r)}</span>`
+                        : `<span class="text-gray-800">${trunc(r.title)}</span>${Epss.chip(r)}` },
                     { key: 'p', w: 6, label: 'P', dir: 1, align: 'center', sort: (r) => r.p || 5, cell: (r) => r.p && r.p < 5 ? `<span title="${esc(PriorityEngine.LABELS[r.tier])} on the most important machine">${StatusEngine.pBadge(r.p)}</span>` : '-' },
                     { key: 'assets', w: 9, label: 'Machines', num: true, dir: -1, align: 'right', sort: (r) => r.assets.size, cell: (r) => `<span class="font-semibold">${fmtNum(r.assets.size)}</span>${r.accN ? `<div class="text-[10px] font-semibold text-amber-900 whitespace-nowrap" title="Findings on risk-accepted machines or accepted findings: shown, never in the machine list">⚑ ${fmtNum(r.accN)} accepted</div>` : ''}` },
                     { key: 'key1', w: 9, label: '🌐 / T1', num: true, dir: -1, align: 'right', sort: (r) => r.key1 || 0, cell: (r) => r.key1 ? `<span title="${fmtNum(r.key1)} of these machines are Internet facing or Tier 1">${fmtNum(r.key1)}</span>` : '<span class="text-gray-400">0</span>' },
@@ -10109,7 +10269,7 @@
                             <div class="max-w-3xl">
                                 <p class="text-xs font-mono text-gray-500">QID ${esc(qid)} • ${esc(q.category || '')}</p>
                                 <h3 class="text-xl font-bold text-gray-800">${esc(plain(q.title))}</h3>
-                                <div class="mt-2">${PriorityEngine.tierBadge(tier)} ${PriorityEngine.sevBadge(q.sev)} <span class="ml-2">${PriorityEngine.flagChips(q.rti, false)}</span></div>
+                                <div class="mt-2">${PriorityEngine.tierBadge(tier)} ${PriorityEngine.sevBadge(q.sev)} ${Epss.chip(q)} <span class="ml-2">${PriorityEngine.flagChips(q.rti, false)}</span></div>
                             </div>
                             <div class="print-hide"><button class="write-only bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium shadow-sm" data-q="${esc(qid)}" onclick="app.trackQid(this.dataset.q)">＋ Track this fix</button></div>
                         </div>
@@ -10664,6 +10824,7 @@ Finish with a "Verify" section saying how to confirm in Qualys (agent check-in o
                 try { await Demo.firstLoad(window.app); } catch (e) { console.error('[Demo]', e); StorageService.toast('The demo could not be built: ' + e.message); }
                 window.app.fillTeamSelects(); window.app.switchView('dashboard'); Demo.paintBanner();
             }
+            Epss.warm();        // v4.35: fetch EPSS scores + the CISA KEV list, then re-rank the current page
         };
     </script>
 </body>

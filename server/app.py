@@ -22,10 +22,11 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 
 import automox
 import eol
+import epss
 import redhat
 import qualys
 
-VERSION = "4.25.2"
+VERSION = "4.35.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -160,7 +161,7 @@ def migrate(wait_seconds=90):
     while True:
         try:
             with conn_ctx() as c, c.cursor() as cur:
-                for stmt in SCHEMA + [automox.SCHEMA, qualys.SCHEMA, eol.SCHEMA, redhat.SCHEMA]:
+                for stmt in SCHEMA + [automox.SCHEMA, qualys.SCHEMA, eol.SCHEMA, redhat.SCHEMA, epss.SCHEMA]:
                     cur.execute(stmt)
             return
         except pymysql.err.OperationalError:
@@ -179,6 +180,7 @@ def _startup():
     qualys.init(conn_ctx, audit)
     eol.init(conn_ctx, audit)
     redhat.init(conn_ctx, audit)
+    epss.init(conn_ctx, audit)
 
 
 # ------------------------------------------------------------------ users, sessions, roles
@@ -986,6 +988,28 @@ async def redhat_cves(ids: str = ""):
 @app.get("/api/eol/data")
 def eol_data():
     return Response(eol.data_json(), media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
+# ------------------------------------------------------------------ EPSS exploitation scores (FIRST, public; v4.35)
+# Read-only: the server keeps FIRST's score for every CVE in the QID catalogue and serves it from /api/epss/data.
+
+@app.get("/api/epss/status")
+def epss_status():
+    """Whether EPSS is set to refresh, the running job and the last result."""
+    return epss.status()
+
+
+@app.post("/api/epss/sync")
+def epss_sync(request: Request):
+    """Fetch the scores for every CVE the portal holds now (editors)."""
+    if not epss.start(current_user(request)):
+        return JSONResponse({"error": "A refresh is already running"}, status_code=409)
+    return JSONResponse({"started": True}, status_code=202)
+
+
+@app.get("/api/epss/data")
+def epss_data():
+    return Response(epss.data_json(), media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
 # ------------------------------------------------------------------ Automox (read-only patch data)

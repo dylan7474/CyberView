@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.35.0 · 25 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.36.0 · 25 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -394,7 +394,7 @@
                         <span class="text-sm font-semibold text-gray-800 w-20">Urgency</span>
                         <div id="vuln-urgency" role="radiogroup" aria-label="Urgency" class="flex flex-wrap gap-1.5"></div>
                         <details id="vuln-more" class="text-sm"><summary class="cursor-pointer text-blue-700 underline">More filters</summary>
-                            <div class="flex flex-wrap gap-4 mt-2"><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Patchable</span><select id="vuln-filter-patchable" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Findings</option><option value="YES">Patchable</option></select></label><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Severity</span><select id="vuln-filter-severity" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Severities</option><option value="4+">Severity 4 & 5</option><option value="5">Severity 5 Only</option></select></label></div></details>
+                            <div class="flex flex-wrap gap-4 mt-2"><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Exploited</span><select id="vuln-filter-exploited" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Findings</option><option value="YES">Known exploited</option><option value="NO">Not exploited</option></select></label><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Patchable</span><select id="vuln-filter-patchable" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Findings</option><option value="YES">Patchable</option></select></label><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Severity</span><select id="vuln-filter-severity" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Severities</option><option value="4+">Severity 4 & 5</option><option value="5">Severity 5 Only</option></select></label></div></details>
                         <button id="vuln-clear-filters" onclick="app.vulnClearFilters()" class="hidden text-xs text-blue-700 underline">Clear filters</button>
                     </div>
                     <p id="vuln-summary" class="text-sm text-gray-800 border-t pt-3"></p>
@@ -8078,7 +8078,7 @@
 
             updateVulnFilters() {
                 const v = (id) => document.getElementById(id).value;
-                this.vulnState.filters = { ...this.vulnState.filters, patchable: v('vuln-filter-patchable'), severity: v('vuln-filter-severity'), owner: v('vuln-filter-owner'), exposure: v('vuln-filter-exposure') };
+                this.vulnState.filters = { ...this.vulnState.filters, patchable: v('vuln-filter-patchable'), severity: v('vuln-filter-severity'), owner: v('vuln-filter-owner'), exposure: v('vuln-filter-exposure'), exploited: v('vuln-filter-exploited') };
                 this.vulnResetPages();
                 this.renderVulnDashboard();
             }
@@ -8174,7 +8174,7 @@
             // Registered assets in scope joined to their detections, with the filters applied at detection level.
             // v4.13: risk-accepted machines and accepted findings follow the Risk-accepted switch (official: true = never included).
             // The old riskStatus filter is gone; hidden = what the switch leaves out within the other filters.
-            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false } = {}) {
+            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', exploited = 'ALL', official = false } = {}) {
                 const vd = await this.getVulnData();
                 const reg = StorageService.live();
                 const regMap = new Map(reg.map(r => [r.normalizedName, r]));
@@ -8184,7 +8184,8 @@
                 const accM = new Map(teamScope.map(r => [r.normalizedName, RiskView.machine(r, vd.ex)]).filter(x => x[1]));
                 const inScope = show ? teamScope : teamScope.filter(r => !accM.has(r.normalizedName));
                 const names = new Set(inScope.map(r => r.normalizedName));
-                const keep = (d) => !(patchable === 'YES' && !d.patchable) && !(severity === '5' && d.sev < 5) && !(severity === '4+' && d.sev < 4) && !(tier !== 'ALL' && d.tier > +tier) && !(p !== 'ALL' && (d.p || 5) > +p);
+                const keep = (d) => !(patchable === 'YES' && !d.patchable) && !(severity === '5' && d.sev < 5) && !(severity === '4+' && d.sev < 4) && !(tier !== 'ALL' && d.tier > +tier) && !(p !== 'ALL' && (d.p || 5) > +p)
+                    && !(exploited === 'YES' && !d.exploited) && !(exploited === 'NO' && d.exploited);
                 const hidden = { machines: 0, findings: 0, expiring: 0 };
                 const hm = new Set();
                 for (const r of teamScope) {
@@ -9350,7 +9351,7 @@
 
             syncVulnFilterControls() {
                 const f = this.vulnState.filters;
-                const map = { patchable: 'vuln-filter-patchable', severity: 'vuln-filter-severity', owner: 'vuln-filter-owner', exposure: 'vuln-filter-exposure' };
+                const map = { patchable: 'vuln-filter-patchable', severity: 'vuln-filter-severity', owner: 'vuln-filter-owner', exposure: 'vuln-filter-exposure', exploited: 'vuln-filter-exploited' };
                 Object.entries(map).forEach(([k, id]) => { const el = document.getElementById(id); if (el) el.value = f[k]; });
             }
 
@@ -9443,12 +9444,36 @@
                 return ((a.p || 5) - (b.p || 5)) || (((b.overdue || 0) > 0) - ((a.overdue || 0) > 0)) || (b.assets.size - a.assets.size)
                     || ((b.key1 || 0) - (a.key1 || 0)) || ((b.epss || 0) - (a.epss || 0)) || (b.qvs - a.qvs) || String(a.title).localeCompare(String(b.title));
             }
+            // v4.36: the one thing that stops a fix being done, for the "Why not done" column.
+            // Owner gaps and "no patch" are pure governance (no Automox data needed); the Automox states reuse the
+            // Patch Plan's own classifier (App.planClassify) per machine, highest blocker wins.
+            static vulnBlocker(g, regMap, m, S) {
+                let noOwner = 0, manual = 0, blocked = 0, will = 0;
+                const auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
+                const end = Demo.now() + (+S.patchPlanDays || 7) * 864e5;
+                const cves = g.cve ? [g.cve] : [];
+                for (const name of g.assets) {
+                    const r = regMap.get(name);
+                    if (!r || r.owner === 'Unassigned' || r.owner === 'Unrecognised') { noOwner++; continue; }
+                    if (!m) continue;
+                    const c = App.axState(App.planClassify({ asset: name, cves }, r, m, end, S, { title: g.title }, auto.has(String(r.owner || '').toLowerCase())));
+                    if (c.b === 'manual') manual++;
+                    else if (c.b === 'blocked') blocked++;
+                    else will++;
+                }
+                if (noOwner) return { kind: 'owner', label: `⚑ no owner · ${noOwner}`, hint: `machine${noOwner === 1 ? '' : 's'} nobody owns: assign a team in the Review Queue before they can be fixed` };
+                if (!g.patchable) return { kind: 'patch', label: '✖ no patch', hint: 'no vendor fix exists (configuration or end of life): mitigate or record a risk acceptance' };
+                if (manual) return { kind: 'manual', label: `✋ manual fix · ${manual}`, hint: 'Automox will not patch these (no agent, no patch policy, or a team Automox does not patch)' };
+                if (blocked) return { kind: 'blocked', label: `⚠ Automox blocked · ${blocked}`, hint: 'stale agent, reboot pending, or the next patch run is too far off' };
+                return { kind: 'ok', label: will ? '✓ Automox patches it' : '✓ patch ready', hint: will ? 'Automox will install the waiting patch; nothing to do unless a run slips' : '' };
+            }
             static vulnWhy(a) {
                 const w = [];
                 if (a.overdue) w.push(`✖ ${fmtNum(a.overdue)} P1/P2 overdue`);
                 if (a.p1) w.push(`${fmtNum(a.p1)} P1`);
                 if (a.p2) w.push(`${fmtNum(a.p2)} P2`);
                 if (!a.p1 && !a.p2) { const p = [3, 4].find(n => a['p' + n]); if (p) w.push(`${fmtNum(a['p' + p])} P${p}`); }
+                if (a.exploited) w.push(`⚑ ${fmtNum(a.exploited)} exploited`);
                 if (a.exposure === 'Internet Facing') w.push('🌐 Internet facing');
                 if (StatusEngine.tierOf(a.r) === 1) w.push('Tier 1');
                 return w.join(' · ');
@@ -9472,7 +9497,7 @@
                 const U = [['ALL', 'All'], ['1', 'P1'], ['2', 'P1–P2'], ['3', 'P1–P3']];
                 $('vuln-urgency').innerHTML = U.map(([v, l]) => { const on = (f.p || 'ALL') === v;
                     return `<button role="radio" aria-checked="${on}" onclick="app.vulnSetUrgency('${v}')" class="px-3 py-1 rounded-full text-sm whitespace-nowrap ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${l}</button>`; }).join('');
-                const more = $('vuln-more'); if (more && (f.patchable !== 'ALL' || f.severity !== 'ALL')) more.open = true;
+                const more = $('vuln-more'); if (more && (f.patchable !== 'ALL' || f.severity !== 'ALL' || f.exploited !== 'ALL')) more.open = true;
 
                 // the importance of a fix's machines: how many are Internet facing or Tier 1
                 const key1 = (g) => { let n = 0; g.assets.forEach(a => { const r = regMap.get(a); if (r && (r.exposure === 'Internet Facing' || StatusEngine.tierOf(r) === 1)) n++; }); return n; };
@@ -9482,6 +9507,13 @@
                 const famFix = PriorityEngine.familyGroups(groups, vd.qmap, App.vulnFixCmp);
                 famFix.forEach(g => { if (g.family) g.key1 = key1(g); });
                 famFix.sort(App.vulnFixCmp);
+                // v4.36: each fix's primary blocker for the "Why not done" column. Automox states reuse the Patch Plan's own
+                // classifier (App.planClassify); without Automox data only the owner and no-patch blockers show.
+                let axm = AutomoxService.match();
+                if (Demo.api() && !axm) { try { await AutomoxService.ensure(); } catch (e) { /* no Automox data */ } axm = AutomoxService.match(); }
+                { const S = StatusEngine.settings();
+                  groups.forEach(g => g.blocker = App.vulnBlocker(g, regMap, axm, S));
+                  famFix.forEach(g => { if (g.family) g.blocker = App.vulnBlocker(g, regMap, axm, S); }); }
                 const ranked = [...assets].sort(App.vulnAssetCmp);
                 ranked.forEach((a, i) => { a.rank = i + 1; a.why = App.vulnWhy(a); });
                 this.vulnData = { assets: ranked, groups, famFix };
@@ -9489,7 +9521,7 @@
                 // one plain summary line (not buttons)
                 const p1 = dets.filter(d => d.p === 1), over = dets.filter(d => d.overdue && d.p <= 2);
                 const patchPct = dets.length ? Math.round(dets.filter(d => d.patchable).length / dets.length * 100) : 0;
-                const scope = [f.owner === 'ALL' ? 'All teams' : f.owner, f.exposure !== 'ALL' ? f.exposure : '', f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : '', f.patchable === 'YES' ? 'patchable' : '', f.severity !== 'ALL' ? 'severity ' + f.severity : ''].filter(Boolean).join(' · ');
+                const scope = [f.owner === 'ALL' ? 'All teams' : f.owner, f.exposure !== 'ALL' ? f.exposure : '', f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : '', f.exploited === 'YES' ? 'known exploited' : (f.exploited === 'NO' ? 'not exploited' : ''), f.patchable === 'YES' ? 'patchable' : '', f.severity !== 'ALL' ? 'severity ' + f.severity : ''].filter(Boolean).join(' · ');
                 $('vuln-summary').innerHTML = `<strong>${esc(scope)}:</strong> ${fmtNum(ranked.length)} machines with findings · ${fmtNum(groups.length)} fixes · <strong>${fmtNum(p1.length)} P1</strong> findings on ${fmtNum(new Set(p1.map(d => d.asset)).size)} machines · ${over.length ? `<strong>✖ ${fmtNum(over.length)} P1/P2 overdue</strong>` : '0 P1/P2 overdue'} · ${patchPct}% fixable by patching`;
                 this.renderVulnSection('assets');
                 this.renderVulnSection('fixes');
@@ -9658,7 +9690,8 @@
                             { key: 'p1', w: 5, label: 'P1', num: true, dir: -1, align: 'right', sort: (r) => r.p1, cell: (r) => `<span class="${r.p1 ? 'font-bold' : 'text-gray-400'}">${fmtNum(r.p1)}</span>` },
                             { key: 'p2', w: 5, label: 'P2', num: true, dir: -1, align: 'right', sort: (r) => r.p2, cell: (r) => `<span class="${r.p2 ? 'font-semibold' : 'text-gray-400'}">${fmtNum(r.p2)}</span>` },
                             { key: 'overdue', w: 8, label: 'Overdue', num: true, dir: -1, align: 'right', sort: (r) => r.overdue, cell: (r) => r.overdue ? `<span class="font-bold">✖ ${fmtNum(r.overdue)}</span>` : '<span class="text-gray-400">0</span>' },
-                            { key: 'why', w: 19, label: 'Why it is here', cell: (r) => `<span class="text-xs text-gray-700">${trunc(r.why)}</span>` },
+                            { key: 'exploited', w: 5, label: '⚑', num: true, dir: -1, align: 'right', sort: (r) => r.exploited, cell: (r) => r.exploited ? `<span class="font-bold text-red-800" title="${fmtNum(r.exploited)} known-exploited finding${r.exploited === 1 ? '' : 's'}">⚑ ${fmtNum(r.exploited)}</span>` : '<span class="text-gray-300">—</span>' },
+                            { key: 'why', w: 14, label: 'Why it is here', cell: (r) => `<span class="text-xs text-gray-700">${trunc(r.why)}</span>` },
                             { key: 'truRisk', w: 9, label: 'TruRisk', num: true, dir: -1, sort: (r) => r.truRisk, cell: (r) => PriorityEngine.truRiskBadge(r.truRisk) },
                             { key: 'act', w: 5, align: 'right', cell: (r) => `<button data-n="${esc(r.name)}" onclick="event.stopPropagation(); app.openRiskModal([this.dataset.n], 'vuln')" class="text-amber-700 font-semibold hover:underline text-[10px] uppercase" title="Record an accepted risk for this machine">Accept</button>` }
                         ]
@@ -9666,22 +9699,24 @@
                 }
                 const RIX = RemediationVerifier.index();
                 const cols = [
-                    { key: 'track', w: 16, head: '<span class="sr-only">Track</span>', cell: (r) => {
+                    { key: 'track', w: 14, head: '<span class="sr-only">Track</span>', cell: (r) => {
                         const tasks = r.family ? [...(RIX.byKey.get('family|' + r.key) || []), ...r.members.flatMap(m => RIX.byQid.get(String(m.qid)) || [])] : (RIX.byQid.get(String(r.qid)) || []);
                         const c = RemediationVerifier.chip(tasks, [...r.assets]);
                         const exBtn = `<button class="write-only text-[10px] text-purple-800 border border-purple-300 rounded px-1.5 py-0.5 hover:bg-purple-50 whitespace-nowrap" title="Record an exception (accepted risk) for this fix on its machines" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.exceptVulnRow(this.dataset.t)">⚖</button>`;
                         const csvBtn = `<button class="text-[10px] text-gray-700 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100" title="Download the names of the machines this fix needs, one per line (an Ansible inventory)" aria-label="Download machine list" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.vulnFixCsv(this.dataset.t)">⬇ List</button>`;
                         return `<span class="inline-flex gap-1 items-center">${c}${exBtn}${csvBtn}<button class="write-only text-[10px] text-blue-700 border border-blue-300 rounded px-1.5 py-0.5 hover:bg-blue-100 whitespace-nowrap" data-t="${esc(r.family ? 'f:' + r.key : 'q:' + r.qid)}" onclick="event.stopPropagation(); app.trackVulnRow(this.dataset.t)" title="Create a remediation task for ${c ? 'the machines not tracked yet' : 'this fix'}">＋${c ? '' : ' Track'}</button></span>`; } },
                     { key: 'rank', w: 4, label: '#', num: true, dir: 1, align: 'right', sort: (r) => r.rank || 0, cell: (r) => r.rank ? `<span class="text-gray-500">${r.rank}</span>` : '' },
-                    { key: 'title', w: 26, label: 'Fix', dir: 1, sort: (r) => r.title.toLowerCase(), cell: (r) => r.family
+                    { key: 'title', w: 18, label: 'Fix', dir: 1, sort: (r) => r.title.toLowerCase(), cell: (r) => r.family
                         ? `<span class="flex items-center gap-2 text-gray-900"><span class="text-gray-400 w-3">${this.vulnState.expanded.has(r.key) ? '▾' : '▸'}</span><span class="truncate" title="${esc(r.title)}">${esc(r.title)}</span><span class="shrink-0 px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">${r.members.length} updates</span>${Epss.chip(r)}</span>`
                         : `<span class="text-gray-800">${trunc(r.title)}</span>${Epss.chip(r)}` },
-                    { key: 'p', w: 6, label: 'P', dir: 1, align: 'center', sort: (r) => r.p || 5, cell: (r) => r.p && r.p < 5 ? `<span title="${esc(PriorityEngine.LABELS[r.tier])} on the most important machine">${StatusEngine.pBadge(r.p)}</span>` : '-' },
-                    { key: 'assets', w: 9, label: 'Machines', num: true, dir: -1, align: 'right', sort: (r) => r.assets.size, cell: (r) => `<span class="font-semibold">${fmtNum(r.assets.size)}</span>${r.accN ? `<div class="text-[10px] font-semibold text-amber-900 whitespace-nowrap" title="Findings on risk-accepted machines or accepted findings: shown, never in the machine list">⚑ ${fmtNum(r.accN)} accepted</div>` : ''}` },
-                    { key: 'key1', w: 9, label: '🌐 / T1', num: true, dir: -1, align: 'right', sort: (r) => r.key1 || 0, cell: (r) => r.key1 ? `<span title="${fmtNum(r.key1)} of these machines are Internet facing or Tier 1">${fmtNum(r.key1)}</span>` : '<span class="text-gray-400">0</span>' },
-                    { key: 'due', w: 13, label: 'Due', dir: 1, sort: (r) => r.due || 9e15, cell: (r) => r.due ? `<span class="text-xs whitespace-nowrap ${r.overdue ? 'font-bold' : ''}">${esc(StatusEngine.dueText(r))}</span>` : '-' },
-                    { key: 'patchable', w: 7, label: 'Patch', dir: -1, align: 'center', sort: (r) => r.patchable ? 1 : 0, cell: (r) => r.family && !r.patchable && r.patchCount ? `<span class="text-xs text-gray-600" title="${r.patchCount} of ${r.members.length} updates have a patch">${r.patchCount}/${r.members.length}</span>` : (r.patchable ? '✅' : '—') },
-                    { key: 'cve', w: 10, label: 'CVE', dir: 1, sort: (r) => r.cve, cell: (r) => r.family ? `<span class="text-xs text-gray-400">various</span>` : `<span class="font-mono text-xs text-blue-700">${esc(r.cve || '-')}</span>` }
+                    { key: 'p', w: 5, label: 'P', dir: 1, align: 'center', sort: (r) => r.p || 5, cell: (r) => r.p && r.p < 5 ? `<span title="${esc(PriorityEngine.LABELS[r.tier])} on the most important machine">${StatusEngine.pBadge(r.p)}</span>` : '-' },
+                    { key: 'assets', w: 8, label: 'Machines', num: true, dir: -1, align: 'right', sort: (r) => r.assets.size, cell: (r) => `<span class="font-semibold">${fmtNum(r.assets.size)}</span>${r.accN ? `<div class="text-[10px] font-semibold text-amber-900 whitespace-nowrap" title="Findings on risk-accepted machines or accepted findings: shown, never in the machine list">⚑ ${fmtNum(r.accN)} accepted</div>` : ''}` },
+                    { key: 'key1', w: 7, label: '🌐 / T1', num: true, dir: -1, align: 'right', sort: (r) => r.key1 || 0, cell: (r) => r.key1 ? `<span title="${fmtNum(r.key1)} of these machines are Internet facing or Tier 1">${fmtNum(r.key1)}</span>` : '<span class="text-gray-400">0</span>' },
+                    { key: 'due', w: 10, label: 'Due', dir: 1, sort: (r) => r.due || 9e15, cell: (r) => r.due ? `<span class="text-xs whitespace-nowrap ${r.overdue ? 'font-bold' : ''}">${esc(StatusEngine.dueText(r))}</span>` : '-' },
+                    { key: 'patchable', w: 6, label: 'Patch', dir: -1, align: 'center', sort: (r) => r.patchable ? 1 : 0, cell: (r) => r.family && !r.patchable && r.patchCount ? `<span class="text-xs text-gray-600" title="${r.patchCount} of ${r.members.length} updates have a patch">${r.patchCount}/${r.members.length}</span>` : (r.patchable ? '✅' : '—') },
+                    { key: 'exploited', w: 5, label: '⚑', dir: -1, align: 'center', sort: (r) => r.exploited ? 1 : 0, cell: (r) => r.exploited ? '<span class="text-red-800 font-bold" title="Known exploited (CISA KEV list or Qualys threat intel): fix before anything else">⚑</span>' : '<span class="text-gray-300">—</span>' },
+                    { key: 'blocker', w: 14, label: 'Why not done', cell: (r) => { const b = r.blocker || { kind: 'ok', label: '✓ patch ready', hint: '' }; const CLS = { owner: 'bg-amber-100 text-amber-900 border-amber-300', patch: 'bg-red-100 text-red-800 border-red-300', manual: 'bg-orange-100 text-orange-800 border-orange-300', blocked: 'bg-amber-100 text-amber-900 border-amber-300', ok: 'bg-emerald-100 text-emerald-900 border-emerald-300' }; return `<span class="inline-block px-1.5 py-0.5 rounded border text-[10px] font-semibold whitespace-nowrap ${CLS[b.kind] || CLS.ok}" title="${esc(b.hint)}">${b.label}</span>`; } },
+                    { key: 'cve', w: 9, label: 'CVE', dir: 1, sort: (r) => r.cve, cell: (r) => r.family ? `<span class="text-xs text-gray-400">various</span>` : `<span class="font-mono text-xs text-blue-700">${esc(r.cve || '-')}</span>` }
                 ];
                 const rows = this.vulnState.group ? d.famFix : d.groups;
                 rows.forEach((r, i) => { r.rank = i + 1; });
@@ -10328,7 +10363,7 @@
             // AI remediation
             // ------------------------------------------
 
-            static VULN_DEFAULT_FILTERS = { patchable: 'ALL', severity: 'ALL', owner: 'ALL', exposure: 'ALL', tier: 'ALL', p: 'ALL' };
+            static VULN_DEFAULT_FILTERS = { patchable: 'ALL', severity: 'ALL', owner: 'ALL', exposure: 'ALL', tier: 'ALL', p: 'ALL', exploited: 'ALL' };
 
             static aiSystem() { return App.AI_SYSTEM_T.replace('{TEAM}', OrgSettings.get().aiTeam || 'an infrastructure operations team'); }
             static AI_SYSTEM_T = `You are a senior infrastructure security engineer advising {TEAM} on remediating vulnerabilities reported by Qualys.

@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.36.0 · 25 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.37.0 · 25 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -87,6 +87,7 @@
         </div>
         <div class="px-3 pt-3 print-hide" id="view-mode"></div>
         <div class="px-3 pt-2 print-hide simple-ok" id="acc-switch"></div>
+        <div class="px-3 pt-2 print-hide simple-ok" id="exploited-switch"></div>
         <div class="px-3 pt-2 print-hide simple-ok" id="team-switch"></div>
         <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
             <p class="nav-group simple-ok px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Daily work</p>
@@ -134,6 +135,7 @@
         <div class="flex-1 overflow-y-auto p-8" id="view-container">
             <div id="demo-banner" class="hidden"></div>
             <div id="acc-strip" class="hidden mb-4 rounded-lg border-2 border-amber-400 bg-amber-50 text-amber-900 px-4 py-2 text-sm flex flex-wrap items-center gap-x-3 gap-y-1"></div>
+            <div id="exploited-strip" class="hidden mb-4 rounded-lg border-2 border-red-400 bg-red-50 text-red-900 px-4 py-2 text-sm flex flex-wrap items-center gap-x-3 gap-y-1"></div>
             <div id="acc-note"></div>
             <div id="org-banner" class="hidden mb-4 bg-amber-50 border-2 border-amber-400 text-amber-900 rounded-xl p-4 text-sm print-hide">⚠ <strong>Set up your organisation first.</strong> This portal has assets but no organisation setup (teams, domain suffixes, rules), so imports and Qualys syncs are paused to avoid duplicate assets. <button onclick="app.switchView('org')" class="underline font-semibold">Open ⚙ Organisation setup</button>, check it and press <em>Save setup</em>, or import your setup, or restore a backup that includes it.</div>
             
@@ -394,7 +396,7 @@
                         <span class="text-sm font-semibold text-gray-800 w-20">Urgency</span>
                         <div id="vuln-urgency" role="radiogroup" aria-label="Urgency" class="flex flex-wrap gap-1.5"></div>
                         <details id="vuln-more" class="text-sm"><summary class="cursor-pointer text-blue-700 underline">More filters</summary>
-                            <div class="flex flex-wrap gap-4 mt-2"><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Exploited</span><select id="vuln-filter-exploited" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Findings</option><option value="YES">Known exploited</option><option value="NO">Not exploited</option></select></label><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Patchable</span><select id="vuln-filter-patchable" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Findings</option><option value="YES">Patchable</option></select></label><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Severity</span><select id="vuln-filter-severity" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Severities</option><option value="4+">Severity 4 & 5</option><option value="5">Severity 5 Only</option></select></label></div></details>
+                            <div class="flex flex-wrap gap-4 mt-2"><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Patchable</span><select id="vuln-filter-patchable" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Findings</option><option value="YES">Patchable</option></select></label><label class="flex items-center gap-1.5 text-sm text-gray-700"><span class="text-xs font-semibold text-gray-500 uppercase">Severity</span><select id="vuln-filter-severity" onchange="app.updateVulnFilters()" class="border-gray-300 rounded text-sm"><option value="ALL">All Severities</option><option value="4+">Severity 4 & 5</option><option value="5">Severity 5 Only</option></select></label></div></details>
                         <button id="vuln-clear-filters" onclick="app.vulnClearFilters()" class="hidden text-xs text-blue-700 underline">Clear filters</button>
                     </div>
                     <p id="vuln-summary" class="text-sm text-gray-800 border-t pt-3"></p>
@@ -2295,6 +2297,9 @@
         class RiskView {
             static SOON = 30;                         // days: an acceptance expiring within this is flagged
             static on() { return !!Prefs.get('showAccepted', false); }
+            // v4.37: the sidebar's "Known exploited" lens — only findings on the CISA KEV list or flagged by Qualys
+            // threat intel are shown on every report. Team status and the Status headline still cover everything.
+            static exploitedOnly() { return !!Prefs.get('showExploitedOnly', false); }
             static today() { return new Date().toISOString().slice(0, 10); }
             // The in-date acceptance behind a risk-accepted machine (a placeholder when the record is missing), or null.
             static machine(r, ex) {
@@ -4818,6 +4823,7 @@
                 Prefs.listen();
                 this.applyViewMode();
                 this.applyAccepted();
+                this.applyExploited();
                 this.applyTeamSwitch();
                 this.initDecorate();
                 window.addEventListener('beforeprint', () => { if (this.currentView === 'eol' && this.eolCtx && !this._eolAll) { this.renderEOLAssets(true); this._eolPrintShort = true; } });
@@ -5219,7 +5225,7 @@
                 const reg = StorageService.live();
                 const own = StorageService.peek(StorageService.KEYS.EOL_DATES) || [];
                 const products = reg.map(r => EolDates.match(r.os)?.product).filter(Boolean);
-                const [vd, dates] = await Promise.all([this.getVulnData(), EolDates.load(products).catch(() => ({ data: {}, failed: products })), RemediationService.refreshQuiet()]);
+                const [vd, dates] = await Promise.all([this.getVulnData({ whole: true }), EolDates.load(products).catch(() => ({ data: {}, failed: products })), RemediationService.refreshQuiet()]);
                 let axOk = false;
                 if (Demo.api()) { try { axOk = !!(await AutomoxService.ensure()); } catch (e) { axOk = false; } }
                 const m = axOk ? AutomoxService.match() : null;
@@ -7077,6 +7083,22 @@
                 this._vd = null; this.vulnData = null;
                 this.switchView(this.currentView || 'dashboard');
             }
+            // ⚑ Known exploited switch (v4.37): a global lens, like the risk-accepted switch — every report and list
+            // shows only findings on the CISA KEV list or flagged by Qualys threat intel. The Status headline and
+            // targets still cover everything (they are a measurement, not a filter).
+            applyExploited() {
+                const on = RiskView.exploitedOnly(), el = document.getElementById('exploited-switch'), strip = document.getElementById('exploited-strip');
+                if (el) el.innerHTML = `<button role="switch" aria-checked="${on}" onclick="app.setShowExploited(${!on})" title="Known exploited only: ${on ? 'every report shows only findings on the CISA KEV list or flagged by Qualys threat intel' : 'every report shows all findings'}. Team status and targets always cover everything." class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs border ${on ? 'border-red-500 bg-red-50 text-red-900 font-semibold' : 'border-gray-300 bg-white text-gray-700'}"><span>⚑ Known exploited</span><span>${on ? '● Only' : '○ All'}</span></button>`;
+                if (strip) { strip.classList.toggle('hidden', !on);
+                    strip.innerHTML = on ? `<span>⚑ <strong>Showing only known-exploited vulnerabilities</strong> (CISA KEV list or Qualys threat intel). Team status and targets still cover everything.</span><button onclick="app.setShowExploited(false)" class="ml-auto underline print-hide">Show everything</button>` : ''; }
+            }
+            setShowExploited(v) {
+                PerfLog.begin('action: exploited ' + (v ? 'only' : 'all'));
+                Prefs.set('showExploitedOnly', !!v);
+                this.applyExploited();
+                this._vd = null; this.vulnData = null;
+                this.switchView(this.currentView || 'dashboard');
+            }
             // Each page puts its hidden/shown counts here (cleared on every page change).
             accNote(h) { const el = document.getElementById('acc-note'); if (el) el.innerHTML = RiskView.note(h); }
 
@@ -8078,7 +8100,7 @@
 
             updateVulnFilters() {
                 const v = (id) => document.getElementById(id).value;
-                this.vulnState.filters = { ...this.vulnState.filters, patchable: v('vuln-filter-patchable'), severity: v('vuln-filter-severity'), owner: v('vuln-filter-owner'), exposure: v('vuln-filter-exposure'), exploited: v('vuln-filter-exploited') };
+                this.vulnState.filters = { ...this.vulnState.filters, patchable: v('vuln-filter-patchable'), severity: v('vuln-filter-severity'), owner: v('vuln-filter-owner'), exposure: v('vuln-filter-exposure') };
                 this.vulnResetPages();
                 this.renderVulnDashboard();
             }
@@ -8128,8 +8150,13 @@
                 } catch (e) { console.error('[Review] could not drop the detections of rejected assets', e); }
             }
 
-            async getVulnData() {
-                const retKey = StorageService.retiredKey();       // v4.30: retiring a machine (here or by someone else) recounts
+            async getVulnData({ whole = false } = {}) {
+                // whole: true = the Status measurement (headline and targets) always covers everything, whatever the
+                // sidebar "Known exploited" lens is set to. Everything else follows the lens. When the lens is off
+                // both builds are the same, so they share one cache entry (no reload when moving Status <-> reports).
+                const on = RiskView.exploitedOnly();
+                const lens = !whole && on;
+                const retKey = StorageService.retiredKey() + (lens ? ':expl' : '');
                 if (this._vd && this._vdRet === retKey) return this._vd;
                 this._vdRet = retKey;
                 let dets = [], qs = [];
@@ -8151,12 +8178,13 @@
                 const excepted = dets.filter(isEx);                 // in-date per-finding exceptions: shown apart, never counted
                 dets = dets.filter(d => !isEx(d));
                 const exBy = new Map();                             // v4.13: listed (flagged ⚑) when the Risk-accepted switch is on
-                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.epss = q.epss || 0; d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
+                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.epss = q.epss || 0; d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (lens && !d.exploited) return; if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
                 dets.forEach(d => {
                     const q = qmap.get(d.qid) || {};
                     d.tier = PriorityEngine.tier(d, q);
                     d.exploited = PriorityEngine.isExploited(q);
                     d.epss = q.epss || 0;
+                    if (lens && !d.exploited) return;               // v4.37: known exploited only
                     if (!byAsset.has(d.asset)) byAsset.set(d.asset, []);
                     byAsset.get(d.asset).push(d);
                     if (!byQid.has(d.qid)) byQid.set(d.qid, []);
@@ -8174,7 +8202,7 @@
             // Registered assets in scope joined to their detections, with the filters applied at detection level.
             // v4.13: risk-accepted machines and accepted findings follow the Risk-accepted switch (official: true = never included).
             // The old riskStatus filter is gone; hidden = what the switch leaves out within the other filters.
-            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', exploited = 'ALL', official = false } = {}) {
+            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false } = {}) {
                 const vd = await this.getVulnData();
                 const reg = StorageService.live();
                 const regMap = new Map(reg.map(r => [r.normalizedName, r]));
@@ -8184,8 +8212,7 @@
                 const accM = new Map(teamScope.map(r => [r.normalizedName, RiskView.machine(r, vd.ex)]).filter(x => x[1]));
                 const inScope = show ? teamScope : teamScope.filter(r => !accM.has(r.normalizedName));
                 const names = new Set(inScope.map(r => r.normalizedName));
-                const keep = (d) => !(patchable === 'YES' && !d.patchable) && !(severity === '5' && d.sev < 5) && !(severity === '4+' && d.sev < 4) && !(tier !== 'ALL' && d.tier > +tier) && !(p !== 'ALL' && (d.p || 5) > +p)
-                    && !(exploited === 'YES' && !d.exploited) && !(exploited === 'NO' && d.exploited);
+                const keep = (d) => !(patchable === 'YES' && !d.patchable) && !(severity === '5' && d.sev < 5) && !(severity === '4+' && d.sev < 4) && !(tier !== 'ALL' && d.tier > +tier) && !(p !== 'ALL' && (d.p || 5) > +p);
                 const hidden = { machines: 0, findings: 0, expiring: 0 };
                 const hm = new Set();
                 for (const r of teamScope) {
@@ -9351,7 +9378,7 @@
 
             syncVulnFilterControls() {
                 const f = this.vulnState.filters;
-                const map = { patchable: 'vuln-filter-patchable', severity: 'vuln-filter-severity', owner: 'vuln-filter-owner', exposure: 'vuln-filter-exposure', exploited: 'vuln-filter-exploited' };
+                const map = { patchable: 'vuln-filter-patchable', severity: 'vuln-filter-severity', owner: 'vuln-filter-owner', exposure: 'vuln-filter-exposure' };
                 Object.entries(map).forEach(([k, id]) => { const el = document.getElementById(id); if (el) el.value = f[k]; });
             }
 
@@ -9497,7 +9524,7 @@
                 const U = [['ALL', 'All'], ['1', 'P1'], ['2', 'P1–P2'], ['3', 'P1–P3']];
                 $('vuln-urgency').innerHTML = U.map(([v, l]) => { const on = (f.p || 'ALL') === v;
                     return `<button role="radio" aria-checked="${on}" onclick="app.vulnSetUrgency('${v}')" class="px-3 py-1 rounded-full text-sm whitespace-nowrap ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${l}</button>`; }).join('');
-                const more = $('vuln-more'); if (more && (f.patchable !== 'ALL' || f.severity !== 'ALL' || f.exploited !== 'ALL')) more.open = true;
+                const more = $('vuln-more'); if (more && (f.patchable !== 'ALL' || f.severity !== 'ALL')) more.open = true;
 
                 // the importance of a fix's machines: how many are Internet facing or Tier 1
                 const key1 = (g) => { let n = 0; g.assets.forEach(a => { const r = regMap.get(a); if (r && (r.exposure === 'Internet Facing' || StatusEngine.tierOf(r) === 1)) n++; }); return n; };
@@ -9521,7 +9548,7 @@
                 // one plain summary line (not buttons)
                 const p1 = dets.filter(d => d.p === 1), over = dets.filter(d => d.overdue && d.p <= 2);
                 const patchPct = dets.length ? Math.round(dets.filter(d => d.patchable).length / dets.length * 100) : 0;
-                const scope = [f.owner === 'ALL' ? 'All teams' : f.owner, f.exposure !== 'ALL' ? f.exposure : '', f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : '', f.exploited === 'YES' ? 'known exploited' : (f.exploited === 'NO' ? 'not exploited' : ''), f.patchable === 'YES' ? 'patchable' : '', f.severity !== 'ALL' ? 'severity ' + f.severity : ''].filter(Boolean).join(' · ');
+                const scope = [f.owner === 'ALL' ? 'All teams' : f.owner, f.exposure !== 'ALL' ? f.exposure : '', f.p !== 'ALL' ? { 1: 'P1', 2: 'P1–P2', 3: 'P1–P3' }[f.p] : '', f.patchable === 'YES' ? 'patchable' : '', f.severity !== 'ALL' ? 'severity ' + f.severity : ''].filter(Boolean).join(' · ');
                 $('vuln-summary').innerHTML = `<strong>${esc(scope)}:</strong> ${fmtNum(ranked.length)} machines with findings · ${fmtNum(groups.length)} fixes · <strong>${fmtNum(p1.length)} P1</strong> findings on ${fmtNum(new Set(p1.map(d => d.asset)).size)} machines · ${over.length ? `<strong>✖ ${fmtNum(over.length)} P1/P2 overdue</strong>` : '0 P1/P2 overdue'} · ${patchPct}% fixable by patching`;
                 this.renderVulnSection('assets');
                 this.renderVulnSection('fixes');
@@ -10363,7 +10390,7 @@
             // AI remediation
             // ------------------------------------------
 
-            static VULN_DEFAULT_FILTERS = { patchable: 'ALL', severity: 'ALL', owner: 'ALL', exposure: 'ALL', tier: 'ALL', p: 'ALL', exploited: 'ALL' };
+            static VULN_DEFAULT_FILTERS = { patchable: 'ALL', severity: 'ALL', owner: 'ALL', exposure: 'ALL', tier: 'ALL', p: 'ALL' };
 
             static aiSystem() { return App.AI_SYSTEM_T.replace('{TEAM}', OrgSettings.get().aiTeam || 'an infrastructure operations team'); }
             static AI_SYSTEM_T = `You are a senior infrastructure security engineer advising {TEAM} on remediating vulnerabilities reported by Qualys.

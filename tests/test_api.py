@@ -325,6 +325,14 @@ st, r = admin.call("POST", "/api/restore", {"assetRegister": [], "orgSettings": 
 s5 = admin.call("GET", "/api/state")[1]
 check("org setup: a backup brings it back (restore)", st == 200 and s5.get("gov_org_settings", {}).get("data", {}).get("mainTeam") == "Team B", (st, s5.get("gov_org_settings")))
 
+# Risk model (v4.38): administrators only, like the status rules; the risk history is an ordinary array collection
+riskS = {"weights": {"obs": 0.30, "asset": 0.25, "exposure": 0.20, "epss": 0.15, "cvss": 0.10}, "crownJewels": ["Active Directory"]}
+check("risk model: editor cannot save it", ed.call("PUT", "/api/collections/gov_risk_settings", {"data": riskS, "baseRevision": None})[0] == 403)
+st, r = admin.call("PUT", "/api/collections/gov_risk_settings", {"data": riskS, "baseRevision": None})
+check("risk model: administrator can save it", st == 200, (st, r))
+st, r = ed.call("PUT", "/api/collections/gov_risk_history", {"data": [{"date": "2026-11-25", "team": "ALL", "open": 3, "total": 12}], "baseRevision": None})
+check("risk history: an editor can save the daily snapshot array", st == 200 and ed.call("GET", "/api/state")[1]["gov_risk_history"]["data"][0]["open"] == 3, (st, r))
+
 # Comments on machines and findings (v4.26): saved one at a time, stamped with the signed-in user, edits keep the earlier wording
 admin.call("POST", "/api/users", {"username": "ed2", "password": "password-ed2", "role": "editor"})
 ed2, _, _ = sign_in("ed2", "password-ed2")

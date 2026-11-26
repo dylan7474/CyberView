@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vanguard SecOps | Engineer Remediation & Asset Register</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons for crisp minimalist iconography -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* CSS Variables for Extensible Theme Architecture */
+        :root, [data-theme="light"] {
+            --bg-app: #f8fafc;
+            --bg-surface: #ffffff;
+            --bg-subtle: #f1f5f9;
+            --bg-hover: #f8fafc;
+            --border-color: #e2e8f0;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --accent-primary: #2563eb;
+            --accent-hover: #1d4ed8;
+            --accent-soft: #eff6ff;
+            --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+        }
+
+        [data-theme="slate"] {
+            --bg-app: #0f172a;
+            --bg-surface: #1e293b;
+            --bg-subtle: #334155;
+            --bg-hover: #263349;
+            --border-color: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            --accent-primary: #3b82f6;
+            --accent-hover: #60a5fa;
+            --accent-soft: rgba(59, 130, 246, 0.15);
+            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.25);
+        }
+
+        [data-theme="midnight"] {
+            --bg-app: #09090b;
+            --bg-surface: #121215;
+            --bg-subtle: #1e1e24;
+            --bg-hover: #18181d;
+            --border-color: #27272a;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #52525b;
+            --accent-primary: #10b981;
+            --accent-hover: #34d399;
+            --accent-soft: rgba(16, 185, 129, 0.12);
+            --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        body {
+            background-color: var(--bg-app);
+            color: var(--text-primary);
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .surface-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-card);
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .subtle-bg {
+            background-color: var(--bg-subtle);
+        }
+
+        .border-theme {
+            border-color: var(--border-color);
+        }
+
+        .text-primary-theme { color: var(--text-primary); }
+        .text-secondary-theme { color: var(--text-secondary); }
+        .text-muted-theme { color: var(--text-muted); }
+
+        .btn-accent {
+            background-color: var(--accent-primary);
+            color: #ffffff;
+        }
+        .btn-accent:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .row-hover:hover {
+            background-color: var(--bg-hover);
+        }
+
+        /* Custom subtle scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="surface-card sticky top-0 z-30 border-b border-theme px-4 sm:px-6 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+            <!-- Brand & Workspace -->
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg btn-accent flex items-center justify-center shadow-sm">
+                    <i class="ph-bold ph-shield-check text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-semibold text-base tracking-tight text-primary-theme">Vanguard SecOps</h1>
+                        <span class="text-[11px] font-mono px-2 py-0.5 rounded-full subtle-bg text-secondary-theme border border-theme">v2.4-DEMO</span>
+                    </div>
+                    <p class="text-xs text-secondary-theme">Unified Remediation &amp; Asset Telemetry</p>
+                </div>
+            </div>
+
+            <!-- API Ingestion Health Pills -->
+            <div class="hidden lg:flex items-center gap-2 text-xs">
+                <span class="text-muted-theme mr-1">Telemetry Sync:</span>
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full subtle-bg border border-theme" title="Primary Agent Authority">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span class="font-medium text-primary-theme">Automox</span>
+                    <span class="text-muted-theme font-mono">4m ago</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full subtle-bg border border-theme" title="Vulnerability & Verification Scanner">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span class="font-medium text-primary-theme">Qualys</span>
+                    <span class="text-muted-theme font-mono">1h ago</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full subtle-bg border border-theme" title="Lifecycle & End-of-Life OS API">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span class="font-medium text-primary-theme">EOL OS API</span>
+                    <span class="text-muted-theme font-mono">Daily</span>
+                </div>
+            </div>
+
+            <!-- Right Controls: Engineer Persona & Theme Switcher -->
+            <div class="flex items-center gap-3">
+                <!-- Current Logged-in Engineer Selector -->
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg subtle-bg border border-theme text-xs">
+                    <i class="ph ph-user-circle text-base text-secondary-theme"></i>
+                    <span class="text-secondary-theme hidden sm:inline">Engineer:</span>
+                    <select id="currentEngineerSelect" onchange="handleEngineerChange()" class="bg-transparent font-medium text-primary-theme focus:outline-none cursor-pointer">
+                        <option value="Alex Mercer (Platform)">Alex Mercer (Platform)</option>
+                        <option value="Priya Nair (Core Infra)">Priya Nair (Core Infra)</option>
+                        <option value="Marcus Vance (CloudOps)">Marcus Vance (CloudOps)</option>
+                        <option value="Elena Rostova (FinTech)">Elena Rostova (FinTech)</option>
+                    </select>
+                </div>
+
+                <!-- Theme Switcher for Demo Presentation -->
+                <div class="flex items-center rounded-lg subtle-bg border border-theme p-1" title="Switch UI Theme">
+                    <button onclick="setTheme('light')" id="theme-light" class="px-2 py-1 rounded-md text-xs font-medium transition flex items-center gap-1 bg-white text-slate-900 shadow-sm">
+                        <i class="ph ph-sun"></i><span class="hidden md:inline">Clean</span>
+                    </button>
+                    <button onclick="setTheme('slate')" id="theme-slate" class="px-2 py-1 rounded-md text-xs font-medium transition flex items-center gap-1 text-secondary-theme">
+                        <i class="ph ph-moon-stars"></i><span class="hidden md:inline">Slate</span>
+                    </button>
+                    <button onclick="setTheme('midnight')" id="theme-midnight" class="px-2 py-1 rounded-md text-xs font-medium transition flex items-center gap-1 text-secondary-theme">
+                        <i class="ph ph-terminal-window"></i><span class="hidden md:inline">SOC</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        <!-- KPI Summary Strip -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="surface-card rounded-xl p-4 flex items-start justify-between">
+                <div>
+                    <p class="text-xs font-medium text-secondary-theme uppercase tracking-wider">Critical Action Queue</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <span id="kpi-critical" class="text-2xl font-bold text-primary-theme">0</span>
+                        <span class="text-xs text-rose-600 font-medium">Score &ge; 80</span>
+                    </div>
+                    <p class="text-xs text-muted-theme mt-1">Internet-facing / Tier-1 priority</p>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center">
+                    <i class="ph-bold ph-warning-octagon text-xl"></i>
+                </div>
+            </div>
+
+            <div class="surface-card rounded-xl p-4 flex items-start justify-between">
+                <div>
+                    <p class="text-xs font-medium text-secondary-theme uppercase tracking-wider">Assigned To Me</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <span id="kpi-mine" class="text-2xl font-bold text-primary-theme">0</span>
+                        <span class="text-xs text-blue-600 font-medium">Active Tickets</span>
+                    </div>
+                    <p id="kpi-mine-name" class="text-xs text-muted-theme mt-1">Alex Mercer</p>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                    <i class="ph-bold ph-ticket text-xl"></i>
+                </div>
+            </div>
+
+            <div class="surface-card rounded-xl p-4 flex items-start justify-between">
+                <div>
+                    <p class="text-xs font-medium text-secondary-theme uppercase tracking-wider">Pending Qualys Check</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <span id="kpi-pending-scan" class="text-2xl font-bold text-primary-theme">0</span>
+                        <span class="text-xs text-amber-600 font-medium">Awaiting Scan</span>
+                    </div>
+                    <p class="text-xs text-muted-theme mt-1">Patched via Automox; awaiting verify</p>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                    <i class="ph-bold ph-radar text-xl"></i>
+                </div>
+            </div>
+
+            <div class="surface-card rounded-xl p-4 flex items-start justify-between">
+                <div>
+                    <p class="text-xs font-medium text-secondary-theme uppercase tracking-wider">Telemetry Overrides</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <span id="kpi-overrides" class="text-2xl font-bold text-primary-theme">0</span>
+                        <span class="text-xs text-emerald-600 font-medium">Automox Authority</span>
+                    </div>
+                    <p class="text-xs text-muted-theme mt-1">Stale Qualys metadata corrected</p>
+                </div>
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                    <i class="ph-bold ph-git-merge text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Primary Navigation Tabs & Formula Trigger -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-theme pb-3">
+            <div class="flex items-center gap-2">
+                <button onclick="switchTab('queue')" id="tab-queue" class="px-4 py-2 rounded-lg text-sm font-semibold btn-accent transition flex items-center gap-2">
+                    <i class="ph-bold ph-kanban"></i>
+                    <span>Remediation Queue</span>
+                    <span id="badge-queue-count" class="px-1.5 py-0.5 text-[11px] rounded-full bg-white/20 text-white font-mono">0</span>
+                </button>
+                <button onclick="switchTab('assets')" id="tab-assets" class="px-4 py-2 rounded-lg text-sm font-medium text-secondary-theme hover:text-primary-theme transition flex items-center gap-2">
+                    <i class="ph-bold ph-hard-drives"></i>
+                    <span>Asset Register &amp; API Sync</span>
+                    <span id="badge-conflict-count" class="px-1.5 py-0.5 text-[11px] rounded-full bg-amber-500/15 text-amber-600 font-mono">2 Needs Review</span>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="toggleFormulaModal()" class="px-3 py-1.5 rounded-lg surface-card text-xs font-medium text-secondary-theme hover:text-primary-theme flex items-center gap-1.5">
+                    <i class="ph ph-function text-base text-blue-500"></i>
+                    <span>Priority Formula Logic</span>
+                </button>
+                <button onclick="simulateQualysScan()" id="btn-simulate-scan" class="px-3 py-1.5 rounded-lg surface-card text-xs font-medium text-emerald-600 hover:bg-emerald-500/10 transition flex items-center gap-1.5" title="Simulate next-day Qualys verification scan">
+                    <i class="ph-bold ph-arrows-clockwise"></i>
+                    <span>Simulate Next-Day Qualys Scan</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- VIEW 1: ENGINEER REMEDIATION QUEUE (ServiceNow Style)                 -->
+        <!-- ===================================================================== -->
+        <section id="view-queue" class="space-y-4">
+            <!-- Filter Bar -->
+            <div class="surface-card rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Quick Filter Pills -->
+                    <button onclick="setQueueFilter('all')" id="qf-all" class="px-3 py-1.5 rounded-lg text-xs font-semibold btn-accent">All Open Tickets</button>
+                    <button onclick="setQueueFilter('mine')" id="qf-mine" class="px-3 py-1.5 rounded-lg text-xs font-medium subtle-bg text-secondary-theme hover:text-primary-theme">My Queue</button>
+                    <button onclick="setQueueFilter('unassigned')" id="qf-unassigned" class="px-3 py-1.5 rounded-lg text-xs font-medium subtle-bg text-secondary-theme hover:text-primary-theme">Unassigned</button>
+                    <button onclick="setQueueFilter('pending_scan')" id="qf-pending_scan" class="px-3 py-1.5 rounded-lg text-xs font-medium subtle-bg text-secondary-theme hover:text-primary-theme">Pending Qualys Verification</button>
+                    <button onclick="setQueueFilter('closed')" id="qf-closed" class="px-3 py-1.5 rounded-lg text-xs font-medium subtle-bg text-secondary-theme hover:text-primary-theme">Verified Closed</button>
+                </div>
+
+                <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <select id="teamFilter" onchange="renderTickets()" class="px-3 py-1.5 rounded-lg subtle-bg border border-theme text-xs text-primary-theme focus:outline-none">
+                        <option value="ALL">All Teams</option>
+                        <option value="Platform">Platform</option>
+                        <option value="Core Infra">Core Infra</option>
+                        <option value="CloudOps">CloudOps</option>
+                        <option value="FinTech">FinTech</option>
+                    </select>
+                    <div class="relative flex-1 sm:w-56">
+                        <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-theme"></i>
+                        <input type="text" id="ticketSearch" oninput="renderTickets()" placeholder="Search CVE, host, ticket..." class="w-full pl-8 pr-3 py-1.5 rounded-lg subtle-bg border border-theme text-xs text-primary-theme placeholder:text-muted-theme focus:outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tickets Table -->
+            <div class="surface-card rounded-xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-theme subtle-bg text-[11px] font-semibold uppercase tracking-wider text-secondary-theme">
+                                <th class="py-3 px-4">Priority Score</th>
+                                <th class="py-3 px-4">Ticket &amp; Vulnerability</th>
+                                <th class="py-3 px-4">Affected Asset &amp; Context</th>
+                                <th class="py-3 px-4">Exposure &amp; Tier</th>
+                                <th class="py-3 px-4">Assigned Engineer</th>
+                                <th class="py-3 px-4">Workflow State</th>
+                                <th class="py-3 px-4 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ticketsTableBody" class="divide-y border-theme text-sm">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===================================================================== -->
+        <!-- VIEW 2: ASSET REGISTER & API RECONCILIATION                           -->
+        <!-- ===================================================================== -->
+        <section id="view-assets" class="hidden space-y-4">
+            <!-- Data Precedence Banner -->
+            <div class="surface-card rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 border-l-blue-500">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-blue-600">Ingestion Precedence Rule Active</span>
+                        <span class="text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 font-mono">Automox &gt; Qualys</span>
+                    </div>
+                    <p class="text-xs text-secondary-theme">
+                        Agent telemetry from <strong>Automox</strong> automatically overrides stale hostname, OS build, and team tags from <strong>Qualys</strong> network scans. Assets missing team ownership or Tier classification are flagged below for engineer categorization.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="autoReconcileAll()" class="px-3 py-2 rounded-lg btn-accent text-xs font-medium flex items-center gap-1.5 shadow-sm">
+                        <i class="ph-bold ph-magic-wand"></i>
+                        <span>Apply Automox Overrides</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Asset Register Table -->
+            <div class="surface-card rounded-xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-theme subtle-bg text-[11px] font-semibold uppercase tracking-wider text-secondary-theme">
+                                <th class="py-3 px-4">Authoritative Hostname</th>
+                                <th class="py-3 px-4">Source Reconciliation (Automox vs Qualys)</th>
+                                <th class="py-3 px-4">OS &amp; EOL Lifecycle</th>
+                                <th class="py-3 px-4">Exposure</th>
+                                <th class="py-3 px-4">Service Tier</th>
+                                <th class="py-3 px-4">Owning Team</th>
+                                <th class="py-3 px-4 text-right">Edit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assetsTableBody" class="divide-y border-theme text-sm">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- SLIDE-OVER DRAWER: TICKET REMEDIATION & QUALYS VERIFICATION WORKFLOW  -->
+    <!-- ===================================================================== -->
+    <div id="ticketDrawerBackdrop" onclick="closeTicketDrawer()" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 hidden transition-opacity"></div>
+    <aside id="ticketDrawer" class="fixed top-0 right-0 h-full w-full max-w-xl surface-card border-l border-theme z-50 transform translate-x-full transition-transform duration-200 flex flex-col shadow-2xl">
+        <!-- Drawer Header -->
+        <div class="px-6 py-4 border-b border-theme flex items-center justify-between">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span id="drawer-ticket-id" class="font-mono text-xs font-semibold px-2 py-0.5 rounded subtle-bg text-primary-theme">INC-4092</span>
+                    <span id="drawer-status-badge" class="text-xs font-medium px-2.5 py-0.5 rounded-full">In Progress</span>
+                </div>
+                <h2 id="drawer-title" class="text-base font-bold text-primary-theme mt-1">CVE-2024-3094</h2>
+            </div>
+            <button onclick="closeTicketDrawer()" class="p-2 rounded-lg subtle-bg text-secondary-theme hover:text-primary-theme">
+                <i class="ph-bold ph-x text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Drawer Body -->
+        <div id="drawerBody" class="flex-1 overflow-y-auto p-6 space-y-6">
+            <!-- Dynamic Content Injected Here -->
+        </div>
+
+        <!-- Drawer Footer Actions -->
+        <div id="drawerFooter" class="px-6 py-4 border-t border-theme subtle-bg flex flex-wrap items-center justify-between gap-3">
+            <!-- Dynamic Action Buttons -->
+        </div>
+    </aside>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL: PRIORITY SCORE FORMULA TRANSPARENCY                            -->
+    <!-- ===================================================================== -->
+    <div id="formulaModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="surface-card rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-theme pb-3">
+                <div class="flex items-center gap-2">
+                    <i class="ph-bold ph-function text-blue-600 text-xl"></i>
+                    <h3 class="font-bold text-base text-primary-theme">Remediation Prioritization Formula</h3>
+                </div>
+                <button onclick="toggleFormulaModal()" class="p-1.5 rounded-lg subtle-bg text-secondary-theme">
+                    <i class="ph-bold ph-x"></i>
+                </button>
+            </div>
+            <p class="text-xs text-secondary-theme leading-relaxed">
+                To prevent alert fatigue, raw CVSS scores are weighted by real-world exploitability and business context from Automox, Qualys, and the EOL OS API:
+            </p>
+            <div class="p-3 rounded-xl subtle-bg border border-theme font-mono text-xs text-primary-theme">
+                Score = (CVSS &times; 6.5) + Exploit_Bonus + Exposure_Weight + Tier_Weight + EOL_Penalty
+            </div>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+                <div class="p-3 rounded-lg border border-theme">
+                    <span class="font-semibold text-primary-theme block mb-1">Exploit Intelligence</span>
+                    <ul class="space-y-1 text-secondary-theme">
+                        <li>• CISA KEV Listed: <strong class="text-rose-600">+15 pts</strong></li>
+                        <li>• EPSS &gt; 50%: <strong class="text-amber-600">+8 pts</strong></li>
+                    </ul>
+                </div>
+                <div class="p-3 rounded-lg border border-theme">
+                    <span class="font-semibold text-primary-theme block mb-1">Network Exposure</span>
+                    <ul class="space-y-1 text-secondary-theme">
+                        <li>• Internet-Facing: <strong class="text-rose-600">+12 pts</strong></li>
+                        <li>• Internal / DMZ: <strong class="text-secondary-theme">+3 pts</strong></li>
+                    </ul>
+                </div>
+                <div class="p-3 rounded-lg border border-theme">
+                    <span class="font-semibold text-primary-theme block mb-1">Service Criticality</span>
+                    <ul class="space-y-1 text-secondary-theme">
+                        <li>• Tier 1 (Mission Critical): <strong class="text-primary-theme">+10 pts</strong></li>
+                        <li>• Tier 2 (Business): <strong class="text-primary-theme">+5 pts</strong></li>
+                        <li>• Tier 3 (Dev/Internal): <strong class="text-primary-theme">+0 pts</strong></li>
+                    </ul>
+                </div>
+                <div class="p-3 rounded-lg border border-theme">
+                    <span class="font-semibold text-primary-theme block mb-1">OS Lifecycle (EOL API)</span>
+                    <ul class="space-y-1 text-secondary-theme">
+                        <li>• End-of-Life OS: <strong class="text-amber-600">+8 pts</strong></li>
+                        <li>• Supported OS: <strong class="text-emerald-600">+0 pts</strong></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="toggleFormulaModal()" class="px-4 py-2 rounded-lg btn-accent text-xs font-semibold">Got It</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL: EDIT / CATEGORIZE ASSET                                        -->
+    <!-- ===================================================================== -->
+    <div id="assetEditModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="surface-card rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-theme pb-3">
+                <h3 class="font-bold text-base text-primary-theme">Categorize &amp; Correct Asset</h3>
+                <button onclick="closeAssetModal()" class="p-1.5 rounded-lg subtle-bg text-secondary-theme">
+                    <i class="ph-bold ph-x"></i>
+                </button>
+            </div>
+            <div id="assetModalBody" class="space-y-4 text-xs">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Banner -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        // =========================================================================
+        // MOCK DATA: ASSETS (Merged Automox, Qualys & EOL OS API) & TICKETS
+        // =========================================================================
+        const ENGINEERS = [
+            "Unassigned",
+            "Alex Mercer (Platform)",
+            "Priya Nair (Core Infra)",
+            "Marcus Vance (CloudOps)",
+            "Elena Rostova (FinTech)"
+        ];
+
+        let assets = [
+            {
+                id: "AST-101",
+                automoxHostname: "prod-pay-gw-01.corp.internal",
+                qualysHostname: "ip-10-24-88-12.ec2.internal",
+                ip: "10.24.88.12",
+                automoxOS: "Ubuntu 22.04.4 LTS",
+                qualysOS: "Ubuntu 22.04.1 LTS",
+                eolStatus: "Supported",
+                eolDate: "2027-04-01",
+                exposure: "Internet-Facing",
+                tier: "Tier 1",
+                team: "FinTech",
+                conflictResolved: true,
+                conflictNote: "Automox agent hostname & kernel build overrode stale Qualys EC2 DNS."
+            },
+            {
+                id: "AST-102",
+                automoxHostname: "core-auth-idp-02.corp.internal",
+                qualysHostname: "core-auth-idp-02.corp.internal",
+                ip: "10.10.4.19",
+                automoxOS: "Windows Server 2012 R2",
+                qualysOS: "Windows Server 2012 R2",
+                eolStatus: "EOL",
+                eolDate: "2023-10-10",
+                exposure: "Internet-Facing",
+                tier: "Tier 1",
+                team: "Core Infra",
+                conflictResolved: true,
+                conflictNote: "Synced across Automox & Qualys."
+            },
+            {
+                id: "AST-103",
+                automoxHostname: "k8s-worker-node-14.corp.internal",
+                qualysHostname: "unknown-linux-10.44.12.9",
+                ip: "10.44.12.9",
+                automoxOS: "Debian 12 (Bookworm)",
+                qualysOS: "Linux 6.1",
+                eolStatus: "Supported",
+                eolDate: "2028-06-10",
+                exposure: "Internal",
+                tier: "Tier 2",
+                team: "Platform",
+                conflictResolved: false,
+                conflictNote: "Qualys missed OS & hostname; Automox agent has full metadata."
+            },
+            {
+                id: "AST-104",
+                automoxHostname: "legacy-reporting-db-01",
+                qualysHostname: "legacy-reporting-db-01",
+                ip: "10.50.9.104",
+                automoxOS: "CentOS 7.9",
+                qualysOS: "CentOS 7.9",
+                eolStatus: "EOL",
+                eolDate: "2024-06-30",
+                exposure: "Internal",
+                tier: "Unassigned",
+                team: "Unassigned",
+                conflictResolved: false,
+                conflictNote: "New ingest from Automox — missing Service Tier & Owning Team."
+            },
+            {
+                id: "AST-105",
+                automoxHostname: "edge-api-proxy-03.corp.internal",
+                qualysHostname: "edge-api-proxy-03-old",
+                ip: "172.16.2.45",
+                automoxOS: "RHEL 9.3",
+                qualysOS: "RHEL 9.1",
+                eolStatus: "Supported",
+                eolDate: "2032-05-31",
+                exposure: "Internet-Facing",
+                tier: "Tier 1",
+                team: "CloudOps",
+                conflictResolved: true,
+                conflictNote: "Automox confirmed RHEL 9.3 patch level over Qualys."
+            }
+        ];
+
+        let tickets = [
+            {
+                id: "INC-8841",
+                cve: "CVE-2024-38077",
+                title: "Windows Server Remote Desktop Licensing RCE (MadLicense)",
+                assetId: "AST-102",
+                cvss: 9.8,
+                epss: 0.84,
+                kev: true,
+                assignee: "Priya Nair (Core Infra)",
+                status: "In Progress", // Open | In Progress | Pending Qualys Scan | Verified Closed
+                automoxPatchId: "KB5040456 (Ready in Automox)",
+                remediationAction: "Apply out-of-band Windows security rollup via Automox Policy #WIN-CRIT-04 and schedule OS migration off EOL 2012 R2.",
+                qualysLastDetected: "2026-11-25 04:15 UTC",
+                qualysVerifyState: "Active Vulnerability (QID 92154)",
+                history: [
+                    { time: "Yesterday 09:12", actor: "System Ingestion", note: "Ticket auto-created. Risk Score 99 (CISA KEV + Internet Facing + EOL OS)." },
+                    { time: "Yesterday 10:05", actor: "Priya Nair", note: "Self-assigned ticket. Staging Automox patch deployment for maintenance window." }
+                ]
+            },
+            {
+                id: "INC-8842",
+                cve: "CVE-2024-6387",
+                title: "OpenSSH Server RegreSSHion Unauthenticated RCE",
+                assetId: "AST-101",
+                cvss: 8.1,
+                epss: 0.72,
+                kev: true,
+                assignee: "Unassigned",
+                status: "Open",
+                automoxPatchId: "openssh-server 1:8.9p1-3ubuntu0.10",
+                remediationAction: "Deploy updated OpenSSH package via Automox Worklet and restart sshd service.",
+                qualysLastDetected: "2026-11-26 02:30 UTC",
+                qualysVerifyState: "Active Vulnerability (QID 38991)",
+                history: [
+                    { time: "Today 03:00", actor: "System Ingestion", note: "Detected on Internet-Facing Tier 1 gateway. Automox confirmed exact hostname prod-pay-gw-01." }
+                ]
+            },
+            {
+                id: "INC-8843",
+                cve: "CVE-2024-21626",
+                title: "runc Container Breakout via Leaky File Descriptors",
+                assetId: "AST-105",
+                cvss: 8.6,
+                epss: 0.61,
+                kev: true,
+                assignee: "Marcus Vance (CloudOps)",
+                status: "Pending Qualys Scan",
+                automoxPatchId: "runc-1.1.12-1.el9_3 (Applied)",
+                remediationAction: "Upgraded container runtime via Automox. Awaiting scheduled Qualys authenticated scan to verify QID closure.",
+                qualysLastDetected: "2026-11-24 22:10 UTC",
+                qualysVerifyState: "Patched in Automox — Awaiting Qualys Rescan",
+                history: [
+                    { time: "2 days ago", actor: "Marcus Vance", note: "Assigned to self." },
+                    { time: "Yesterday 16:40", actor: "Marcus Vance", note: "Executed Automox patch job #AMX-9921. Marked Ready for Qualys Verification." }
+                ]
+            },
+            {
+                id: "INC-8844",
+                cve: "CVE-2024-1086",
+                title: "Linux Kernel nf_tables Use-After-Free Local Privilege Escalation",
+                assetId: "AST-103",
+                cvss: 7.8,
+                epss: 0.55,
+                kev: true,
+                assignee: "Alex Mercer (Platform)",
+                status: "Open",
+                automoxPatchId: "linux-image-6.1.0-21-amd64",
+                remediationAction: "Trigger kernel update and rolling node reboot via Automox.",
+                qualysLastDetected: "2026-11-25 18:00 UTC",
+                qualysVerifyState: "Active Vulnerability (QID 379412)",
+                history: [
+                    { time: "Yesterday 19:00", actor: "System Ingestion", note: "Mapped to Platform team via Automox agent tag." }
+                ]
+            },
+            {
+                id: "INC-8845",
+                cve: "CVE-2023-44487",
+                title: "HTTP/2 Rapid Reset Denial of Service Vulnerability",
+                assetId: "AST-104",
+                cvss: 7.5,
+                epss: 0.42,
+                kev: true,
+                assignee: "Unassigned",
+                status: "Open",
+                automoxPatchId: "EOL OS — Manual Mitigation / Upgrade Required",
+                remediationAction: "CentOS 7.9 is End-of-Life. Apply nginx HTTP/2 stream limits or migrate workload to RHEL 9.",
+                qualysLastDetected: "2026-11-25 06:00 UTC",
+                qualysVerifyState: "Active Vulnerability (QID 150611)",
+                history: [
+                    { time: "Yesterday 07:15", actor: "System Ingestion", note: "Flagged with +8 EOL OS penalty from EOL Lifecycle API." }
+                ]
+            },
+            {
+                id: "INC-8839",
+                cve: "CVE-2024-27198",
+                title: "JetBrains TeamCity Authentication Bypass",
+                assetId: "AST-103",
+                cvss: 9.8,
+                epss: 0.91,
+                kev: true,
+                assignee: "Alex Mercer (Platform)",
+                status: "Verified Closed",
+                automoxPatchId: "teamcity-2023.11.4 (Verified)",
+                remediationAction: "Upgraded build server package via Automox.",
+                qualysLastDetected: "2026-11-20 01:00 UTC",
+                qualysVerifyState: "Verified Fixed by Qualys (2026-11-22)",
+                history: [
+                    { time: "Nov 21", actor: "Alex Mercer", note: "Patched via Automox." },
+                    { time: "Nov 22", actor: "Qualys Verification Sync", note: "QID no longer detected on scan. Ticket automatically verified & closed." }
+                ]
+            }
+        ];
+
+        let currentQueueFilter = "all";
+        let activeDrawerTicketId = null;
+
+        // =========================================================================
+        // INDUSTRY-STANDARD PRIORITIZATION FORMULA
+        // =========================================================================
+        function calculatePriorityScore(ticket, asset) {
+            // Base CVSS weighted to 65 max points
+            let score = ticket.cvss * 6.5;
+
+            // Threat Intelligence (CISA KEV & EPSS)
+            if (ticket.kev) score += 15;
+            else if (ticket.epss >= 0.5) score += 8;
+
+            // Exposure Context
+            if (asset.exposure === "Internet-Facing") score += 12;
+            else score += 3;
+
+            // Business Service Tier
+            if (asset.tier === "Tier 1") score += 10;
+            else if (asset.tier === "Tier 2") score += 5;
+
+            // EOL OS Lifecycle Penalty
+            if (asset.eolStatus === "EOL") score += 8;
+
+            return Math.min(100, Math.round(score));
+        }
+
+        function getScoreBadgeHTML(score) {
+            if (score >= 85) {
+                return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-rose-500/15 text-rose-600 border border-rose-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>${score} CRIT
+                </span>`;
+            } else if (score >= 70) {
+                return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-amber-500/15 text-amber-600 border border-amber-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>${score} HIGH
+                </span>`;
+            } else {
+                return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-blue-500/15 text-blue-600 border border-blue-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>${score} MED
+                </span>`;
+            }
+        }
+
+        function getStatusBadgeHTML(status) {
+            switch (status) {
+                case "Open":
+                    return `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-500/15 text-secondary-theme">Open</span>`;
+                case "In Progress":
+                    return `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-600">In Progress</span>`;
+                case "Pending Qualys Scan":
+                    return `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-600"><i class="ph-bold ph-hourglass-medium"></i> Pending Qualys</span>`;
+                case "Verified Closed":
+                    return `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-600"><i class="ph-bold ph-check-circle"></i> Verified Closed</span>`;
+            }
+        }
+
+        // =========================================================================
+        // RENDERING: KPIs, TICKET QUEUE & ASSET REGISTER
+        // =========================================================================
+        function updateKPIs() {
+            const currentEng = document.getElementById("currentEngineerSelect").value;
+            document.getElementById("kpi-mine-name").textContent = currentEng;
+
+            let criticalOpen = 0;
+            let assignedToMe = 0;
+            let pendingScan = 0;
+            let openCount = 0;
+
+            tickets.forEach(t => {
+                const asset = assets.find(a => a.id === t.assetId);
+                const score = calculatePriorityScore(t, asset);
+                if (t.status !== "Verified Closed") {
+                    openCount++;
+                    if (score >= 80) criticalOpen++;
+                    if (t.assignee === currentEng) assignedToMe++;
+                }
+                if (t.status === "Pending Qualys Scan") pendingScan++;
+            });
+
+            const overridesCount = assets.filter(a => a.automoxHostname !== a.qualysHostname || a.automoxOS !== a.qualysOS).length;
+            const needsReviewCount = assets.filter(a => !a.conflictResolved || a.team === "Unassigned" || a.tier === "Unassigned").length;
+
+            document.getElementById("kpi-critical").textContent = criticalOpen;
+            document.getElementById("kpi-mine").textContent = assignedToMe;
+            document.getElementById("kpi-pending-scan").textContent = pendingScan;
+            document.getElementById("kpi-overrides").textContent = overridesCount;
+            document.getElementById("badge-queue-count").textContent = openCount;
+
+            const conflictBadge = document.getElementById("badge-conflict-count");
+            if (needsReviewCount > 0) {
+                conflictBadge.textContent = `${needsReviewCount} Needs Review`;
+                conflictBadge.className = "px-1.5 py-0.5 text-[11px] rounded-full bg-amber-500/15 text-amber-600 font-mono";
+            } else {
+                conflictBadge.textContent = "All Synced";
+                conflictBadge.className = "px-1.5 py-0.5 text-[11px] rounded-full bg-emerald-500/15 text-emerald-600 font-mono";
+            }
+        }
+
+        function renderTickets() {
+            const tbody = document.getElementById("ticketsTableBody");
+            const currentEng = document.getElementById("currentEngineerSelect").value;
+            const teamFilter = document.getElementById("teamFilter").value;
+            const search = document.getElementById("ticketSearch").value.toLowerCase();
+
+            // Enrich with asset and calculated score, then sort descending by Priority Score
+            const enriched = tickets.map(t => {
+                const asset = assets.find(a => a.id === t.assetId);
+                return { ...t, asset, score: calculatePriorityScore(t, asset) };
+            }).sort((a, b) => b.score - a.score);
+
+            const filtered = enriched.filter(item => {
+                if (currentQueueFilter === "all" && item.status === "Verified Closed") return false;
+                if (currentQueueFilter === "mine" && (item.assignee !== currentEng || item.status === "Verified Closed")) return false;
+                if (currentQueueFilter === "unassigned" && (item.assignee !== "Unassigned" || item.status === "Verified Closed")) return false;
+                if (currentQueueFilter === "pending_scan" && item.status !== "Pending Qualys Scan") return false;
+                if (currentQueueFilter === "closed" && item.status !== "Verified Closed") return false;
+
+                if (teamFilter !== "ALL" && item.asset.team !== teamFilter) return false;
+
+                if (search) {
+                    const hay = `${item.id} ${item.cve} ${item.title} ${item.asset.automoxHostname} ${item.asset.team}`.toLowerCase();
+                    if (!hay.includes(search)) return false;
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="py-10 text-center text-secondary-theme text-xs">
+                            <i class="ph ph-check-circle text-2xl text-emerald-500 block mb-1"></i>
+                            No tickets match the current filter criteria.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(item => {
+                const isEOL = item.asset.eolStatus === "EOL";
+                return `
+                <tr class="row-hover transition cursor-pointer" onclick="openTicketDrawer('${item.id}')">
+                    <td class="py-3.5 px-4 whitespace-nowrap">
+                        ${getScoreBadgeHTML(item.score)}
+                        <div class="text-[11px] font-mono text-muted-theme mt-1">CVSS ${item.cvss} ${item.kev ? '• KEV' : ''}</div>
+                    </td>
+                    <td class="py-3.5 px-4 max-w-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono text-xs font-semibold text-blue-600">${item.id}</span>
+                            <span class="font-mono text-xs text-secondary-theme">${item.cve}</span>
+                        </div>
+                        <p class="font-medium text-primary-theme text-xs mt-0.5 line-clamp-1">${item.title}</p>
+                    </td>
+                    <td class="py-3.5 px-4">
+                        <div class="flex items-center gap-1.5">
+                            <span class="font-mono text-xs font-medium text-primary-theme">${item.asset.automoxHostname}</span>
+                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 font-mono" title="Verified by Automox Agent">AMX</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-[11px] text-secondary-theme mt-0.5">
+                            <span>${item.asset.automoxOS}</span>
+                            ${isEOL ? `<span class="px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-600 font-semibold">EOL OS</span>` : ''}
+                            <span>• Team: <strong>${item.asset.team}</strong></span>
+                        </div>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap">
+                        <div class="flex flex-col gap-1">
+                            <span class="inline-flex items-center gap-1 text-xs font-medium ${item.asset.exposure === 'Internet-Facing' ? 'text-rose-600' : 'text-secondary-theme'}">
+                                <i class="ph-bold ${item.asset.exposure === 'Internet-Facing' ? 'ph-globe' : 'ph-lock-key'}"></i>
+                                ${item.asset.exposure}
+                            </span>
+                            <span class="text-[11px] font-mono text-muted-theme">${item.asset.tier}</span>
+                        </div>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap" onclick="event.stopPropagation()">
+                        <select onchange="assignTicket('${item.id}', this.value)" class="px-2.5 py-1 rounded-lg subtle-bg border border-theme text-xs text-primary-theme focus:outline-none cursor-pointer">
+                            ${ENGINEERS.map(eng => `<option value="${eng}" ${item.assignee === eng ? 'selected' : ''}>${eng}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap">
+                        ${getStatusBadgeHTML(item.status)}
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-right" onclick="event.stopPropagation()">
+                        ${item.assignee === 'Unassigned'
+                            ? `<button onclick="claimTicket('${item.id}')" class="px-2.5 py-1 rounded-lg btn-accent text-xs font-medium">Claim</button>`
+                            : `<button onclick="openTicketDrawer('${item.id}')" class="px-2.5 py-1 rounded-lg subtle-bg border border-theme text-xs font-medium text-primary-theme hover:border-blue-500">Work Ticket</button>`
+                        }
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderAssets() {
+            const tbody = document.getElementById("assetsTableBody");
+            tbody.innerHTML = assets.map(asset => {
+                const hasHostnameDiff = asset.automoxHostname !== asset.qualysHostname;
+                const hasOSDiff = asset.automoxOS !== asset.qualysOS;
+                const needsCategorization = asset.team === "Unassigned" || asset.tier === "Unassigned" || !asset.conflictResolved;
+
+                return `
+                <tr class="row-hover transition">
+                    <td class="py-3.5 px-4">
+                        <div class="font-mono text-xs font-semibold text-primary-theme">${asset.automoxHostname}</div>
+                        <div class="font-mono text-[11px] text-muted-theme">${asset.ip} • ${asset.id}</div>
+                    </td>
+                    <td class="py-3.5 px-4 text-xs">
+                        ${hasHostnameDiff || hasOSDiff ? `
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-1.5 text-emerald-600 font-medium">
+                                    <i class="ph-bold ph-check-circle"></i>
+                                    <span>Automox Authority Applied</span>
+                                </div>
+                                <div class="text-[11px] text-muted-theme font-mono line-through">Qualys: ${asset.qualysHostname} (${asset.qualysOS})</div>
+                            </div>
+                        ` : `
+                            <span class="inline-flex items-center gap-1 text-secondary-theme">
+                                <i class="ph ph-equals text-emerald-500"></i> Exact Match (Automox &amp; Qualys)
+                            </span>
+                        `}
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap">
+                        <div class="text-xs font-medium text-primary-theme">${asset.automoxOS}</div>
+                        <div class="mt-0.5">
+                            ${asset.eolStatus === "EOL"
+                                ? `<span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-500/15 text-rose-600">EOL (${asset.eolDate})</span>`
+                                : `<span class="text-[10px] font-medium px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600">Supported until ${asset.eolDate}</span>`
+                            }
+                        </div>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-xs">
+                        <span class="px-2 py-0.5 rounded-md font-medium ${asset.exposure === 'Internet-Facing' ? 'bg-rose-500/10 text-rose-600' : 'subtle-bg text-secondary-theme'}">
+                            ${asset.exposure}
+                        </span>
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-xs font-mono">
+                        ${asset.tier === "Unassigned"
+                            ? `<span class="px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 font-sans font-semibold">Needs Tier</span>`
+                            : `<span class="text-primary-theme font-semibold">${asset.tier}</span>`
+                        }
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-xs">
+                        ${asset.team === "Unassigned"
+                            ? `<span class="px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 font-semibold">Unassigned Team</span>`
+                            : `<span class="font-medium text-primary-theme">${asset.team}</span>`
+                        }
+                    </td>
+                    <td class="py-3.5 px-4 whitespace-nowrap text-right">
+                        <button onclick="openAssetModal('${asset.id}')" class="px-2.5 py-1 rounded-lg ${needsCategorization ? 'btn-accent' : 'subtle-bg border border-theme text-primary-theme'} text-xs font-medium">
+                            ${needsCategorization ? 'Categorize' : 'Edit'}
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        // =========================================================================
+        // WORKFLOW INTERACTIONS (ServiceNow-Style Triage & Qualys Verification)
+        // =========================================================================
+        function claimTicket(ticketId) {
+            const currentEng = document.getElementById("currentEngineerSelect").value;
+            assignTicket(ticketId, currentEng);
+        }
+
+        function assignTicket(ticketId, engineer) {
+            const ticket = tickets.find(t => t.id === ticketId);
+            if (!ticket) return;
+            ticket.assignee = engineer;
+            if (ticket.status === "Open" && engineer !== "Unassigned") {
+                ticket.status = "In Progress";
+            }
+            ticket.history.unshift({
+                time: "Just now",
+                actor: document.getElementById("currentEngineerSelect").value,
+                note: `Assigned ticket to ${engineer}.`
+            });
+            showToast(`Ticket ${ticket.id} assigned to ${engineer}`);
+            refreshAll();
+            if (activeDrawerTicketId === ticketId) openTicketDrawer(ticketId);
+        }
+
+        function markRemediatedAwaitingScan(ticketId) {
+            const ticket = tickets.find(t => t.id === ticketId);
+            if (!ticket) return;
+            const currentEng = document.getElementById("currentEngineerSelect").value;
+            ticket.status = "Pending Qualys Scan";
+            ticket.qualysVerifyState = "Patch Applied via Automox — Scheduled for Next Qualys Scan";
+            ticket.history.unshift({
+                time: "Just now",
+                actor: currentEng,
+                note: "Remediation deployed via Automox. Moved to 'Pending Qualys Scan' for automated verification."
+            });
+            showToast(`${ticket.id} marked remediated. Queued for Qualys verification scan.`);
+            refreshAll();
+            openTicketDrawer(ticketId);
+        }
+
+        function simulateQualysScan() {
+            const pending = tickets.filter(t => t.status === "Pending Qualys Scan");
+            if (pending.length === 0) {
+                showToast("No tickets currently awaiting Qualys verification. Remediate a ticket first!");
+                return;
+            }
+            pending.forEach(ticket => {
+                ticket.status = "Verified Closed";
+                ticket.qualysVerifyState = "Verified Fixed by Qualys Scanner (Confirmed Clean)";
+                ticket.history.unshift({
+                    time: "Just now",
+                    actor: "Qualys Verification Sync",
+                    note: "Authenticated Qualys rescan confirmed vulnerability is no longer present. Ticket auto-closed."
+                });
+            });
+            showToast(`Qualys Scan Complete: ${pending.length} ticket(s) verified fixed and closed!`);
+            refreshAll();
+            if (activeDrawerTicketId) openTicketDrawer(activeDrawerTicketId);
+        }
+
+        // =========================================================================
+        // TICKET SLIDE-OVER DRAWER
+        // =========================================================================
+        function openTicketDrawer(ticketId) {
+            activeDrawerTicketId = ticketId;
+            const ticket = tickets.find(t => t.id === ticketId);
+            const asset = assets.find(a => a.id === ticket.assetId);
+            const score = calculatePriorityScore(ticket, asset);
+
+            document.getElementById("drawer-ticket-id").textContent = `${ticket.id} • ${ticket.cve}`;
+            document.getElementById("drawer-status-badge").outerHTML = `<span id="drawer-status-badge">${getStatusBadgeHTML(ticket.status)}</span>`;
+            document.getElementById("drawer-title").textContent = ticket.title;
+
+            const body = document.getElementById("drawerBody");
+            body.innerHTML = `
+                <!-- Risk Breakdown Card -->
+                <div class="p-4 rounded-xl subtle-bg border border-theme space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-secondary-theme">Calculated Remediation Priority</span>
+                        ${getScoreBadgeHTML(score)}
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                        <div class="p-2 rounded-lg surface-card">
+                            <span class="text-muted-theme block text-[10px]">CVSS</span>
+                            <strong class="font-mono text-primary-theme">${ticket.cvss}</strong>
+                        </div>
+                        <div class="p-2 rounded-lg surface-card">
+                            <span class="text-muted-theme block text-[10px]">Intel</span>
+                            <strong class="text-rose-600">${ticket.kev ? 'CISA KEV' : 'EPSS ' + (ticket.epss*100) + '%'}</strong>
+                        </div>
+                        <div class="p-2 rounded-lg surface-card">
+                            <span class="text-muted-theme block text-[10px]">Exposure</span>
+                            <strong class="text-primary-theme">${asset.exposure === 'Internet-Facing' ? 'Internet' : 'Internal'}</strong>
+                        </div>
+                        <div class="p-2 rounded-lg surface-card">
+                            <span class="text-muted-theme block text-[10px]">Criticality</span>
+                            <strong class="text-primary-theme">${asset.tier}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Authoritative Asset & Dual-API Status -->
+                <div class="space-y-2">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-secondary-theme">Asset &amp; Telemetry Verification</h4>
+                    <div class="p-4 rounded-xl border border-theme space-y-2.5 text-xs">
+                        <div class="flex justify-between">
+                            <span class="text-secondary-theme">Authoritative Host (Automox):</span>
+                            <span class="font-mono font-semibold text-primary-theme">${asset.automoxHostname}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-secondary-theme">Operating System &amp; EOL:</span>
+                            <span class="font-medium ${asset.eolStatus === 'EOL' ? 'text-rose-600' : 'text-primary-theme'}">${asset.automoxOS} (${asset.eolStatus})</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-secondary-theme">Automox Package Action:</span>
+                            <span class="font-mono text-emerald-600 font-medium">${ticket.automoxPatchId}</span>
+                        </div>
+                        <div class="flex justify-between border-t border-theme pt-2">
+                            <span class="text-secondary-theme">Qualys Scan Verification:</span>
+                            <span class="font-medium ${ticket.status === 'Verified Closed' ? 'text-emerald-600' : 'text-amber-600'}">${ticket.qualysVerifyState}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Remediation Instructions -->
+                <div class="space-y-2">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-secondary-theme">Recommended Engineer Action</h4>
+                    <div class="p-3.5 rounded-xl border border-theme text-xs text-primary-theme leading-relaxed">
+                        ${ticket.remediationAction}
+                    </div>
+                </div>
+
+                <!-- Assignment & Engineer Work Notes -->
+                <div class="space-y-2">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-secondary-theme">Assignment &amp; Work Log</h4>
+                    <div class="flex gap-2">
+                        <select onchange="assignTicket('${ticket.id}', this.value)" class="flex-1 px-3 py-2 rounded-lg subtle-bg border border-theme text-xs text-primary-theme">
+                            ${ENGINEERS.map(eng => `<option value="${eng}" ${ticket.assignee === eng ? 'selected' : ''}>${eng}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <input type="text" id="workNoteInput" placeholder="Add engineer work note or change request ID..." class="flex-1 px-3 py-2 rounded-lg subtle-bg border border-theme text-xs text-primary-theme focus:outline-none">
+                        <button onclick="addWorkNote('${ticket.id}')" class="px-3 py-2 rounded-lg subtle-bg border border-theme text-xs font-semibold text-primary-theme hover:border-blue-500">Post</button>
+                    </div>
+                </div>
+
+                <!-- Audit Trail -->
+                <div class="space-y-2">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-secondary-theme">Ticket Activity Timeline</h4>
+                    <div class="space-y-2.5 border-l-2 border-theme pl-3 ml-1">
+                        ${ticket.history.map(h => `
+                            <div class="text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-semibold text-primary-theme">${h.actor}</span>
+                                    <span class="text-[11px] text-muted-theme">${h.time}</span>
+                                </div>
+                                <p class="text-secondary-theme mt-0.5">${h.note}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            const footer = document.getElementById("drawerFooter");
+            if (ticket.status === "Open" || ticket.status === "In Progress") {
+                footer.innerHTML = `
+                    <span class="text-xs text-secondary-theme">Step 1: Patch via Automox</span>
+                    <button onclick="markRemediatedAwaitingScan('${ticket.id}')" class="px-4 py-2 rounded-lg btn-accent text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                        <i class="ph-bold ph-check"></i>
+                        <span>Mark Remediated (Queue Qualys Check)</span>
+                    </button>
+                `;
+            } else if (ticket.status === "Pending Qualys Scan") {
+                footer.innerHTML = `
+                    <span class="text-xs text-amber-600 font-medium">Awaiting next Qualys scan to confirm fix</span>
+                    <button onclick="simulateQualysScan()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5">
+                        <i class="ph-bold ph-radar"></i>
+                        <span>Run Verification Scan Now</span>
+                    </button>
+                `;
+            } else {
+                footer.innerHTML = `
+                    <span class="text-xs text-emerald-600 font-medium flex items-center gap-1"><i class="ph-bold ph-seal-check"></i> Confirmed remediated by Qualys telemetry</span>
+                    <button onclick="closeTicketDrawer()" class="px-4 py-2 rounded-lg subtle-bg border border-theme text-xs font-semibold text-primary-theme">Close</button>
+                `;
+            }
+
+            document.getElementById("ticketDrawerBackdrop").classList.remove("hidden");
+            document.getElementById("ticketDrawer").classList.remove("translate-x-full");
+        }
+
+        function closeTicketDrawer() {
+            activeDrawerTicketId = null;
+            document.getElementById("ticketDrawerBackdrop").classList.add("hidden");
+            document.getElementById("ticketDrawer").classList.add("translate-x-full");
+        }
+
+        function addWorkNote(ticketId) {
+            const input = document.getElementById("workNoteInput");
+            const text = input.value.trim();
+            if (!text) return;
+            const ticket = tickets.find(t => t.id === ticketId);
+            ticket.history.unshift({
+                time: "Just now",
+                actor: document.getElementById("currentEngineerSelect").value,
+                note: text
+            });
+            openTicketDrawer(ticketId);
+        }
+
+        // =========================================================================
+        // ASSET CATEGORIZATION & DATA CORRECTION MODAL
+        // =========================================================================
+        function openAssetModal(assetId) {
+            const asset = assets.find(a => a.id === assetId);
+            const body = document.getElementById("assetModalBody");
+            body.innerHTML = `
+                <div class="p-3 rounded-lg subtle-bg border border-theme space-y-1">
+                    <div class="font-mono font-semibold text-primary-theme">${asset.automoxHostname}</div>
+                    <div class="text-secondary-theme">Automox OS: <strong>${asset.automoxOS}</strong> | Qualys Raw: <span class="font-mono">${asset.qualysHostname}</span></div>
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block font-medium text-secondary-theme mb-1">Network Exposure</label>
+                        <select id="edit-exposure" class="w-full px-3 py-2 rounded-lg subtle-bg border border-theme text-primary-theme">
+                            <option value="Internet-Facing" ${asset.exposure === 'Internet-Facing' ? 'selected' : ''}>Internet-Facing</option>
+                            <option value="Internal" ${asset.exposure === 'Internal' ? 'selected' : ''}>Internal</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-medium text-secondary-theme mb-1">Service Criticality Tier</label>
+                        <select id="edit-tier" class="w-full px-3 py-2 rounded-lg subtle-bg border border-theme text-primary-theme">
+                            <option value="Tier 1" ${asset.tier === 'Tier 1' ? 'selected' : ''}>Tier 1 (Mission Critical)</option>
+                            <option value="Tier 2" ${asset.tier === 'Tier 2' ? 'selected' : ''}>Tier 2 (Business Important)</option>
+                            <option value="Tier 3" ${asset.tier === 'Tier 3' ? 'selected' : ''}>Tier 3 (Internal / Dev)</option>
+                            <option value="Unassigned" ${asset.tier === 'Unassigned' ? 'selected' : ''}>Unassigned</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-medium text-secondary-theme mb-1">Owning Engineering Team</label>
+                        <select id="edit-team" class="w-full px-3 py-2 rounded-lg subtle-bg border border-theme text-primary-theme">
+                            <option value="Platform" ${asset.team === 'Platform' ? 'selected' : ''}>Platform</option>
+                            <option value="Core Infra" ${asset.team === 'Core Infra' ? 'selected' : ''}>Core Infra</option>
+                            <option value="CloudOps" ${asset.team === 'CloudOps' ? 'selected' : ''}>CloudOps</option>
+                            <option value="FinTech" ${asset.team === 'FinTech' ? 'selected' : ''}>FinTech</option>
+                            <option value="Unassigned" ${asset.team === 'Unassigned' ? 'selected' : ''}>Unassigned</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-theme">
+                    <button onclick="closeAssetModal()" class="px-3 py-2 rounded-lg subtle-bg text-secondary-theme font-medium">Cancel</button>
+                    <button onclick="saveAssetCategorization('${asset.id}')" class="px-4 py-2 rounded-lg btn-accent font-semibold">Save &amp; Recalculate Risk</button>
+                </div>
+            `;
+            document.getElementById("assetEditModal").classList.remove("hidden");
+        }
+
+        function closeAssetModal() {
+            document.getElementById("assetEditModal").classList.add("hidden");
+        }
+
+        function saveAssetCategorization(assetId) {
+            const asset = assets.find(a => a.id === assetId);
+            asset.exposure = document.getElementById("edit-exposure").value;
+            asset.tier = document.getElementById("edit-tier").value;
+            asset.team = document.getElementById("edit-team").value;
+            asset.conflictResolved = true;
+            closeAssetModal();
+            showToast(`Updated ${asset.automoxHostname} — Remediation priority scores recalculated.`);
+            refreshAll();
+        }
+
+        function autoReconcileAll() {
+            assets.forEach(a => {
+                a.conflictResolved = true;
+                if (a.team === "Unassigned") a.team = "Platform";
+                if (a.tier === "Unassigned") a.tier = "Tier 2";
+            });
+            showToast("Applied Automox authoritative metadata across all ingested assets.");
+            refreshAll();
+        }
+
+        // =========================================================================
+        // NAVIGATION, THEME SWITCHER & UTILITIES
+        // =========================================================================
+        function switchTab(tab) {
+            const queueView = document.getElementById("view-queue");
+            const assetsView = document.getElementById("view-assets");
+            const tabQueue = document.getElementById("tab-queue");
+            const tabAssets = document.getElementById("tab-assets");
+
+            if (tab === "queue") {
+                queueView.classList.remove("hidden");
+                assetsView.classList.add("hidden");
+                tabQueue.className = "px-4 py-2 rounded-lg text-sm font-semibold btn-accent transition flex items-center gap-2";
+                tabAssets.className = "px-4 py-2 rounded-lg text-sm font-medium text-secondary-theme hover:text-primary-theme transition flex items-center gap-2";
+            } else {
+                queueView.classList.add("hidden");
+                assetsView.classList.remove("hidden");
+                tabAssets.className = "px-4 py-2 rounded-lg text-sm font-semibold btn-accent transition flex items-center gap-2";
+                tabQueue.className = "px-4 py-2 rounded-lg text-sm font-medium text-secondary-theme hover:text-primary-theme transition flex items-center gap-2";
+            }
+        }
+
+        function setQueueFilter(filter) {
+            currentQueueFilter = filter;
+            ["all", "mine", "unassigned", "pending_scan", "closed"].forEach(f => {
+                const btn = document.getElementById(`qf-${f}`);
+                if (f === filter) {
+                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold btn-accent";
+                } else {
+                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-medium subtle-bg text-secondary-theme hover:text-primary-theme";
+                }
+            });
+            renderTickets();
+        }
+
+        function setTheme(themeName) {
+            document.documentElement.setAttribute("data-theme", themeName);
+            ["light", "slate", "midnight"].forEach(t => {
+                const btn = document.getElementById(`theme-${t}`);
+                if (t === themeName) {
+                    btn.className = "px-2 py-1 rounded-md text-xs font-semibold transition flex items-center gap-1 btn-accent shadow-sm";
+                } else {
+                    btn.className = "px-2 py-1 rounded-md text-xs font-medium transition flex items-center gap-1 text-secondary-theme";
+                }
+            });
+        }
+
+        function handleEngineerChange() {
+            refreshAll();
+        }
+
+        function toggleFormulaModal() {
+            document.getElementById("formulaModal").classList.toggle("hidden");
+        }
+
+        function showToast(message) {
+            const container = document.getElementById("toastContainer");
+            const toast = document.createElement("div");
+            toast.className = "surface-card border-l-4 border-l-blue-600 px-4 py-3 rounded-xl shadow-lg text-xs font-medium text-primary-theme flex items-center gap-2.5 pointer-events-auto transition-all";
+            toast.innerHTML = `<i class="ph-bold ph-info text-blue-600 text-base"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = "0";
+                setTimeout(() => toast.remove(), 250);
+            }, 3500);
+        }
+
+        function refreshAll() {
+            updateKPIs();
+            renderTickets();
+            renderAssets();
+        }
+
+        window.onload = function() {
+            refreshAll();
+        };
+    </script>
+</body>
+</html>

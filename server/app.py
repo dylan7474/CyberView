@@ -28,7 +28,7 @@ import redhat
 import qualys
 import relational
 
-VERSION = "4.42.0"
+VERSION = "4.43.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -177,23 +177,49 @@ app = FastAPI(title="CyberView", version=VERSION, docs_url=None, redoc_url=None,
 
 
 def rebuild_relational(why="start-up"):
-    """v4.42 (database stage 1): fill the new relational tables from the old storage and check them. They are not
-    used by the app yet; a failure is logged and never stops the portal."""
+    """Fill the relational tables from the old storage and check them (database stages 1-2). Only a verified rebuild
+    lets the reads use them (v4.43); a failure is logged, the reads stay on the old storage, the portal carries on."""
     try:
         with conn_ctx() as c, c.cursor() as cur:
             meta = relational.rebuild(cur)
             res = relational.verify(cur)
-        print(f"[relational] rebuilt ({why}) in {meta['seconds']} s: {meta['counts']}; check {'OK' if res['ok'] else 'FAILED: ' + '; '.join(x['name'] for x in res['checks'] if not x['ok'])}", flush=True)
+        relational.READY = bool(res["ok"])
+        relational.LAST_ERROR = "" if res["ok"] else "check failed: " + "; ".join(x["name"] for x in res["checks"] if not x["ok"])
+        print(f"[relational] rebuilt ({why}) in {meta['seconds']} s: {meta['counts']}; check {'OK' if res['ok'] else 'FAILED: ' + relational.LAST_ERROR}; reads from {'the relational tables' if relational.reads_on() else 'the old storage'}", flush=True)
         return meta, res
-    except Exception as e:      # noqa: BLE001 - stage 1 must never break the portal
-        print(f"[relational] rebuild failed ({why}): {e}", flush=True)
+    except Exception as e:      # noqa: BLE001 - must never break the portal
+        relational.READY = False
+        relational.LAST_ERROR = f"rebuild failed: {e}"[:300]
+        print(f"[relational] rebuild failed ({why}): {e}; reads stay on the old storage", flush=True)
         return None, {"ok": False, "checks": [{"name": "rebuild", "ok": False, "detail": str(e)[:300]}]}
+
+
+def rel_sync(cur, fn, *args):
+    """v4.43 (stage 2): repeat a write on the relational tables inside the same transaction. The old storage stays the
+    master copy: if this ever fails, only these statements are undone (savepoint), the reads go back to the old storage
+    until the next verified rebuild (restart, or an administrator's rebuild), and the save itself still succeeds."""
+    if not relational.READY:
+        return
+    cur.execute("SAVEPOINT rel_sync")
+    try:
+        fn(cur, *args)
+        cur.execute("RELEASE SAVEPOINT rel_sync")
+    except Exception as e:      # noqa: BLE001
+        cur.execute("ROLLBACK TO SAVEPOINT rel_sync")
+        relational.READY = False
+        relational.LAST_ERROR = f"keeping in step failed ({getattr(fn, '__name__', fn)}): {e}"[:300]
+        print(f"[relational] {relational.LAST_ERROR}; reads back on the old storage", flush=True)
 
 
 @app.on_event("startup")
 def _startup():
     migrate()
-    threading.Thread(target=rebuild_relational, daemon=True).start()
+    try:
+        with conn_ctx() as c, c.cursor() as cur:
+            relational.create(cur)          # DDL on its own (it commits)
+    except Exception as e:      # noqa: BLE001
+        print(f"[relational] could not create the tables: {e}", flush=True)
+    rebuild_relational()                    # before the first request, so reads start from verified tables
     automox.init(conn_ctx, audit)
     qualys.init(conn_ctx, audit)
     eol.init(conn_ctx, audit)
@@ -380,6 +406,21 @@ def relational_status(request: Request):
         return JSONResponse({"error": "Administrators only"}, status_code=403)
     with conn_ctx() as c, c.cursor() as cur:
         return relational.status(cur)
+
+
+@app.post("/api/admin/relational/verify")
+def relational_verify(request: Request):
+    """v4.43: check, without rebuilding, that the relational tables still match the old storage after all the writes
+    since the last rebuild (administrators). A failure switches the reads back to the old storage."""
+    u = getattr(request.state, "user", None) or {}
+    if u.get("role") != "admin" and not u.get("open"):
+        return JSONResponse({"error": "Administrators only"}, status_code=403)
+    with conn_ctx() as c, c.cursor() as cur:
+        res = relational.verify(cur)
+    if not res["ok"] and relational.READY:
+        relational.READY = False
+        relational.LAST_ERROR = "check failed: " + "; ".join(x["name"] for x in res["checks"] if not x["ok"])
+    return {**res, "reads": "relational" if relational.reads_on() else "old storage"}
 
 
 @app.post("/api/admin/relational/rebuild")
@@ -571,10 +612,21 @@ def state():
     with conn_ctx() as c, c.cursor() as cur:
         cur.execute("SELECT name, kind, revision FROM collections")
         meta = {n: (k, r) for n, k, r in cur.fetchall()}
-        cur.execute("SELECT collection, doc FROM records ORDER BY collection, seq")
         docs = {}
-        for coll, doc in cur.fetchall():
-            docs.setdefault(coll, []).append(doc)
+        if relational.reads_on():
+            # v4.43: the register, risk acceptances, tasks, comments and Review Queue come from their own tables
+            moved = list(relational.TABLE_OF)
+            cur.execute("SELECT collection, doc FROM records WHERE collection NOT IN (%s) ORDER BY collection, seq" % ",".join(["%s"] * len(moved)), moved)
+            for coll, doc in cur.fetchall():
+                docs.setdefault(coll, []).append(doc)
+            for coll, table in relational.TABLE_OF.items():
+                if coll in meta:
+                    cur.execute(f"SELECT doc FROM {table} ORDER BY seq")
+                    docs[coll] = [r[0] for r in cur.fetchall()]
+        else:
+            cur.execute("SELECT collection, doc FROM records ORDER BY collection, seq")
+            for coll, doc in cur.fetchall():
+                docs.setdefault(coll, []).append(doc)
     parts = []
     for name, (kind, rev) in meta.items():
         d = docs.get(name, [])
@@ -679,6 +731,7 @@ def put_collection(name: str, request: Request, body: dict = Body(...)):
             "INSERT INTO collections (name, kind, revision, updated_at, updated_by) VALUES (%s,%s,%s,NOW(3),%s) "
             "ON DUPLICATE KEY UPDATE kind=VALUES(kind), revision=VALUES(revision), updated_at=VALUES(updated_at), updated_by=VALUES(updated_by)",
             (name, kind, rev, user))
+        rel_sync(cur, relational.sync_collection, name)
         audit(cur, user, "save", f"{name} ({len(docs)} records, rev {rev})")
     return {"revision": rev}
 
@@ -690,6 +743,7 @@ def delete_collection(name: str, request: Request):
     with conn_ctx() as c, c.cursor() as cur:
         cur.execute("DELETE FROM records WHERE collection=%s", (name,))
         cur.execute("DELETE FROM collections WHERE name=%s", (name,))
+        rel_sync(cur, relational.sync_collection, name)
         audit(cur, user, "delete", name)
     return {"ok": True}
 
@@ -791,6 +845,7 @@ def retry_deadlock(fn, tries=4):
 
 def bump_tasks(cur, user, name=TASKS):
     cur.execute("UPDATE collections SET revision=revision+1, updated_at=NOW(3), updated_by=%s WHERE name=%s", (user, name))
+    rel_sync(cur, relational.sync_collection, name)       # v4.43: every task and comment write ends here
 
 
 def for_log(t):
@@ -819,7 +874,10 @@ def people():
 @app.get("/api/tasks")
 def list_tasks():
     with conn_ctx() as c, c.cursor() as cur:
-        cur.execute("SELECT doc FROM records WHERE collection=%s ORDER BY seq", (TASKS,))
+        if relational.reads_on():
+            cur.execute("SELECT doc FROM tasks ORDER BY seq")
+        else:
+            cur.execute("SELECT doc FROM records WHERE collection=%s ORDER BY seq", (TASKS,))
         body = "[" + ",".join(r[0] for r in cur.fetchall()) + "]"
     return Response(body, media_type="application/json", headers={"Cache-Control": "no-store"})
 
@@ -944,7 +1002,10 @@ def _note_label(n):
 @app.get("/api/notes")
 def list_notes():
     with conn_ctx() as c, c.cursor() as cur:
-        cur.execute("SELECT doc FROM records WHERE collection=%s ORDER BY seq", (NOTES,))
+        if relational.reads_on():
+            cur.execute("SELECT doc FROM notes ORDER BY seq")
+        else:
+            cur.execute("SELECT doc FROM records WHERE collection=%s ORDER BY seq", (NOTES,))
         body = "[" + ",".join(r[0] for r in cur.fetchall()) + "]"
     return Response(body, media_type="application/json", headers={"Cache-Control": "no-store"})
 
@@ -1197,12 +1258,12 @@ def stream_table(sql):
 
 @app.get("/api/vuln/detections")
 def get_detections():
-    return stream_table("SELECT doc FROM detections")
+    return stream_table("SELECT doc FROM findings" if relational.reads_on() else "SELECT doc FROM detections")
 
 
 @app.get("/api/vuln/qids")
 def get_qids():
-    return stream_table("SELECT doc FROM qids")
+    return stream_table("SELECT doc FROM vulns" if relational.reads_on() else "SELECT doc FROM qids")
 
 
 @app.post("/api/vuln/merge")
@@ -1222,15 +1283,18 @@ def vuln_merge(request: Request, body: dict = Body(...)):
             for i in range(0, len(assets), 500):
                 chunk = assets[i:i + 500]
                 cur.execute("DELETE FROM detections WHERE asset IN (%s)" % ",".join(["%s"] * len(chunk)), chunk)
+        draw = [(d, json.dumps(d, separators=(",", ":"))) for d in dets]
+        qraw = [(q, json.dumps(q, separators=(",", ":"))) for q in qids]
         if dets:
             cur.executemany(
                 "INSERT INTO detections (k, asset, qid, sev, qvs, doc) VALUES (%s,%s,%s,%s,%s,%s) "
                 "ON DUPLICATE KEY UPDATE asset=VALUES(asset), qid=VALUES(qid), sev=VALUES(sev), qvs=VALUES(qvs), doc=VALUES(doc)",
-                [(d["k"], d["asset"], str(d["qid"]), int(d.get("sev") or 0), float(d.get("qvs") or 0), json.dumps(d, separators=(",", ":"))) for d in dets])
+                [(d["k"], d["asset"], str(d["qid"]), int(d.get("sev") or 0), float(d.get("qvs") or 0), raw) for d, raw in draw])
         if qids:
             cur.executemany(
                 "INSERT INTO qids (qid, doc) VALUES (%s,%s) ON DUPLICATE KEY UPDATE doc=VALUES(doc)",
-                [(str(q["qid"]), json.dumps(q, separators=(",", ":"))) for q in qids])
+                [(str(q["qid"]), raw) for q, raw in qraw])
+        rel_sync(cur, relational.mirror_vuln_merge, clear, assets, draw, qraw)
         if clear or assets or dets:
             audit(cur, user, "vuln-merge", f"{'clear all, ' if clear else ''}{len(assets)} assets replaced, {len(dets)} detections, {len(qids)} qids")
     return {"ok": True}
@@ -1242,6 +1306,7 @@ def vuln_clear(request: Request):
     with conn_ctx() as c, c.cursor() as cur:
         cur.execute("DELETE FROM detections")
         cur.execute("DELETE FROM qids")
+        rel_sync(cur, relational.mirror_vuln_clear)
         audit(cur, user, "vuln-clear")
     return {"ok": True}
 
@@ -1275,6 +1340,7 @@ def restore(request: Request, body: dict = Body(...)):
                             [(d["k"], d["asset"], str(d["qid"]), int(d.get("sev") or 0), float(d.get("qvs") or 0), json.dumps(d, separators=(",", ":"))) for d in dets[i:i + 2000]])
         if qids:
             cur.executemany("INSERT INTO qids (qid, doc) VALUES (%s,%s)", [(str(q["qid"]), json.dumps(q, separators=(",", ":"))) for q in qids])
+        rel_sync(cur, relational.rebuild)          # v4.43: everything replaced, so the tables are filled afresh
         audit(cur, user, "restore", f"{kept} collections, {len(dets)} detections, {len(qids)} qids")
     return {"ok": True}
 

@@ -390,6 +390,14 @@ check("notes: a backup brings them back (restore)", st == 200 and [n["text"] for
 st, r = ed.call("POST", "/api/notes", {"asset": "x", "text": "after restore"})
 check("notes: new ids continue after a restore", st == 200 and r["note"]["id"] == "N-000100", r)
 
+# v4.43 database stage 2: every write above (register, risk acceptances, tasks, comments, Review Queue, findings, restores)
+# was repeated on the relational tables; they must still match the old storage exactly, and the reads come from them
+st, r = admin.call("POST", "/api/admin/relational/verify")
+check("relational tables still match the old storage after every write above", st == 200 and r.get("ok") is True, [c for c in (r or {}).get("checks", []) if not c.get("ok")] or r)
+st, r = admin.call("GET", "/api/admin/relational")
+check("the reads come from the relational tables", st == 200 and r.get("reads") == "relational", r)
+check("relational check is for administrators only", ed.call("POST", "/api/admin/relational/verify")[0] == 403)
+
 # logout ends the session
 check("logout", admin.call("POST", "/api/logout")[0] == 200 and admin.call("GET", "/api/state")[0] == 401)
 print("\n%d failed" % len(fails) if fails else "\nall passed")

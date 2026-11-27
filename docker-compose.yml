@@ -38,6 +38,8 @@ services:
       EOL_SYNC_HOURS: ${EOL_SYNC_HOURS:-24}
       # Red Hat Security Data (public, no key): what Red Hat says per RHEL release; watched CVEs refreshed every REDHAT_SYNC_HOURS
       REDHAT_SYNC_HOURS: ${REDHAT_SYNC_HOURS:-24}
+      # v4.43 database stage 2: the reads use the relational tables once a start-up check says they match (0 = always the old storage)
+      RELATIONAL_READS: ${RELATIONAL_READS:-1}
       # EPSS exploitation scores from FIRST (public, no key): every CVE in the QID catalogue, refreshed every EPSS_SYNC_HOURS (0 = only by hand)
       EPSS_SYNC_HOURS: ${EPSS_SYNC_HOURS:-24}
       EOL_PRODUCTS: ${EOL_PRODUCTS:-}

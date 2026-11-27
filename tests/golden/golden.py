@@ -236,6 +236,12 @@ async def server(url, update, user, password):
     print(f"  {'PASS' if logged else 'FAIL'} the change is in the history")
     print(f"  {'PASS' if st4 == 409 else 'FAIL'} a save from an out-of-date copy is refused (409, got {st4})")
     ok &= saved_ok and logged and st4 == 409
+    st8, vf = api.call("POST", "/api/admin/relational/verify")
+    kept = st8 == 200 and vf.get("ok") and vf.get("reads") == "relational"
+    print(f"  {'PASS' if kept else 'FAIL'} the relational tables kept in step with the saves (verified without a rebuild), reads from them")
+    if not kept:
+        print("     ", json.dumps(vf)[:1500])
+    ok &= bool(kept)
     st5, rb2 = api.call("POST", "/api/admin/relational/rebuild")
     st6, rel = api.call("GET", "/api/admin/relational")
     follows = st5 == 200 and rb2["verify"]["ok"] and st6 == 200 and rel.get("verify", {}).get("ok")

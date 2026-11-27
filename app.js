@@ -3367,6 +3367,16 @@
             // Register asset <-> Automox device. A hand link wins; then the full name, the short name, and last the IP.
             // Anything that fits more than one way goes to "ambiguous" for a person to settle.
             static RANK = { 'linked by hand': 0, 'name': 1, 'short name': 2, 'IP only': 3 };
+            // v4.40 the Automox device for a machine that is not in the register yet (a Review Queue item): name, short name, then IP; one match only
+            static findDev(rec) {
+                const m = this.match(); if (!m || !rec || !m.byName) return null;
+                const union = (map, keys) => [...new Set(keys.flatMap(k => map.get(k) || []))];
+                const names = [rec.normalizedName, rec.originalName, rec.originalAssetName].filter(Boolean);
+                let c = union(m.byName, names.map(x => this.key(x)));
+                if (!c.length) c = union(m.byShort, names.map(x => this.short(x)));
+                if (!c.length) c = union(m.byIp, String(rec.ipv4Address || rec.ipAddress || '').split(/[\s,;]+/).filter(Boolean));
+                return c.length === 1 ? c[0] : null;
+            }
             static match() {
                 const D = this.data; if (!D) return null;
                 const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER);
@@ -3403,7 +3413,7 @@
                 byAsset.forEach((m, a) => { if (m.dev) byDev.set(m.dev.id, a); });
                 const extra = D.devices.filter(d => !byDev.has(d.id));
                 const ambiguous = [...byAsset.entries()].filter(([, m]) => m.how === 'ambiguous' || m.how === 'duplicate').map(([a]) => a);
-                this._m = { sig, byAsset, byDev, extra, ambiguous };
+                this._m = { sig, byAsset, byDev, extra, ambiguous, byName, byShort, byIp };
                 return this._m;
             }
             static devFor(asset) { const m = this.match(); return m ? (m.byAsset.get(asset)?.dev || null) : null; }
@@ -6981,7 +6991,7 @@
                     { id: 'automox', label: 'Automox', noun: 'check-in', days: +S.agentStaleDays || 7, setting: 'Agent stale after', ready: !!m, pending: axOn && !m && !this._nsAxTried,
                       fix: 'fix or install its Automox agent',
                       expect: (r) => r.patchNA ? 'cannot take an agent' : auto.has(StatusEngine.teamOf(r).toLowerCase()) ? true : 'team not patched by Automox',
-                      seen: (r) => { const dev = m.byAsset.get(r.normalizedName)?.dev; return dev ? { t: AutomoxService.time(dev.lastSeen) } : { t: 0, none: 'no agent' }; } }
+                      seen: (r) => { const x = m.byAsset.get(r.normalizedName), dev = x ? x.dev : AutomoxService.findDev(r); return dev ? { t: AutomoxService.time(dev.lastSeen) } : { t: 0, none: 'no agent' }; } }
                 ];
             }
             // Machines some expected source has not seen within its days. Entry: { miss: [source ids], all: every expected source
@@ -6995,24 +7005,44 @@
                 srcs.forEach(x => { counts[x.id] = 0; });
                 StorageService.live().forEach(r => {
                     if (r.unrecognised) return;
-                    const by = {}, miss = []; let exp = 0;
-                    for (const x of srcs) {
-                        const e = x.expect(r);
-                        if (e !== true) { by[x.id] = { exp: false, why: e }; continue; }
-                        exp++;
-                        const v = x.seen(r), cut = now - x.days * 864e5;
-                        const gone = v.t ? v.t < cut : StatusEngine.time(r.lastSeen) < cut;
-                        by[x.id] = { exp: true, t: v.t, none: v.none || '', miss: gone };
-                        if (gone) { miss.push(x.id); counts[x.id]++; }
-                    }
-                    if (!miss.length) return;
-                    const allMiss = miss.length === exp;
-                    if (allMiss) counts.ALL++;
-                    list.set(r.normalizedName, { miss, all: allMiss, by });
+                    const e = this.missFor(r, srcs, now);
+                    if (!e.miss.length) return;
+                    e.miss.forEach(id => counts[id]++);
+                    if (e.all) counts.ALL++;
+                    list.set(r.normalizedName, e);
                 });
                 const v = { list, srcs, counts, axPending: all.some(x => x.pending) };
                 this._staleC = { key, v };
                 return v;
+            }
+            // One machine against each ready source: { miss: [ids], all, by: { id: { exp, why, t, none, miss } } } (miss may be empty)
+            missFor(r, srcs = this.sources().filter(x => x.ready), now = Demo.now()) {
+                const by = {}, miss = []; let exp = 0;
+                for (const x of srcs) {
+                    const e = x.expect(r);
+                    if (e !== true) { by[x.id] = { exp: false, why: e }; continue; }
+                    exp++;
+                    const v = x.seen(r), cut = now - x.days * 864e5;
+                    const gone = v.t ? v.t < cut : StatusEngine.time(r.lastSeen) < cut;
+                    by[x.id] = { exp: true, t: v.t, none: v.none || '', miss: gone };
+                    if (gone) miss.push(x.id);
+                }
+                return { miss, all: !!miss.length && miss.length === exp, by };
+            }
+            // v4.40 Seen by, for Review Queue items (the new-look site's step 2): the same data sources as everywhere else. The machine
+            // has no team yet, so the suggested team decides whether Automox should see it. Built from the register record (Unrecognised
+            // machines are in it) or the item's own data. by: item id -> missFor entry; open items only.
+            queueSeen(queue = ReviewQueueService.getQueue()) {
+                const all = this.sources(), srcs = all.filter(x => x.ready), now = Demo.now(), pending = all.some(x => x.pending);
+                if (pending) this.staleLoadAx();
+                const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
+                const by = new Map();
+                queue.forEach(q => {
+                    if (q.status === 'APPROVED' || q.status === 'REJECTED') return;
+                    const base = reg.get(q.normalizedName) || { ...(q.qualysData || {}), normalizedName: q.normalizedName, ipv4Address: q.ipAddress || q.qualysData?.ipv4Address, originalName: q.originalName };
+                    by.set(q.id, this.missFor({ ...base, owner: q.suggestedOwner || 'Unknown', unrecognised: false }, srcs, now));
+                });
+                return { by, srcs, pending };
             }
             staleLoadAx() {
                 if (this._regAxLoading) return;

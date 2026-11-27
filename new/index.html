@@ -312,7 +312,7 @@ details.tv th:first-child, details.tv td:first-child { text-align: left; }
     </div>
 </div>
 
-<script src="app.js?v=4.39.1"></script>
+<script src="app.js?v=4.40.0"></script>
 <script>
 // Phosphor Icons 2.1.1 (MIT licence, phosphoricons.com): only the icons this page uses, inline, so they show without the internet.
 // d- = duotone (large), b- = bold (small). Drawn as inline SVG (not <use href="#...">, which <base href="../"> would point at the wrong page).
@@ -334,6 +334,7 @@ class NewApp extends App {
     renderRiskAcceptances() { }
     renderVulnDashboard() { }
     updateGlobalBadges() { }        // the classic sidebar's counters
+    restale() { UI.refresh(); }     // Automox arrived: the Seen by and Not seen lists change
 }
 
 // ------------------------------------------------------------------ the priority model
@@ -496,7 +497,7 @@ class PriorityModel {
 const UI = {
     view: 'home', team: 'ALL', M: null, saved: null, data: null, stale: false, seq: 0,
     work: { p: 'ALL', kev: false, overdue: false, q: '', shown: 40, open: new Set() },
-    mach: { tab: 'noteam', q: '' },
+    mach: { tab: 'queue', q: '', seen: 'ALL' },
     get canEdit() { const me = StorageService.me; return !(me && me.role === 'viewer'); },
 
     // ---------- start
@@ -609,7 +610,7 @@ const UI = {
                 `<button class="btn primary" onclick="UI.go('work')">${ic('b-wrench')} Open the work list ${ic('b-arrow-right')}</button>`)
             + `<div class="grid g4">
                 ${tile(1, corner(bad, bad + ' sources to check', !bad), bad ? `<span class="st warn">⚠ ${bad} source${bad === 1 ? '' : 's'} to check</span>` : '<span class="st ok">✓ All sources fresh</span>', `${fmtNum(rows.length)} sources: Qualys, Automox, end-of-life dates, EPSS, Red Hat`)}
-                ${tile(2, corner(gaps.total, gaps.total + ' machines to put right', !gaps.total), gaps.total ? `<span class="st warn">⚠ ${fmtNum(gaps.total)} to put right</span>` : '<span class="st ok">✓ Nothing to put right</span>', `${fmtNum(gaps.noteam.length)} without a team · ${fmtNum(gaps.notier.length)} without a tier · ${fmtNum(gaps.unseen.length)} not seen lately`)}
+                ${tile(2, corner(gaps.total, gaps.total + ' machines to put right', !gaps.total), gaps.total ? `<span class="st warn">⚠ ${fmtNum(gaps.total)} to put right</span>` : '<span class="st ok">✓ Nothing to put right</span>', `${fmtNum(gaps.queue.length)} waiting for review · ${fmtNum(gaps.noteam.length)} without a team · ${fmtNum(gaps.notier.length)} without a tier · ${fmtNum(gaps.unseen.length)} not seen lately`)}
                 ${tile(3, '', `<strong>${esc(P.name)}</strong>`, esc(P.tag) + (M.preset === 'cyberview' ? ' · the same priorities as the classic site' : ''))}
                 ${tile(4, corner(p1.length, p1.length + ' P1 fixes', !p1.length), `<strong>${fmtNum(p1.length)} P1 fix${p1.length === 1 ? '' : 'es'}</strong>`, `${fmtNum(groups.length)} fixes on ${fmtNum(new Set(D.dets.map(d => d.asset)).size)} machines${od ? ` · <strong>✖ ${fmtNum(od)} overdue</strong>` : ''}`, sp)}
             </div>
@@ -658,21 +659,25 @@ const UI = {
         const T = this.team, live = StorageService.live().filter(r => !r.unrecognised);
         const mine = live.filter(r => T === 'ALL' || r.owner === T);
         const st = app.stale();
+        const queue = (ReviewQueueService.getQueue() || []).filter(q => (q.status === 'PENDING' || q.status === 'IN_REVIEW') && (T === 'ALL' || q.suggestedOwner === T || !q.suggestedOwner || q.suggestedOwner === 'Unknown'));
         return {
+            queue,
             noteam: live.filter(r => !r.owner || r.owner === 'Unknown' || r.owner === 'Unrecognised'),
             notier: mine.filter(r => !StatusEngine.tierOf(r)),
             noexp: mine.filter(r => !r.exposure || r.exposure === 'Unknown'),
             unseen: mine.filter(r => st.list.has(r.normalizedName)),
-            get total() { return new Set([...this.noteam, ...this.notier, ...this.noexp, ...this.unseen].map(r => r.normalizedName)).size; },
+            get total() { return new Set([...this.noteam, ...this.notier, ...this.noexp, ...this.unseen].map(r => r.normalizedName)).size + this.queue.length; },
             st,
         };
     },
     async vMachines() {
         const G = this.gaps(), T = this.team, tab = this.mach.tab;
-        const pend = (ReviewQueueService.getQueue() || []).filter(q => q.status === 'PENDING' || q.status === 'IN_REVIEW').length;
-        const tabs = [['noteam', 'No team', G.noteam, 'Every team: a machine without a team is on nobody\'s list'], ['notier', 'Tier not set', G.notier, 'Counts as Tier 2 until someone sets it'],
+        const tabs = [['queue', 'Waiting for review', G.queue, 'New from Qualys: confirm a team, or reject the junk. Seen by says which sources still see each machine.'], ['noteam', 'No team', G.noteam, 'Every team: a machine without a team is on nobody\'s list'], ['notier', 'Tier not set', G.notier, 'Counts as Tier 2 until someone sets it'],
             ['noexp', 'Exposure unknown', G.noexp, 'Internet facing, DMZ or internal changes the priority'], ['unseen', 'Not seen lately', G.unseen, 'An expected source has not seen it: retired, or an agent problem'], ['all', 'Find any machine', null, '']];
         const cur = tabs.find(t => t[0] === tab) || tabs[0];
+        const tabsHTML = `<div class="row mb" role="tablist">${tabs.map(([id, l, arr]) => `<button class="btn ${id === cur[0] ? 'primary' : ''}" role="tab" aria-selected="${id === cur[0]}" onclick="UI.mach.tab='${id}'; UI.render()">${l}${arr ? ` <span class="mono">${fmtNum(arr.length)}</span>` : ''}</button>`).join('')}</div>`;
+        const headHTML = this.head(2, 'Machines', 'Are the machines right?', `The work list is only as good as the register: each machine needs a team, a tier and an exposure. Put them right here with ✎ (the same edit as the classic site). ${T === 'ALL' ? '' : 'Showing ' + esc(T) + '\'s machines (and every machine without a team).'}`);
+        if (cur[0] === 'queue') return headHTML + tabsHTML + this.queueCard(G.queue, cur[3]);
         let list = cur[2];
         if (tab === 'all') list = StorageService.live().filter(r => T === 'ALL' || r.owner === T);
         const q = this.mach.q.trim().toLowerCase();
@@ -680,8 +685,7 @@ const UI = {
         const shown = list.slice(0, 150);
         const why = (r) => { const x = G.st.list.get(r.normalizedName); return x ? x.miss.map(id => (G.st.srcs.find(s => s.id === id) || {}).label || id).join(', ') : ''; };
         return this.head(2, 'Machines', 'Are the machines right?', `The work list is only as good as the register: each machine needs a team, a tier and an exposure. Put them right here with ✎ (the same edit as the classic site). ${T === 'ALL' ? '' : 'Showing ' + esc(T) + '\'s machines (and every machine without a team).'}`)
-            + (pend ? `<div class="note mb">⚠ <strong>${fmtNum(pend)} machine${pend === 1 ? '' : 's'} waiting in the Review Queue</strong> (new from Qualys, team not confirmed). <a href="./" title="Opens the classic site">Review them on the classic site ↗</a></div>` : '')
-            + `<div class="row mb" role="tablist">${tabs.map(([id, l, arr]) => `<button class="btn ${id === tab ? 'primary' : ''}" role="tab" aria-selected="${id === tab}" onclick="UI.mach.tab='${id}'; UI.render()">${l}${arr ? ` <span class="mono">${fmtNum(arr.length)}</span>` : ''}</button>`).join('')}</div>
+            + tabsHTML + `
             <div class="card"><div class="pad row between"><span class="t2 small">${esc(cur[3])}</span>
                 <input class="in" type="search" placeholder="Search name, service, OS…" value="${esc(this.mach.q)}" oninput="UI.mach.q=this.value; clearTimeout(UI._mt); UI._mt=setTimeout(()=>UI.render(), 250)" aria-label="Search machines"></div>
             <div class="scroll"><table class="tbl"><thead><tr><th>Machine</th><th>Team</th><th>Service</th><th>Tier</th><th>Exposure</th><th class="hide-sm">OS</th><th>Last seen</th></tr></thead><tbody>
@@ -692,6 +696,59 @@ const UI = {
                 <td class="hide-sm small t2">${esc(r.os || '')}</td><td class="small nowrap">${esc(this.ago(StatusEngine.time(r.lastSeen)))}</td></tr>`).join('') || `<tr><td colspan="7" class="empty">${tab === 'all' ? 'No machine matches.' : '✓ None: nothing to put right here.'}</td></tr>`}
             </tbody></table></div>${list.length > shown.length ? `<p class="pad small muted">Showing the first ${shown.length} of ${fmtNum(list.length)}: search to narrow it.</p>` : ''}</div>`;
     },
+
+    // ---------- Step 2, Waiting for review: the Review Queue with Seen by (which data sources still see each new machine)
+    queueCard(items, lead) {
+        const SB = app.queueSeen(), f = this.mach.seen || 'ALL', q = this.mach.q.trim().toLowerCase();
+        const E = (it) => SB.by.get(it.id);
+        const match = (it, v) => { const e = E(it); if (!e) return v === 'ALL'; return v === 'ALL' ? true : v === 'SEEN' ? !e.miss.length : v === 'MISS:ALL' ? e.all : e.miss.includes(v.slice(5)); };
+        let list = items.filter(it => match(it, f));
+        if (q) list = list.filter(it => [it.normalizedName, it.originalName, it.ipAddress, it.detectedService, it.suggestedOwner].some(v => String(v || '').toLowerCase().includes(q)));
+        this._qShown = list.map(it => it.id);
+        // icons, not the 🕳 / ⏳ emoji, which some computers cannot draw
+        const opts = [['ALL', '', 'Any', items.length], ['MISS:ALL', 'b-x-circle', 'All sources missing', items.filter(it => match(it, 'MISS:ALL')).length],
+            ...SB.srcs.map(x => ['MISS:' + x.id, 'b-warning', `${x.label} missing`, items.filter(it => match(it, 'MISS:' + x.id)).length]), ['SEEN', 'b-check-circle', 'Seen recently', items.filter(it => match(it, 'SEEN')).length]];
+        const seg = opts.map(([v, icn, l, n]) => `<button aria-pressed="${f === v}" onclick="UI.mach.seen='${v}'; UI.render()">${icn ? ic(icn) + ' ' : ''}${esc(l)} <span class="mono">${fmtNum(n)}</span></button>`).join('');
+        const T = OrgSettings.teams(), shown = list.slice(0, 150);
+        const teamSel = (it) => `<select class="in" id="qt-${esc(it.id)}" aria-label="Team for ${esc(it.originalName || it.normalizedName)}" onclick="event.stopPropagation()">${[...T, 'Unknown'].map(t => `<option value="${esc(t)}" ${t === (it.suggestedOwner || 'Unknown') ? 'selected' : ''}>${esc(t)}${t === it.suggestedOwner && t !== 'Unknown' ? ' (suggested)' : ''}</option>`).join('')}</select>`;
+        const seenCell = (e) => {
+            if (!e) return '<span class="muted small">–</span>';
+            const head = e.miss.length ? `<span class="st ${e.all ? 'bad' : 'warn'}" title="${esc(app.missText(e))}">${ic(e.all ? 'b-x-circle' : 'b-warning')} ${esc(app.missLabel(e))}</span>` : `<span class="st ok">${ic('b-check-circle')} Seen recently</span>`;
+            return head + app.missLines(e, true).map(l => `<div class="tiny muted">${esc(l.replace(/: not expected \(.*\)$/, ': not expected'))}</div>`).join('');
+        };
+        const can = this.canEdit, allMiss = f === 'MISS:ALL';
+        const junk = allMiss && list.length ? `<div class="note warn mb">${ic('b-x-circle')} <strong>Nothing that should see these ${fmtNum(list.length)} machine${list.length === 1 ? '' : 's'} has seen ${list.length === 1 ? 'it' : 'them'} lately.</strong> Most likely junk: old scan targets, rebuilt or renamed machines, test hosts, or machines already gone. Check a few, then reject them.${can ? ` <button class="btn sm" style="margin-left:6px" onclick="UI.qRejectShown()">${ic('b-x-circle')} Reject all ${fmtNum(list.length)} shown</button>` : ''}</div>` : '';
+        return `${SB.pending ? '<div class="note mb">⟳ Loading Automox: the Automox column fills in when it arrives.</div>' : ''}${junk}
+            <div class="card"><div class="pad"><p class="t2 small" style="margin:0 0 10px">${esc(lead)}${this.team === 'ALL' ? '' : ' Showing machines suggested for ' + esc(this.team) + ' or for no team.'}</p>
+                <div class="row between"><div class="seg" role="group" aria-label="Seen by">${seg}</div>
+                <input class="in" type="search" placeholder="Search name, IP, service…" value="${esc(this.mach.q)}" oninput="UI.mach.q=this.value; clearTimeout(UI._mt); UI._mt=setTimeout(()=>UI.render(), 250)" aria-label="Search machines waiting for review"></div></div>
+            <div class="scroll"><table class="tbl"><thead><tr><th>Machine</th><th>Team</th><th>Service</th><th>Seen by</th><th class="hide-sm">Why it is here</th>${can ? '<th></th>' : ''}</tr></thead><tbody>
+            ${shown.map(it => `<tr><td><span class="machine">${esc(it.originalName || it.normalizedName)}</span><div class="tiny muted mono">${esc(it.ipAddress || '')}</div></td>
+                <td>${can ? teamSel(it) : esc(it.suggestedOwner || 'Unknown')}<div class="tiny muted">${esc(it.ownershipSource && it.ownershipSource !== 'Unknown' ? 'from ' + it.ownershipSource : 'no rule matched')}</div></td>
+                <td class="small">${esc(it.detectedService || 'Unclassified')}</td><td>${seenCell(E(it))}</td>
+                <td class="hide-sm small t2">${esc(it.reason || '')}</td>
+                ${can ? `<td class="nowrap"><button class="btn sm primary" data-id="${esc(it.id)}" onclick="UI.qApprove(this.dataset.id)" title="Add it to the register with this team">${ic('b-check-circle')} Approve</button> <button class="btn sm" data-id="${esc(it.id)}" onclick="UI.qReject([this.dataset.id])" title="Junk: drop it and its findings; later syncs will not add it again">${ic('b-x-circle')} Reject</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="6" class="empty">${items.length ? 'No machine matches.' : '✓ Nothing waiting for review.'}</td></tr>`}
+            </tbody></table></div>${list.length > shown.length ? `<p class="pad small muted">Showing the first ${shown.length} of ${fmtNum(list.length)}: search or filter to narrow it.</p>` : ''}
+            <p class="pad tiny muted" style="margin:0">Approve adds the machine to the register with the team chosen; then set its tier and exposure in the other tabs. Reject drops it with its findings, and later Qualys syncs do not add it again. The same Review Queue as the classic site.</p></div>`;
+    },
+    qApprove(id) {
+        const it = ReviewQueueService.getQueue().find(x => x.id === id); if (!it) return;
+        const team = (document.getElementById('qt-' + id) || {}).value || it.suggestedOwner || 'Unknown';
+        ReviewQueueService.resolveBulk([{ id, finalOwner: team, finalService: it.detectedService || 'Unclassified', finalTier: 0, finalExposure: '' }], 'APPROVED');
+        app.invalidateVulnData(); app._staleC = null;
+        StorageService.toast(`Approved ${it.originalName || it.normalizedName}: team ${team}`);
+        this.refresh();
+    },
+    qReject(ids) {
+        ids = ids.filter(Boolean); if (!ids.length) return;
+        const one = ids.length === 1 ? ReviewQueueService.getQueue().find(x => x.id === ids[0]) : null;
+        if (!confirm(`Reject ${one ? (one.originalName || one.normalizedName) : fmtNum(ids.length) + ' machines'} as junk?\n\nIt leaves the register with its findings, and later Qualys syncs will not add it again (it is remembered as rejected).`)) return;
+        ReviewQueueService.resolveBulk(ids.map(id => ({ id, finalOwner: 'Unknown', finalService: '', finalTier: 0, finalExposure: '' })), 'REJECTED');
+        app.invalidateVulnData(); app._staleC = null;
+        StorageService.toast(`${fmtNum(ids.length)} machine${ids.length === 1 ? '' : 's'} rejected`);
+        this.refresh();
+    },
+    qRejectShown() { this.qReject(this._qShown || []); },
 
     // ---------- Step 3: the priority model
     async vModel() {

@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.38.1 · 27 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.38.2 · 27 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -504,6 +504,7 @@
                         <div>
                             <h2 class="text-2xl font-bold text-slate-800">🔎 CVE Lookup</h2>
                             <p class="text-sm text-gray-500 mt-1">Which machines have a CVE, and whether Automox has a fix for them. Paste one or more CVE numbers.</p>
+                            <p id="cve-expl-note" class="hidden text-xs text-red-900 mt-1">⚑ The Known exploited switch is on, but this page still lists every machine with the CVE open, so it never says "not affected" by mistake.</p>
                             <p class="text-xs text-gray-400 mt-1" id="cve-asof"></p>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 print-hide">
@@ -2195,7 +2196,7 @@
             static weekOf(t) { const d = new Date(t); d.setUTCHours(0, 0, 0, 0); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); }
             static async update(app) {
                 if (app.me && app.me.role === 'viewer') return null;
-                const PB = await app.planBuckets('ALL', 'ALL', true);      // official: never risk-accepted
+                const PB = await app.planBuckets('ALL', 'ALL', true, true);      // official: never risk-accepted; whole: every finding, never just the Known exploited ones (v4.38.2)
                 if (!PB || !PB.policiesRead) return null;            // no promises without Automox's schedules
                 const F = this.load(), now = this.now(), day = 864e5, vd = PB.vd;
                 const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
@@ -6231,6 +6232,7 @@
                 if ($('cve-scope') && [...$('cve-scope').options].some(o => o.value === team)) $('cve-scope').value = team;
                 if (document.activeElement !== $('cve-input')) $('cve-input').value = pref.q || '';
                 const ids = App.cveIds(pref.q), out = $('cve-out');
+                $('cve-expl-note')?.classList.toggle('hidden', !RiskView.exploitedOnly());   // v4.38.2: this page ignores the switch, and says so
                 this.renderCveWatch();
                 const asOf = (this.loadVulnMeta().imports || []).slice(-1)[0];
                 $('cve-asof').textContent = asOf ? `Qualys data as of ${new Date(asOf.at || asOf.date || Date.now()).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
@@ -6411,10 +6413,10 @@
             }
 
             // The four Patch Plan sections for a team and urgency (shared by the Patch Plan page and the Team Risk Report). null = no Automox data.
-            async planBuckets(team, pmax, official = false) {
+            async planBuckets(team, pmax, official = false, whole = false) {
                 const S = StatusEngine.settings(), days = +S.patchPlanDays || 7, end = Demo.now() + days * 864e5;     // Demo.now() = the real clock outside the demo
                 let D = null; if (Demo.api()) { try { D = await AutomoxService.ensure(); } catch (e) { D = null; } }
-                const { dets, vd, regMap, hidden } = await this.scopedData({ owner: team, p: pmax, official });
+                const { dets, vd, regMap, hidden } = await this.scopedData({ owner: team, p: pmax, official, whole });
                 if (!D) return null;
                 const m = AutomoxService.match(), auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
                 const B = { manual: [], blocked: [], will: [], done: [] };
@@ -7520,7 +7522,7 @@
                 const on = RiskView.exploitedOnly(), el = document.getElementById('exploited-switch'), strip = document.getElementById('exploited-strip');
                 if (el) el.innerHTML = `<button role="switch" aria-checked="${on}" onclick="app.setShowExploited(${!on})" title="Known exploited only: ${on ? 'every report shows only findings on the CISA KEV list or flagged by Qualys threat intel' : 'every report shows all findings'}. Team status and targets always cover everything." class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs border ${on ? 'border-red-500 bg-red-50 text-red-900 font-semibold' : 'border-gray-300 bg-white text-gray-700'}"><span>⚑ Known exploited</span><span>${on ? '● Only' : '○ All'}</span></button>`;
                 if (strip) { strip.classList.toggle('hidden', !on);
-                    strip.innerHTML = on ? `<span>⚑ <strong>Showing only known-exploited vulnerabilities</strong> (CISA KEV list or Qualys threat intel). Team status and targets still cover everything.</span><button onclick="app.setShowExploited(false)" class="ml-auto underline print-hide">Show everything</button>` : ''; }
+                    strip.innerHTML = on ? `<span>⚑ <strong>Showing only known-exploited vulnerabilities</strong> (CISA KEV list or Qualys threat intel). Team status and targets still cover everything, and CVE Lookup always lists every machine with the CVE open.</span><button onclick="app.setShowExploited(false)" class="ml-auto underline print-hide">Show everything</button>` : ''; }
             }
             setShowExploited(v) {
                 PerfLog.begin('action: exploited ' + (v ? 'only' : 'all'));
@@ -8636,8 +8638,8 @@
             // Registered assets in scope joined to their detections, with the filters applied at detection level.
             // v4.13: risk-accepted machines and accepted findings follow the Risk-accepted switch (official: true = never included).
             // The old riskStatus filter is gone; hidden = what the switch leaves out within the other filters.
-            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false } = {}) {
-                const vd = await this.getVulnData();
+            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false, whole = false } = {}) {
+                const vd = await this.getVulnData({ whole });      // whole: true = every finding, whatever the Known exploited switch says (v4.38.2)
                 const reg = StorageService.live();
                 const regMap = new Map(reg.map(r => [r.normalizedName, r]));
                 const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => [s.name, s]));

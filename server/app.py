@@ -26,7 +26,7 @@ import epss
 import redhat
 import qualys
 
-VERSION = "4.38.1"
+VERSION = "4.38.2"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)

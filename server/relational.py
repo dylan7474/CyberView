@@ -251,6 +251,7 @@ REPLACE = {t: q.replace("INSERT INTO", "REPLACE INTO", 1) for t, q in INSERT.ite
 
 # ---------------------------------------------------------------- stage 2: reads come from these tables once a verified rebuild says they are right
 READY = False        # set by the server after a verified rebuild; cleared if keeping them in step ever fails
+GEN = 0              # bumped after every write kept in step and every rebuild: the server's answers are cached per GEN
 LAST_ERROR = ""
 
 

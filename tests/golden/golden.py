@@ -22,7 +22,7 @@ import urllib.request
 from http.cookiejar import CookieJar
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from browser import Browser, StaticServer, here, repo_root  # noqa: E402
+from browser import FROZEN_MS, Browser, StaticServer, here, repo_root  # noqa: E402
 
 PROBE = open(here("probe.js"), encoding="utf-8").read()
 FIXTURE, NET = here("fixture", "estate.json"), here("fixture", "net.json")
@@ -67,7 +67,10 @@ def compare(name, got, path, update):
     if not diffs:
         print(f"  PASS {name}: {len(a)} numbers match")
         return True
-    print(f"  FAIL {name}: {len(diffs)} of {len(a)} numbers differ")
+    import tempfile
+    gotp = os.path.join(tempfile.gettempdir(), "golden-" + os.path.basename(path).replace(".json", ".got.json"))
+    dump(gotp, got)
+    print(f"  FAIL {name}: {len(diffs)} of {len(a)} numbers differ (what was found: {gotp})")
     for k in diffs[:40]:
         print(f"     {k}: expected {a.get(k, '<missing>')!r}, got {b.get(k, '<missing>')!r}")
     if len(diffs) > 40:
@@ -197,6 +200,17 @@ async def server(url, update, user, password):
     if st != 200:
         raise SystemExit(f"restore refused: {st} {r}")
     print(f"  loaded the fixture: {len(sent)} collections, {len(F['detections'])} findings, {len(F['qids'])} QIDs")
+    net = load(NET)
+    kevcat = next((json.loads(v["body"]) for u, v in net.items() if "kev" in u.lower()), None)
+    ep = {}
+    for u, v in net.items():
+        if "api.first.org" in u:
+            for d in json.loads(v["body"]).get("data") or []:
+                ep[d["cve"]] = {"epss": float(d["epss"]), "pct": float(d.get("percentile") or 0)}
+    st, r = api.call("POST", "/api/admin/intel", {"kev": kevcat, "epss": ep})
+    if st != 200:
+        raise SystemExit(f"could not load KEV/EPSS into the server: {st} {r}")
+    print(f"  loaded the recorded outside data into the server: {r.get('kev')} KEV CVEs, {r.get('epss')} EPSS scores")
     ok = True
     # v4.42 stage 1: the relational tables, rebuilt from the fixture, hold exactly the same (every document and column checked)
     want = {"assets": len(sent.get("gov_asset_register", [])), "findings": len(F["detections"]), "vulns": len(F["qids"]), "tasks": len(sent.get("gov_remediation", [])),
@@ -259,7 +273,41 @@ async def server(url, update, user, password):
         if st != 200:
             raise SystemExit(f"browser sign-in failed: {st}")
         got = await probe_pages(b, url.rstrip("/"), demo=False)
+        # v4.44 stage 3: the server's rules against the browser's, finding by finding, for every team
+        await b.goto(url.rstrip("/") + "/", 2)
+        await b.wait_for("window.app && StorageService.live().length > 0 && Epss.ready && Epss._kevDone", 180)
+        await b.js(PROBE)
+        teams = ["ALL"] + await b.js("OrgSettings.teams()")
+        bvec = await b.js(f"goldenVectors({json.dumps(teams)})", 300)
+        bconst = await b.js("goldenConstants()")
         errors = b.errors
+    st, sconst = api.call("GET", "/api/q/rules")
+    same_c = st == 200 and sconst == bconst
+    print(f"  {'PASS' if same_c else 'FAIL'} the server's rule constants are the browser's (exploited tags, QVS bands, status defaults, SLA days)")
+    if not same_c:
+        print("     server:", json.dumps(sconst)[:600]); print("     browser:", json.dumps(bconst)[:600])
+    ok &= same_c
+    for t in teams:
+        st, svec = api.call("GET", f"/api/q/vectors?team={urllib.request.quote(t)}&at={FROZEN_MS}")
+        same = st == 200 and svec == bvec[t]
+        print(f"  {'PASS' if same else 'FAIL'} server rules = browser rules for {t}: {len(bvec[t])} findings (tier, priority, due, backlog, overdue, exploited)")
+        if not same:
+            sb, ss = set(bvec[t]), set(svec if isinstance(svec, list) else [])
+            for x in sorted(sb - ss)[:6]:
+                print("       browser:", x)
+            for x in sorted(ss - sb)[:6]:
+                print("       server: ", x)
+        ok &= same
+        st, sm = api.call("GET", f"/api/q/summary?team={urllib.request.quote(t)}&at={FROZEN_MS}")
+        tn = got["classic"]["teams"][t]
+        keys = ["findings", "machines", "byP", "byTier", "overdue", "backlog", "exploited", "fixes"]
+        diff = [k for k in keys if st != 200 or sm.get(k) != tn.get(k)]
+        print(f"  {'PASS' if not diff else 'FAIL'} server summary = the classic site's numbers for {t}{': ' + ', '.join(f'{k} {tn.get(k)} vs {sm.get(k)}' for k in diff) if diff else ''}")
+        ok &= not diff
+    st, wl = api.call("GET", f"/api/q/worklist?team=ALL&at={FROZEN_MS}")
+    wl_ok = st == 200 and wl["fixes"] == got["classic"]["teams"]["ALL"]["fixes"] and sum(r["findings"] for r in wl["rows"]) == got["classic"]["teams"]["ALL"]["findings"]
+    print(f"  {'PASS' if wl_ok else 'FAIL'} server work list: {wl.get('fixes') if isinstance(wl, dict) else st} fixes covering every finding")
+    ok &= wl_ok
     ok &= compare("both sites, signed in to the server", got, here("expected", "pages-server.json"), update)
     if errors:
         print("  page errors:", *errors[:8], sep="\n    ")

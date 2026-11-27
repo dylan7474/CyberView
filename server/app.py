@@ -26,9 +26,11 @@ import eol
 import epss
 import redhat
 import qualys
+import kev
 import relational
+import rules
 
-VERSION = "4.43.0"
+VERSION = "4.44.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -164,7 +166,7 @@ def migrate(wait_seconds=90):
     while True:
         try:
             with conn_ctx() as c, c.cursor() as cur:
-                for stmt in SCHEMA + [automox.SCHEMA, qualys.SCHEMA, eol.SCHEMA, redhat.SCHEMA, epss.SCHEMA]:
+                for stmt in SCHEMA + [automox.SCHEMA, qualys.SCHEMA, eol.SCHEMA, redhat.SCHEMA, epss.SCHEMA, kev.SCHEMA]:
                     cur.execute(stmt)
             return
         except pymysql.err.OperationalError:
@@ -184,6 +186,7 @@ def rebuild_relational(why="start-up"):
             meta = relational.rebuild(cur)
             res = relational.verify(cur)
         relational.READY = bool(res["ok"])
+        relational.GEN += 1
         relational.LAST_ERROR = "" if res["ok"] else "check failed: " + "; ".join(x["name"] for x in res["checks"] if not x["ok"])
         print(f"[relational] rebuilt ({why}) in {meta['seconds']} s: {meta['counts']}; check {'OK' if res['ok'] else 'FAILED: ' + relational.LAST_ERROR}; reads from {'the relational tables' if relational.reads_on() else 'the old storage'}", flush=True)
         return meta, res
@@ -204,6 +207,7 @@ def rel_sync(cur, fn, *args):
     try:
         fn(cur, *args)
         cur.execute("RELEASE SAVEPOINT rel_sync")
+        relational.GEN += 1
     except Exception as e:      # noqa: BLE001
         cur.execute("ROLLBACK TO SAVEPOINT rel_sync")
         relational.READY = False
@@ -225,6 +229,7 @@ def _startup():
     eol.init(conn_ctx, audit)
     redhat.init(conn_ctx, audit)
     epss.init(conn_ctx, audit)
+    kev.init(conn_ctx, audit)
 
 
 # ------------------------------------------------------------------ users, sessions, roles
@@ -433,6 +438,138 @@ def relational_rebuild(request: Request):
     with conn_ctx() as c, c.cursor() as cur:
         audit(cur, current_user(request), "relational-rebuild", "ok" if res.get("ok") else "FAILED")
     return {"build": meta, "verify": res}
+
+
+# ------------------------------------------------------------------ v4.44 database stage 3: answers worked out on the server
+# The CyberView status rules (rules.py, a port of the browser's) over the relational tables, so a page can ask for one
+# team's numbers or work list instead of downloading every finding. Not used by the pages yet (stage 4).
+# `at` (epoch ms) fixes the clock for the golden tests; normal callers leave it out.
+
+_QCACHE = {"key": None, "D": None, "ann": {}}
+_QLOCK = threading.Lock()
+
+
+def _q_data(cur):
+    """The data and the rules' answers, read once per change: GEN moves with every write (rel_sync) and rebuild,
+    and the EPSS / KEV tables are checked for new scores. Answers are kept per minute of the clock (overdue moves)."""
+    if not relational.reads_on():
+        raise HTTPException(503, "The relational tables are not in use (see /api/admin/relational): no server-side answers until a check passes")
+    cur.execute("SELECT COUNT(*), MAX(at) FROM epss_cve")
+    e = cur.fetchone()
+    cur.execute("SELECT doc FROM kev_cve WHERE cve='meta:last'")
+    k = cur.fetchone()
+    key = (relational.GEN, e[0], str(e[1]), k[0] if k else "")
+    with _QLOCK:
+        if _QCACHE["key"] != key:
+            cur.execute("SELECT k, doc FROM epss_cve WHERE k LIKE 'CVE-%%'")
+            ep = {kk: rules.num(json.loads(d).get("epss")) for kk, d in cur.fetchall()}
+            _QCACHE.update({"key": key, "D": rules.load(cur, kev=kev.cves(cur), epss=ep), "ann": {}})
+        return _QCACHE["D"]
+
+
+def _q_ann(D, now):
+    """annotate() for this clock minute (or the exact `at` a test asks for), cached with the data."""
+    slot = now // 60000
+    with _QLOCK:
+        hit = _QCACHE["ann"].get(slot)
+        if hit is None or hit[0] is not D:
+            if len(_QCACHE["ann"]) > 4:
+                _QCACHE["ann"].clear()
+            hit = (D, rules.annotate(D, now))
+            _QCACHE["ann"][slot] = hit
+        return hit[1]
+
+
+def _q_now(at):
+    try:
+        return int(at) if at else rules.now_ms()
+    except ValueError:
+        raise HTTPException(400, "at must be epoch milliseconds")
+
+
+@app.get("/api/q/rules")
+def q_rules():
+    """The constants the server's rules use (the golden test compares them with the browser's)."""
+    return rules.constants()
+
+
+@app.get("/api/q/summary")
+def q_summary(team: str = "ALL", at: str = ""):
+    """One team's official numbers: findings, machines, P1-P4, finding tiers, overdue, backlog, exploited, fixes."""
+    now = _q_now(at)
+    with conn_ctx() as c, c.cursor() as cur:
+        D = _q_data(cur)
+    dets, hidden = rules.scope(D, team, now, _q_ann(D, now))
+    return {**rules.summary(dets), "team": team, "at": now, "riskAcceptedMachines": hidden["machines"]}
+
+
+@app.get("/api/q/worklist")
+def q_worklist(team: str = "ALL", at: str = "", limit: int = 500):
+    """One row per fix (QID) for a team, worst first, with the CyberView status rules."""
+    now = _q_now(at)
+    with conn_ctx() as c, c.cursor() as cur:
+        D = _q_data(cur)
+    dets, _ = rules.scope(D, team, now, _q_ann(D, now))
+    rows = rules.worklist(dets, D["qmap"])
+    return {"team": team, "at": now, "fixes": len(rows), "rows": rows[:max(1, min(limit, 5000))]}
+
+
+@app.get("/api/q/findings")
+def q_findings(team: str = "ALL", qid: str = "", asset: str = "", at: str = ""):
+    """A team's counted findings with their priority and due date, optionally for one QID or one machine."""
+    now = _q_now(at)
+    with conn_ctx() as c, c.cursor() as cur:
+        D = _q_data(cur)
+    dets, _ = rules.scope(D, team, now, _q_ann(D, now))
+    if qid:
+        dets = [d for d in dets if d["qid"] == qid]
+    if asset:
+        dets = [d for d in dets if d["asset"] == asset]
+    return {"team": team, "at": now, "count": len(dets), "findings": dets}
+
+
+@app.get("/api/q/vectors")
+def q_vectors(team: str = "ALL", at: str = ""):
+    """One line per counted finding: key, tier, priority, due, backlog, overdue, exploited (for the golden test)."""
+    now = _q_now(at)
+    with conn_ctx() as c, c.cursor() as cur:
+        D = _q_data(cur)
+    dets, _ = rules.scope(D, team, now, _q_ann(D, now))
+    return rules.vectors(dets)
+
+
+@app.get("/api/kev/status")
+def kev_status():
+    return kev.status()
+
+
+@app.post("/api/kev/sync")
+def kev_sync(request: Request):
+    if not kev.start(current_user(request)):
+        return JSONResponse({"error": "A refresh is already running"}, status_code=409)
+    return {"started": True}
+
+
+@app.post("/api/admin/intel")
+def admin_intel(request: Request, body: dict = Body(...)):
+    """Load the CISA KEV catalogue and/or EPSS scores given in the request (administrators): for a server with no
+    internet access, and for the golden tests. {kev: <CISA catalogue>, epss: {cve: {epss, pct}}}"""
+    u = getattr(request.state, "user", None) or {}
+    if u.get("role") != "admin" and not u.get("open"):
+        return JSONResponse({"error": "Administrators only"}, status_code=403)
+    out = {}
+    with conn_ctx() as c, c.cursor() as cur:
+        if isinstance(body.get("kev"), dict):
+            out["kev"] = kev.store(cur, body["kev"], current_user(request))
+        if isinstance(body.get("epss"), dict):
+            n = 0
+            for cve, v in body["epss"].items():
+                if str(cve).upper().startswith("CVE-") and isinstance(v, dict):
+                    cur.execute("REPLACE INTO epss_cve (k, at, doc) VALUES (%s, UTC_TIMESTAMP(), %s)", (str(cve).upper(), json.dumps({"epss": rules.num(v.get("epss")), "pct": rules.num(v.get("pct"))}, separators=(",", ":"))))
+                    n += 1
+            out["epss"] = n
+        audit(cur, current_user(request), "intel-load", json.dumps(out))
+    return out
 
 
 @app.get("/api/health")

@@ -70,6 +70,23 @@
         return out;
     };
 
+    // v4.44 stage 3: what the server's rules (server/rules.py) must reproduce, finding by finding, and the constants they use
+    window.goldenVectors = async function (teams) {
+        const out = {};
+        for (const t of teams) {
+            const sd = await app.scopedData({ owner: t, official: true, whole: true });
+            out[t] = sd.dets.map(d => `${d.k}|T${d.tier}|P${d.p}|${Math.round(d.due)}|${d.backlog ? 1 : 0}|${d.overdue ? 1 : 0}|${d.exploited ? 1 : 0}`).sort();
+        }
+        return out;
+    };
+    window.goldenConstants = function () {
+        const D = StatusEngine.DEFAULTS, sla = RemediationService.SLA_DEFAULT;
+        return { exploited: PriorityEngine.EXPLOITED, qvsSprint: PriorityEngine.QVS_SPRINT, qvsScheduled: PriorityEngine.QVS_SCHEDULED,
+            statusDefaults: { matrix: Object.fromEntries(Object.entries(D.matrix).map(([k, v]) => [String(k), v])), internetStep: D.internetStep, internetDays: D.internetDays,
+                epssThreshold: D.epssThreshold, highSevP2: D.highSevP2, goLive: D.goLive, backlogTargets: Object.fromEntries(Object.entries(D.backlogTargets).map(([k, v]) => [String(k), v])) },
+            slaDefault: { t1: sla.t1, t2: sla.t2, t3: sla.t3, t4: sla.t4 } };
+    };
+
     window.goldenNew = async function () {
         const out = { clock: new Date(T()).toISOString(), presets: {} };
         const teams = ['ALL', ...OrgSettings.teams()];

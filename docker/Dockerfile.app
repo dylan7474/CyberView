@@ -6,7 +6,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin portal \
  && mkdir -p /app/static
-COPY server/app.py server/users.py server/automox.py server/qualys.py server/eol.py server/redhat.py server/epss.py server/relational.py /app/
+COPY server/app.py server/users.py server/automox.py server/qualys.py server/eol.py server/redhat.py server/epss.py server/relational.py server/rules.py server/kev.py /app/
 COPY server/login.html /app/static/login.html
 COPY index.html app.js /app/static/
 COPY new/index.html /app/static/new/index.html

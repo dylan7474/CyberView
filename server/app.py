@@ -30,7 +30,7 @@ import kev
 import relational
 import rules
 
-VERSION = "4.45.0"
+VERSION = "4.45.1"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -458,6 +458,10 @@ def _q_data(cur):
     e = cur.fetchone()
     cur.execute("SELECT doc FROM kev_cve WHERE cve='meta:last'")
     k = cur.fetchone()
+    if not k or not (json.loads(k[0]).get("count") or 0):
+        # v4.45.1: without the CISA KEV list the server cannot tell which findings are known exploited, so its priorities
+        # would be lower than the browser's. Say so; the new site then works the old way until the list arrives.
+        raise HTTPException(503, "The server does not have the CISA KEV list yet (see /api/kev/status): no server-side answers until it does")
     key = (relational.GEN, e[0], str(e[1]), k[0] if k else "")
     with _QLOCK:
         if _QCACHE["key"] != key:

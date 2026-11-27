@@ -347,7 +347,7 @@ details.tv th:first-child, details.tv td:first-child { text-align: left; }
 
 <div id="drawer" class="drawer hidden" onclick="if (event.target === this) UI.closeDrawer()"><div class="panel" id="drawer-panel" role="dialog" aria-modal="true" aria-label="Details"></div></div>
 
-<script src="app.js?v=4.45.0"></script>
+<script src="app.js?v=4.45.1"></script>
 <script>
 // Phosphor Icons 2.1.1 (MIT licence, phosphoricons.com): only the icons this page uses, inline, so they show without the internet.
 // d- = duotone (large), b- = bold (small). Drawn as inline SVG (not <use href="#...">, which <base href="../"> would point at the wrong page).
@@ -556,7 +556,7 @@ const UI = {
     },
     paintFoot() {
         const f = document.getElementById('nx-foot'); if (!f) return;
-        const src = StorageService.mode !== 'server' ? 'data in this browser' : this.q.state === 'on' ? 'priorities worked out by the server' : this.q.state === 'unknown' ? 'server' : 'priorities worked out in this browser (the server\'s answers are not available)';
+        const src = StorageService.mode !== 'server' ? 'data in this browser' : this.q.state === 'on' ? 'priorities worked out by the server' : this.q.state === 'unknown' ? 'server' : 'priorities worked out in this browser' + (this.q.reason ? ': ' + this.q.reason : ' (the server\'s answers are not available)');
         f.textContent = `CyberView v${APP_VERSION} · ${APP_VERSION_DATE} · new look (preview); the classic site runs the same release · ${src}`;
     },
     fromHash() {
@@ -601,7 +601,7 @@ const UI = {
             const u = `api/q/findings?full=1&team=${encodeURIComponent(team)}${asset ? '&asset=' + encodeURIComponent(asset) : ''}&official=${official}`;
             const r = await fetch(u, { cache: 'no-store' });
             if (r.status === 404) { this.q.state = 'off'; return null; }          // an older server: never ask again
-            if (!r.ok) { this.q.state = 'unavailable'; return null; }            // 503: its tables are not in use right now
+            if (!r.ok) { this.q.state = 'unavailable'; this.q.reason = await r.json().then(j => j.detail || j.error || '').catch(() => ''); return null; }   // 503: tables not in use, or no KEV list yet
             const j = await r.json();
             this.q.state = 'on';
             const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), regMap = new Map(reg.map(x => [x.normalizedName, x]));

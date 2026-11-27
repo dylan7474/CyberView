@@ -96,7 +96,8 @@ def _run(user):
 
 
 def _scheduler():
-    time.sleep(45)
+    # the first time (no list yet) fetch soon after start: the server's answers wait for it
+    time.sleep(45 if (status().get("last") or {}).get("count") else 5)
     while True:
         try:
             last = (status().get("last") or {}).get("at")

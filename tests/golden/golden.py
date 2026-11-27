@@ -203,6 +203,11 @@ async def server(url, update, user, password):
     if st != 200:
         raise SystemExit(f"restore refused: {st} {r}")
     print(f"  loaded the fixture: {len(sent)} collections, {len(F['detections'])} findings, {len(F['qids'])} QIDs")
+    # v4.45.1: no CISA KEV list on the server yet -> no server answers (the new site then works the old way)
+    st, r = api.call("GET", "/api/q/summary?team=ALL")
+    nokev = st == 503 and "KEV" in json.dumps(r)
+    print(f"  {'PASS' if nokev else 'FAIL'} without the CISA KEV list the server gives no answers ({st})")
+    ok_kev = nokev
     net = load(NET)
     kevcat = next((json.loads(v["body"]) for u, v in net.items() if "kev" in u.lower()), None)
     ep = {}
@@ -214,7 +219,7 @@ async def server(url, update, user, password):
     if st != 200:
         raise SystemExit(f"could not load KEV/EPSS into the server: {st} {r}")
     print(f"  loaded the recorded outside data into the server: {r.get('kev')} KEV CVEs, {r.get('epss')} EPSS scores")
-    ok = True
+    ok = bool(ok_kev)
     # v4.42 stage 1: the relational tables, rebuilt from the fixture, hold exactly the same (every document and column checked)
     want = {"assets": len(sent.get("gov_asset_register", [])), "findings": len(F["detections"]), "vulns": len(F["qids"]), "tasks": len(sent.get("gov_remediation", [])),
             "notes": len(sent.get("gov_asset_notes", [])), "risk_acceptances": len(sent.get("gov_risk_acceptances", [])), "review_queue": len(sent.get("gov_review_queue", []))}

@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.38.2 · 27 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.38.3 · 27 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -7528,7 +7528,7 @@
                 PerfLog.begin('action: exploited ' + (v ? 'only' : 'all'));
                 Prefs.set('showExploitedOnly', !!v);
                 this.applyExploited();
-                this._vd = null; this.vulnData = null;
+                this.vulnData = null;                               // v4.38.3: the whole build stays; the narrow one is made from it
                 this.switchView(this.currentView || 'dashboard');
             }
             // Each page puts its hidden/shown counts here (cleared on every page change).
@@ -8590,9 +8590,19 @@
                 // whole: true = the Status measurement (headline and targets) always covers everything, whatever the
                 // sidebar "Known exploited" lens is set to. Everything else follows the lens. When the lens is off
                 // both builds are the same, so they share one cache entry (no reload when moving Status <-> reports).
-                const on = RiskView.exploitedOnly();
-                const lens = !whole && on;
-                const retKey = StorageService.retiredKey() + (lens ? ':expl' : '');
+                // v4.38.3: the findings are read from the browser store ONCE (the whole build, this._vd); the known-exploited
+                // build is made from it in memory (this._vdL, same finding objects, narrower byAsset / byQid / exBy), so
+                // pages that need both (Dashboard, Team Risk Report) no longer reload everything twice.
+                const lens = !whole && RiskView.exploitedOnly();
+                const W = await this.getVulnWhole();
+                if (!lens) return W;
+                if (this._vdL && this._vdL._base === W) return this._vdL;
+                const narrow = (m) => { const o = new Map(); (m || new Map()).forEach((list, k) => { const f = list.filter(d => d.exploited); if (f.length) o.set(k, f); }); return o; };
+                this._vdL = { ...W, byAsset: narrow(W.byAsset), byQid: narrow(W.byQid), exBy: narrow(W.exBy), lens: true, _base: W };
+                return this._vdL;
+            }
+            async getVulnWhole() {
+                const retKey = StorageService.retiredKey();
                 if (this._vd && this._vdRet === retKey) return this._vd;
                 this._vdRet = retKey;
                 let dets = [], qs = [];
@@ -8614,13 +8624,12 @@
                 const excepted = dets.filter(isEx);                 // in-date per-finding exceptions: shown apart, never counted
                 dets = dets.filter(d => !isEx(d));
                 const exBy = new Map();                             // v4.13: listed (flagged ⚑) when the Risk-accepted switch is on
-                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.epss = q.epss || 0; d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (lens && !d.exploited) return; if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
+                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.epss = q.epss || 0; d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
                 dets.forEach(d => {
                     const q = qmap.get(d.qid) || {};
                     d.tier = PriorityEngine.tier(d, q);
                     d.exploited = PriorityEngine.isExploited(q);
                     d.epss = q.epss || 0;
-                    if (lens && !d.exploited) return;               // v4.37: known exploited only
                     if (!byAsset.has(d.asset)) byAsset.set(d.asset, []);
                     byAsset.get(d.asset).push(d);
                     if (!byQid.has(d.qid)) byQid.set(d.qid, []);
@@ -10608,6 +10617,9 @@
                 all.forEach(d => PriorityEngine.accumulate(st, d));
                 this.inspectCtx = { name, all, vd };
                 const meta = this.loadVulnMeta();
+                // v4.38.3: with the Known exploited switch on, say plainly that this is not every finding on the machine
+                const fullN = (!retired && vd.lens) ? (vd._base.byAsset.get(name) || []).length : all.length;
+                const lensHTML = fullN !== all.length ? `<div class="rounded-lg border-2 border-red-400 bg-red-50 text-red-900 p-3 text-sm flex flex-wrap items-center gap-3"><span>⚑ <strong>Known exploited only:</strong> showing ${fmtNum(all.length)} of this machine's ${fmtNum(fullN)} open findings.</span><button onclick="app.setShowExploited(false)" class="underline font-semibold">Show all ${fmtNum(fullN)}</button></div>` : '';
                 const kpi = (label, v, cls = 'bg-gray-50 border') => `<div class="${cls} p-3 rounded"><p class="text-[10px] uppercase font-semibold opacity-70">${label}</p><p class="text-xl font-bold">${v}</p></div>`;
 
                 const ns = !retired && this.stale().list.get(name);
@@ -10616,8 +10628,8 @@
                         <button class="write-only underline font-semibold" data-n="${esc(name)}" onclick="app.unretire(this.dataset.n)">Bring it back</button></div>`
                     : ns ? `<div class="rounded-lg border ${ns.all ? 'border-gray-500 bg-gray-100 text-gray-900' : 'border-amber-300 bg-amber-50 text-amber-950'} p-3 text-sm flex flex-wrap items-center gap-3"><span>${ns.all ? '🕳' : '⏳'} <strong>${esc(this.missLabel(ns))}</strong>: ${esc(this.missLines(ns).join(' · '))}. ${esc(this.missAdvice(ns))}</span>
                         <button class="write-only underline font-semibold" data-n="${esc(name)}" onclick="app.retireOne(this.dataset.n)">⊘ Retire it</button></div>` : '';
-                body.innerHTML = `${retiredHTML}
-                    <div class="bg-white rounded-lg shadow border p-5">
+                body.innerHTML = `${retiredHTML}${lensHTML}
+                    <div id="insp-head" class="bg-white rounded-lg shadow border p-5">
                         <div class="flex flex-wrap justify-between gap-4">
                             <div>
                                 <h3 class="text-2xl font-bold text-gray-800">${esc(name)}${retired ? ' <span class="text-sm font-semibold text-gray-500 align-middle">⊘ Retired</span>' : ''}</h3>
@@ -10633,7 +10645,7 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
-                            ${kpi('Detections', fmtNum(st.detections))}
+                            ${kpi(fullN !== all.length ? 'Detections ⚑ exploited' : 'Detections', fmtNum(st.detections) + (fullN !== all.length ? `<span class="text-xs font-normal text-gray-500"> of ${fmtNum(fullN)}</span>` : ''))}
                             ${kpi('Fix now', fmtNum(st.t1), 'bg-red-50 border border-red-200 text-red-800')}
                             ${kpi('This sprint', fmtNum(st.t2), 'bg-orange-50 border border-orange-200 text-orange-800')}
                             ${kpi('Severity 5', fmtNum(st.sev5))}
@@ -10683,7 +10695,7 @@
                             </table>
                         </div>
                     </div>`;
-                body.firstElementChild.insertAdjacentHTML('afterend', this.assetNotesPanelHTML(name) + '<div id="insp-ax" class="print-hide"></div>' + this.assetTasksHTML(name));
+                (body.querySelector('#insp-head') || body.firstElementChild).insertAdjacentHTML('afterend', this.assetNotesPanelHTML(name) + '<div id="insp-ax" class="print-hide"></div>' + this.assetTasksHTML(name));
                 AssetNotes.refresh(30000).then(ch => { if (ch) this.afterNoteChange(true); });
                 this.fillAutomoxAsset(name);
                 const cached = this.aiCache.get('asset:' + name);

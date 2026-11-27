@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.38.0 · 25 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.38.1 · 27 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -697,7 +697,7 @@
                     <div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-2"><h3 class="text-lg font-semibold">Tier 0 crown jewels</h3><span class="text-xs text-gray-500">Identity, recovery, hypervisor and storage management — compromise of these is a full estate takeover or loss of recovery.</span></div>
                         <div class="p-3" id="risk-crown"></div></div>
                     <div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-2"><h3 class="text-lg font-semibold">Risk burn-down</h3>
-                        <span class="flex items-center gap-1 text-xs">${[30, 90, 365].map(n => `<button onclick="app.riskTrendDays(${n})" class="risk-trend-btn px-2 py-1 rounded border ${n === 30 ? 'border-slate-800 bg-slate-800 text-white' : 'border-gray-300 bg-white text-gray-700'}">${n === 365 ? '12 mo' : n + ' d'}</button>`).join('')}</span></div>
+                        <span class="flex items-center gap-1 text-xs"><button onclick="app.riskTrendDays(30)" class="risk-trend-btn px-2 py-1 rounded border border-slate-800 bg-slate-800 text-white">30 d</button><button onclick="app.riskTrendDays(90)" class="risk-trend-btn px-2 py-1 rounded border border-gray-300 bg-white text-gray-700">90 d</button><button onclick="app.riskTrendDays(365)" class="risk-trend-btn px-2 py-1 rounded border border-gray-300 bg-white text-gray-700">12 mo</button></span></div>
                         <div class="p-3"><canvas id="risk-trend" height="220"></canvas></div></div>
                     <p class="text-xs text-gray-500">Scores: observed exploitation 30% + asset criticality 25% + exposure 20% + EPSS 15% + CVSS 10%, × service-tier multiplier, plus ransomware (+1), no patch (+0.5) and verified mitigations (−0.5 each, cap −2), floored at 1. Hover any score for its breakdown. The P1–P4 action engine and team Status are unchanged by this page.</p>
                 </div>
@@ -3668,7 +3668,7 @@
             static DEFAULTS = {
                 weights: { obs: 0.30, asset: 0.25, exposure: 0.20, epss: 0.15, cvss: 0.10 },
                 tierMultiplier: { 0: 2.0, 1: 1.5, 2: 1.2, 3: 1.0 },
-                crownJewels: ['Active Directory', 'Entra', 'PKI', 'PAM', 'Backup', 'Hypervisor', 'VM Orchestration', 'Storage'],   // any service name containing one of these is Tier 0
+                crownJewels: [],                                  // none until an admin names them (suggestions in CROWN_SUGGEST); whole words of the service name
                 bands: [                                          // Final Risk Score -> report priority
                     { min: 8, p: 1 }, { min: 6, p: 2 }, { min: 4, p: 3 }, { min: 2, p: 4 }, { min: 0, p: 5 }],
                 kevOverrides: { tier01: true, internetFacing: true, baselineFloor: 2, stepDown: true },
@@ -3676,6 +3676,7 @@
                 mods: { ransomware: 1.0, noPatch: 0.5, mitigation: -0.5, mitigationCap: 2.0 },
                 mitigations: ['Compensating control', 'Service disabled', 'Unreachable path', 'Microsegmented'],
             };
+            static CROWN_SUGGEST = ['Active Directory', 'Entra', 'PKI', 'PAM', 'Backup', 'Hypervisor', 'VM Orchestration', 'Storage'];
             static PRIORITY = { 1: 'P1 Emergency', 2: 'P2 High', 3: 'P3 Medium', 4: 'P4 Low', 5: 'P5 Monitor' };
             static PRI_CLS = { 1: 'bg-red-100 text-red-800', 2: 'bg-orange-100 text-orange-800', 3: 'bg-amber-100 text-amber-800', 4: 'bg-yellow-50 text-yellow-800', 5: 'bg-gray-100 text-gray-600' };
 
@@ -3683,7 +3684,7 @@
                 const o = StorageService.load(this.KEY);
                 const D = this.DEFAULTS, s = (o && !Array.isArray(o)) ? o : {};
                 return { ...D, ...s, weights: { ...D.weights, ...(s.weights || {}) }, tierMultiplier: { ...D.tierMultiplier, ...(s.tierMultiplier || {}) },
-                    bands: Array.isArray(s.bands) ? s.bands : D.bands, kevOverrides: { ...D.kevOverrides, ...(s.kevOverrides || {}) },
+                    bands: Array.isArray(s.bands) ? s.bands.map(b => ({ min: +b.min || 0, p: +b.p })) : D.bands, kevOverrides: { ...D.kevOverrides, ...(s.kevOverrides || {}), baselineFloor: Math.min(5, Math.max(1, parseInt((s.kevOverrides || {}).baselineFloor ?? D.kevOverrides.baselineFloor) || 2)) },
                     slaDays: { ...D.slaDays, ...(s.slaDays || {}) }, mods: { ...D.mods, ...(s.mods || {}) },
                     crownJewels: Array.isArray(s.crownJewels) ? s.crownJewels : [], mitigations: Array.isArray(s.mitigations) ? s.mitigations : D.mitigations };
             }
@@ -3692,7 +3693,7 @@
             // The register's tier -> the spec's service tier. Crown-jewels services are Tier 0 whatever the register says.
             static tierOf(r, S = this.settings()) {
                 const svc = String(r?.service || '').toLowerCase();
-                if (S.crownJewels.some(j => svc && svc.includes(String(j || '').trim().toLowerCase()))) return 0;
+                if (svc && S.crownJewels.some(j => { const w = String(j || '').trim().toLowerCase(); return w && new RegExp('(^|[^a-z0-9])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9])').test(svc); })) return 0;   // whole words: PAM never matches "Spam filter"
                 const t = +(r && r.tier); return (t === 1 || t === 2 || t === 3) ? t : 2;      // not set counts as Tier 2
             }
             static tierLabel(t) { return t === 0 ? 'Tier 0 · Crown jewels' : ['', 'Tier 1', 'Tier 2', 'Tier 3'][t] || 'Tier ?'; }
@@ -3738,7 +3739,7 @@
             static hasMitigation(r, flag) { return (r && Array.isArray(r.mitigations)) ? r.mitigations.includes(flag) : false; }
 
             // The full breakdown for one finding. kev = the CISA KEV record for the CVE (or null). r = register record.
-            static score(d, r, q, kev, S = this.settings()) {
+            static score(d, r, q, kev, S = this.settings(), now = Demo.now()) {
                 const parts = {
                     obs: this.obsScore(d, q, kev), asset: this.assetScore(r, S), exposure: this.exposureScore(r),
                     epss: this.epssScore(q), cvss: this.cvssScore(d) };
@@ -3764,13 +3765,15 @@
                     else if (priority > S.kevOverrides.baselineFloor) { priority = S.kevOverrides.baselineFloor; override = 'KEV floor'; }
                     if (blockedByM) { priority = Math.min(5, priority + 1); override += ' · mitigated'; }   // v4.38: a neutralised vector is stepped DOWN a level (P1 -> P2)
                 }
+                // Due = when Qualys first found it + the priority's days, like the rest of CyberView (a finding first found before
+                // go-live counts from go-live). CISA's KEV due date is set for US federal agencies: shown for information only.
                 const kevDue = kev?.due || '';
                 const slaDays = S.slaDays[priority] ?? 0;
                 let due = 0;
                 if (slaDays > 0) {
-                    due = Date.now() + slaDays * 864e5;
-                    if (kevDue) { const kd = Date.parse(kevDue + 'T00:00:00Z'); if (kd < due) due = kd; }
-                } else if (kevDue) due = Date.parse(kevDue + 'T00:00:00Z');
+                    const first = StatusEngine.time(d.first) || now, live = StatusEngine.time(StatusEngine.settings().goLive);
+                    due = Math.max(first, live || 0) + slaDays * 864e5;
+                }
                 return { score: Math.round(adjusted * 100) / 100, base: +base.toFixed(3), parts, tier, multiplier, mod: Math.round(mod * 100) / 100,
                     priority, override, kevDue, due: due || null, breakdown: { ...parts, base: +base.toFixed(3), adjusted: Math.round(adjusted * 100) / 100, mod: Math.round(mod * 100) / 100 } };
             }
@@ -3782,10 +3785,10 @@
             // A tiny score badge whose hover shows the breakdown (auditability).
             static scoreBadge(s) {
                 if (!s) return '';
-                const b = s.breakdown || s, parts = b.parts;
-                const tip = parts ? `Obs ${parts.obs} · Asset ${parts.asset} · Exposure ${parts.exposure} · EPSS ${parts.epss} · CVSS ${parts.cvss} → base ${b.base} × Tier${b.tier} (${b.multiplier}) ${b.mod > 0 ? '+' : ''}${b.mod} = ${b.score}`
-                    : `Risk ${b.score}${b.tier !== undefined ? ` · Tier ${b.tier}` : ''}`;
-                return `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-900 border border-indigo-200" title="${esc(tip)}">Risk ${b.score}</span>`;
+                const p = s.parts;
+                const tip = p ? `Obs ${p.obs} · Asset ${p.asset} · Exposure ${p.exposure} · EPSS ${p.epss} · CVSS ${p.cvss} → base ${s.base} × Tier ${s.tier} (×${s.multiplier}) ${s.mod >= 0 ? '+' : '−'} ${Math.abs(s.mod)} = ${s.score}${s.kevDue ? ` · CISA KEV date ${s.kevDue} (US federal, for information)` : ''}`
+                    : `Risk ${s.score}`;
+                return `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-900 border border-indigo-200" title="${esc(tip)}">Risk ${s.score}</span>`;
             }
         }
 
@@ -6671,7 +6674,7 @@
                         </div>
                         <label class="block text-xs">Crown-jewels services (comma separated) — an asset whose service is here is Tier 0 (identity, recovery, hypervisor/storage management etc.), whatever its register tier:<br>
                             <input type="text" data-k="crownJewels" value="${esc((S.crownJewels || []).join(', '))}" class="rm-in border rounded px-2 py-1 w-full" ${dis}></label>
-                        <p class="text-[11px] text-gray-500">Defaults are empty so nothing is Tier 0 until you name your services. The report's Tier 0 panel flags AD, PKI, PAM, backup, hypervisor and storage management systems.</p>
+                        <p class="text-[11px] text-gray-500">Empty by default, so nothing is Tier 0 until you name your services (whole words of the service name; suggestions: ${esc(RiskModel.CROWN_SUGGEST.join(', '))}). The report's Tier 0 panel flags AD, PKI, PAM, backup, hypervisor and storage management systems.</p>
                     </div>
                     <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Final score → priority bands</h4>
                         <div class="flex flex-wrap gap-4 items-end text-xs">
@@ -6698,7 +6701,7 @@
                         <label class="block text-xs">Mitigation options available on the asset edit form (comma separated):<br>
                             <input type="text" data-k="mitigations" value="${esc((S.mitigations || []).join(', '))}" class="rm-in border rounded px-2 py-1 w-full" ${dis}></label>
                     </div>
-                    <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">SLA targets (days from today; the binding due date is the earliest of this and the CISA KEV due date)</h4>
+                    <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">SLA targets (days from when Qualys first found it, or from go-live for older findings; CISA KEV dates are US federal and shown for information only)</h4>
                         <div class="flex flex-wrap gap-4 items-end text-xs">
                             <label>P1 (72 hours)<br>${num('slaDays.1', S.slaDays[1], 1, 0, 3650, 'w-16')}</label>
                             <label>P2<br>${num('slaDays.2', S.slaDays[2], 1, 0, 3650, 'w-16')}</label>
@@ -6721,6 +6724,7 @@
                         else if (k.startsWith('weights.')) S.weights[k.slice(8)] = Math.min(1, Math.max(0, parseFloat(v) || 0));
                         else if (k.startsWith('tierMultiplier.')) S.tierMultiplier[k.slice(15)] = Math.min(20, Math.max(0, parseFloat(v) || 0));
                         else if (k.startsWith('bands.')) { const i = +k.slice(6); S.bands[i] = { min: Math.min(20, Math.max(0, parseFloat(v) || 0)), p: i + 1 }; }
+                        else if (k === 'kevOverrides.baselineFloor') S.kevOverrides.baselineFloor = Math.min(5, Math.max(1, parseInt(v) || 2));
                         else if (k.startsWith('kevOverrides.')) S.kevOverrides[k.slice(13)] = v;
                         else if (k.startsWith('mods.')) S.mods[k.slice(5)] = k === 'mods.mitigation' ? -Math.abs(parseFloat(v) || 0) : Math.min(20, Math.max(0, parseFloat(v) || 0));
                         else if (k.startsWith('slaDays.')) S.slaDays[k.slice(8)] = Math.max(0, parseInt(v) || 0);
@@ -6737,7 +6741,7 @@
             // it follows the sidebar Team like the other pages. P1-P4 and the team Status are untouched.
             async renderRiskReport() {
                 const $ = (id) => document.getElementById(id);
-                const body = $('#risk-report-body'); if (!body) return;
+                const body = $('risk-report-body'); if (!body) return;
                 const seq = this._rrSeq = (this._rrSeq || 0) + 1, stale = () => seq !== this._rrSeq || this.currentView !== 'risk-report';
                 const tm = App.team();
                 const vd = await this.getVulnData({ whole: true });
@@ -6749,12 +6753,12 @@
                 const S = RiskModel.settings();
                 const cveOf = (q) => { const c = (q.cves || [])[0]; return c ? String(typeof c === 'string' ? c : c.id || '').toUpperCase() : ''; };
                 const kevFor = (q) => { for (const c of (q.cves || [])) { const id = String(typeof c === 'string' ? c : c.id || '').toUpperCase(); const k = id && kev.get(id); if (k) return k; } return null; };
-                const now = Date.now(), today = new Date().toISOString().slice(0, 10);
+                const now = Demo.now(), today = new Date(now).toISOString().slice(0, 10);
                 const rows = [];
                 for (const d of vd.dets) {
                     if (!names.has(d.asset)) continue;
                     const r = regMap.get(d.asset) || {}, q = vd.qmap.get(d.qid) || {}, k = kevFor(q);
-                    const s = RiskModel.score(d, r, q, k, S);
+                    const s = RiskModel.score(d, r, q, k, S, now);
                     s.d = d; s.r = r; s.q = q; s.cve = cveOf(q); s.kev = k; s.overdue = s.due ? s.due < now : false;
                     rows.push(s);
                 }
@@ -6765,7 +6769,7 @@
                 // Executive KPIs with a 30-day delta where history exists
                 const hist = StorageService.load(StorageService.KEYS.RISK_HISTORY) || [];
                 const myHist = hist.filter(h => h.team === tm);
-                const then = myHist.find(h => h.date <= today && (Date.now() - Date.parse(h.date)) >= 29 * 864e5) || myHist[myHist.length - 1] || null;
+                const then = [...myHist].reverse().find(h => (now - Date.parse(h.date)) >= 29 * 864e5) || null;   // no 30-day-old point yet: no change shown
                 const delta = (cur, k) => { if (!then || then[k] === undefined) return ''; const d = cur - then[k]; return d === 0 ? '' : ` <span class="text-[10px] ${d < 0 ? 'text-emerald-700' : 'text-red-700'}">${d < 0 ? '▼' : '▲'} ${Math.abs(d)}</span>`; };
                 const kpis = [
                     ['Open vulnerabilities', rows.length, delta(rows.length, 'open')],
@@ -6775,9 +6779,9 @@
                     ['Internet-facing P1/P2', rows.filter(r => r.priority <= 2 && r.r?.exposure === 'Internet Facing').length, ''],
                     ['SLA breaches', rows.filter(r => r.overdue).length, ''],
                     ['Tier 0 open', (byTier[0] || []).length, delta((byTier[0] || []).length, 't0')],
-                    ['Aggregate risk', fmtNum(Math.round(totalRisk)), delta(Math.round(totalRisk), 'total')],
+                    ['Aggregate risk', Math.round(totalRisk), delta(Math.round(totalRisk), 'total')],
                 ];
-                $('#risk-report-kpis').innerHTML = kpis.map(([l, v, d]) => `<div class="rounded-lg border bg-white px-4 py-3"><p class="text-[10px] uppercase font-semibold text-gray-500">${l}</p><p class="text-xl font-bold text-gray-900">${fmtNum(v)}</p>${d ? `<p class="text-[11px] text-gray-600">30d${d}</p>` : ''}</div>`).join('');
+                $('risk-report-kpis').innerHTML = kpis.map(([l, v, d]) => `<div class="rounded-lg border bg-white px-4 py-3"><p class="text-[10px] uppercase font-semibold text-gray-500">${l}</p><p class="text-xl font-bold text-gray-900">${fmtNum(v)}</p>${d ? `<p class="text-[11px] text-gray-600">30d${d}</p>` : ''}</div>`).join('');
 
                 // Service tier × priority heatmap (count · aggregate risk · % of total)
                 const heat = this._rrFilter || null;
@@ -6790,7 +6794,7 @@
                 }
                 const rowsP = [1, 2, 3, 4, 5], head = '<div></div>' + rowsP.map(p => `<div class="text-[10px] uppercase font-semibold text-gray-500">${RiskModel.PRIORITY[p]}</div>`).join('');
                 const grid = [0, 1, 2, 3].map(t => `<div class="text-[10px] uppercase font-semibold text-gray-500">${RiskModel.tierLabel(t)}</div>` + rowsP.map(p => cells[(t) * 5 + (p - 1)]).join('')).join('');
-                $('#risk-heatmap').innerHTML = `<div class="grid gap-1" style="grid-template-columns: 9rem repeat(5, 1fr)">${head}${grid}</div>`;
+                $('risk-heatmap').innerHTML = `<div class="grid gap-1" style="grid-template-columns: 9rem repeat(5, 1fr)">${head}${grid}</div>`;
 
                 // Top 20 grouped remediation queue (CVE + service + priority), expandable hosts
                 const group = new Map();
@@ -6799,7 +6803,7 @@
                     if (!group.has(k)) group.set(k, { key: k, cve: s.cve, service: s.r?.service || 'Unclassified', tier: s.tier, priority: s.priority,
                         max: 0, hosts: new Map(), due: 9e15, owner: '', patch: true, kev: !!s.kev, override: s.override });
                     const g = group.get(k);
-                    g.max = Math.max(g.max, s.score);
+                    if (s.score > g.max) { g.max = s.score; g.top = s; }
                     g.hosts.set(s.d.asset, s);
                     if (s.due && s.due < g.due) g.due = s.due;
                     if (s.r?.owner) g.owner = s.r.owner;
@@ -6809,18 +6813,18 @@
                     .sort((a, b) => b.max - a.max || (a.due || 9e15) - (b.due || 9e15)).slice(0, 20);
                 const open = this._rrOpen || new Set();
                 const fmtDue = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-                $('#risk-queue-filter').textContent = heat ? `${RiskModel.tierLabel(heat.tier)} · ${RiskModel.PRIORITY[heat.p]} — click the cell again to clear` : '';
-                $('#risk-queue').innerHTML = queue.length ? `<table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs uppercase"><tr>
+                $('risk-queue-filter').textContent = heat ? `${RiskModel.tierLabel(heat.tier)} · ${RiskModel.PRIORITY[heat.p]} — click the cell again to clear` : '';
+                $('risk-queue').innerHTML = queue.length ? `<table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs uppercase"><tr>
                         <th class="px-3 py-2 text-left">#</th><th class="px-3 py-2 text-left">CVE</th><th class="px-3 py-2 text-left">Service</th><th class="px-3 py-2">Tier</th><th class="px-3 py-2 text-right">Hosts</th>
-                        <th class="px-3 py-2 text-right">Max risk</th><th class="px-3 py-2">Priority</th><th class="px-3 py-2">Patch</th><th class="px-3 py-2 text-left">Binding SLA due</th><th class="px-3 py-2 text-left">Owner</th></tr></thead>
+                        <th class="px-3 py-2 text-right">Max risk</th><th class="px-3 py-2">Priority</th><th class="px-3 py-2">Patch</th><th class="px-3 py-2 text-left">Due</th><th class="px-3 py-2 text-left">Owner</th></tr></thead>
                     <tbody class="divide-y">${queue.map((g, i) => {
-                        const dueTxt = g.due < 9e15 ? (g.due < Date.now() ? `<span class="text-red-700 font-bold">✖ ${fmtDue(g.due)}</span>` : fmtDue(g.due)) : '—';
+                        const dueTxt = g.due < 9e15 ? (g.due < now ? `<span class="text-red-700 font-bold">✖ ${fmtDue(g.due)}</span>` : fmtDue(g.due)) : '—';
                         const expanded = open.has(g.key);
                         const hosts = [...g.hosts.entries()].sort((a, b) => b[1].score - a[1].score);
-                        return `<tr class="align-top ${expanded ? 'bg-indigo-50' : 'cursor-pointer hover:bg-blue-50'}" ${expanded ? '' : 'onclick="app.riskToggleEl(this)"'} data-rr="${esc(g.key)}">
+                        return `<tr class="align-top cursor-pointer ${expanded ? 'bg-indigo-50' : 'hover:bg-blue-50'}" onclick="app.riskToggleEl(this)" title="${expanded ? 'Click to hide the machines' : 'Click to show the machines'}" data-rr="${esc(g.key)}">
                             <td class="px-3 py-2 text-gray-500">${i + 1}</td><td class="px-3 py-2 font-mono text-xs text-blue-700">${esc(g.cve || '—')}${g.kev ? ' <span class="text-red-800 font-bold" title="On the CISA KEV list">⚑</span>' : ''}</td>
                             <td class="px-3 py-2">${esc(g.service)}</td><td class="px-3 py-2 text-center">${g.tier === 0 ? '<span class="font-bold text-red-800">T0</span>' : 'T' + g.tier}</td>
-                            <td class="px-3 py-2 text-right font-mono">${fmtNum(g.hosts.size)}</td><td class="px-3 py-2 text-right">${RiskModel.scoreBadge({ score: g.max, tier: g.tier })}</td>
+                            <td class="px-3 py-2 text-right font-mono">${fmtNum(g.hosts.size)}</td><td class="px-3 py-2 text-right">${RiskModel.scoreBadge(g.top)}</td>
                             <td class="px-3 py-2 text-center">${RiskModel.priBadge(g.priority, g.override)}</td>
                             <td class="px-3 py-2 text-center">${g.patch ? '<span class="text-emerald-700">✅</span>' : '<span class="text-red-700 font-semibold" title="No vendor patch: mitigation required">✖</span>'}</td>
                             <td class="px-3 py-2 text-xs whitespace-nowrap">${dueTxt}</td><td class="px-3 py-2 text-xs">${esc(g.owner || '—')}</td></tr>
@@ -6832,7 +6836,7 @@
                 const t0badge = (cond, txt, cls) => cond ? `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}">${txt}</span>` : '';
                 const t0BySvc = new Map();
                 t0.forEach(s => { if (!t0BySvc.has(s.r?.service || 'Unclassified')) t0BySvc.set(s.r?.service || 'Unclassified', []); t0BySvc.get(s.r?.service || 'Unclassified').push(s); });
-                $('#risk-crown').innerHTML = t0.length ? `<table class="w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs uppercase"><tr><th class="px-3 py-2 text-left">Service</th><th class="px-3 py-2 text-right">Hosts</th><th class="px-3 py-2 text-right">Aggregate risk</th><th class="px-3 py-2 text-left">Status</th></tr></thead>
+                $('risk-crown').innerHTML = t0.length ? `<table class="w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs uppercase"><tr><th class="px-3 py-2 text-left">Service</th><th class="px-3 py-2 text-right">Hosts</th><th class="px-3 py-2 text-right">Aggregate risk</th><th class="px-3 py-2 text-left">Status</th></tr></thead>
                     <tbody class="divide-y">${[...t0BySvc.entries()].sort((a, b) => b[1].reduce((n, x) => n + x.score, 0) - a[1].reduce((n, x) => n + x.score, 0)).map(([svc, list]) => {
                         const agg = list.reduce((n, x) => n + x.score, 0), hosts = new Set(list.map(s => s.d.asset)).size;
                         const flag = { kev: list.some(s => s.kev), expl: list.some(s => s.q?.rti?.includes('Public Exploit')), unpatched: list.some(s => !s.d.patchable), breach: list.some(s => s.overdue) };
@@ -6848,8 +6852,8 @@
                 const kevOver = rows.filter(r => r.kev && r.overdue).length;
                 const n1 = `Current vulnerability exposure is concentrated within Tier 0 and Tier 1 infrastructure services, which account for ${t01Pct}% of aggregate organisational risk.`;
                 const n2 = rawCrit ? ` Whilst ${rawCrit} vulnerabilities carry a Critical CVSS score, risk prioritisation identifies ${p1} P1 Emergency findings requiring remediation within the P1 target—driven primarily by ${topT0.length ? topT0.join(', ') : 'the top services'}.` : ` Risk prioritisation identifies ${p1} P1 Emergency findings requiring remediation within the P1 target.`;
-                const n3 = kevOver ? ` Currently, ${kevOver} CISA KEV-listed vulnerabilities exceed their binding remediation SLA and require immediate operational intervention.` : '';
-                $('#risk-report-narrative').innerHTML = `<span class="font-semibold">⚖️ Executive summary.</span> ${n1}${n2}${n3} ${totalRisk ? `Aggregate open risk is <strong>${fmtNum(Math.round(totalRisk))}</strong> across ${fmtNum(rows.length)} findings on ${fmtNum(assets.size)} machines.` : 'No open findings in this scope.'}`;
+                const n3 = kevOver ? ` Currently, ${kevOver} CISA KEV-listed vulnerabilities are past their remediation target and require immediate operational intervention.` : '';
+                $('risk-report-narrative').innerHTML = `<span class="font-semibold">⚖️ Executive summary.</span> ${n1}${n2}${n3} ${totalRisk ? `Aggregate open risk is <strong>${fmtNum(Math.round(totalRisk))}</strong> across ${fmtNum(rows.length)} findings on ${fmtNum(assets.size)} machines.` : 'No open findings in this scope.'}`;
 
                 // Risk burn-down snapshot + chart
                 const hist2 = this.riskSnapshot(rows, tm, { total: totalRisk, open: rows.length, p1: p1, kev: rows.filter(r => r.kev).length, kevOverdue: kevOver, t0: (byTier[0] || []).length });
@@ -6877,18 +6881,19 @@
             }
             riskSnapshot(rows, team, agg) {
                 const hist = StorageService.load(StorageService.KEYS.RISK_HISTORY) || [];
-                const today = new Date().toISOString().slice(0, 10), last = hist[hist.length - 1];
-                if (last && last.team === team && last.date === today) return hist;
+                const now = Demo.now(), today = new Date(now).toISOString().slice(0, 10);
+                if (hist.some(h => h.team === team && h.date === today)) return hist;      // one point per team per day
+                if (StorageService.me && StorageService.me.role === 'viewer') return hist;   // read-only: the next editor records it
                 hist.push({ date: today, team, open: agg.open, total: Math.round(agg.total), mean: agg.open ? Math.round(agg.total / Math.max(1, new Set(rows.map(r => r.d.asset)).size) * 10) / 10 : 0,
                     p1: agg.p1, p1p2: rows.filter(r => r.priority <= 2).length, kev: agg.kev, kevOverdue: agg.kevOverdue, t0: agg.t0 });
-                StorageService.save(StorageService.KEYS.RISK_HISTORY, hist.slice(-370));
+                StorageService.save(StorageService.KEYS.RISK_HISTORY, hist.filter(h => now - Date.parse(h.date) <= 400 * 864e5));   // about 13 months for every team
                 return hist;
             }
             riskTrend(hist) {
                 const c = document.getElementById('risk-trend'); if (!c) return;
                 const n = this._rrTrendDays || 30, ctx = c.getContext('2d'), W = c.width = c.offsetWidth || 900, H = c.height = 220;
                 ctx.clearRect(0, 0, W, H);
-                const pts = hist.filter(h => Date.now() - Date.parse(h.date) <= n * 864e5);
+                const pts = hist.filter(h => Demo.now() - Date.parse(h.date) <= n * 864e5).sort((a, b) => a.date < b.date ? -1 : 1);
                 if (pts.length < 2) { ctx.fillStyle = '#64748b'; ctx.font = '12px sans-serif'; ctx.fillText('Collecting history: the report records one point a day; revisit over the coming days.', 16, H / 2); return; }
                 const xs = (i) => 8 + i * (W - 16) / (pts.length - 1), max = Math.max(1, ...pts.map(p => p.total)), min = Math.min(0, ...pts.map(p => p.total));
                 const y = (v) => H - 24 - (v - min) / (max - min || 1) * (H - 40);

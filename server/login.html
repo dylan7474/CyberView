@@ -34,7 +34,8 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   const b = document.getElementById('b'), err = document.getElementById('err');
   b.disabled = true; err.textContent = '';
   try {
-    const r = await fetch('api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'portal' },
+    // v4.39: the API is at the site root, also when this form is shown at /new/
+    const r = await fetch(location.pathname.replace(/[^/]*$/, '').replace(/\/new\/$/, '/') + 'api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'portal' },
       body: JSON.stringify({ username: document.getElementById('u').value.trim(), password: document.getElementById('p').value }) });
     if (r.ok) { location.reload(); return; }
     let j = {}; try { j = await r.json(); } catch (x) {}

@@ -8,7 +8,8 @@ RUN apt-get update \
  && mkdir -p /app/static
 COPY server/app.py server/users.py server/automox.py server/qualys.py server/eol.py server/redhat.py server/epss.py /app/
 COPY server/login.html /app/static/login.html
-COPY index.html /app/static/index.html
+COPY index.html app.js /app/static/
+COPY new/index.html /app/static/new/index.html
 USER portal
 WORKDIR /app
 ENV STATIC_DIR=/app/static PYTHONUNBUFFERED=1

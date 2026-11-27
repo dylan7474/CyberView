@@ -18,7 +18,7 @@ from pathlib import Path
 import pymysql
 from fastapi import Body, FastAPI, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
 import automox
 import eol
@@ -26,7 +26,7 @@ import epss
 import redhat
 import qualys
 
-VERSION = "4.38.3"
+VERSION = "4.39.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -44,7 +44,7 @@ FIELD_MAP = {
     "automoxLinks": "gov_automox_links", "statusSettings": "gov_status_settings", "statusHistory": "gov_status_history", "scanDates": "gov_scan_dates",
     "orgSettings": "gov_org_settings", "planForecast": "gov_plan_forecast", "cveWatch": "gov_cve_watch",
     "riskSettings": "gov_risk_settings", "riskHistory": "gov_risk_history",
-    "assetNotes": "gov_asset_notes",
+    "assetNotes": "gov_asset_notes", "priorityModel": "gov_priority_model",
 }
 # collections whose edits are written to the change history, and the field that identifies a record
 TRACKED = {"gov_asset_register": ("normalizedName", "normalizedName"), "gov_risk_acceptances": ("id", "asset"),
@@ -56,7 +56,7 @@ COLLECTIONS = {
     "gov_vuln_asset_summary", "gov_vuln_service_summary", "gov_vuln_cve_summary", "gov_vuln_details",
     "gov_vuln_meta", "gov_risk_acceptances", "gov_eol_dates", "gov_remediation", "gov_remediation_settings",
     "gov_automox_links", "gov_status_settings", "gov_status_history", "gov_scan_dates", "gov_org_settings", "gov_plan_forecast",
-    "gov_cve_watch", "gov_risk_settings", "gov_risk_history", "gov_asset_notes",
+    "gov_cve_watch", "gov_risk_settings", "gov_risk_history", "gov_asset_notes", "gov_priority_model",
 }
 # Saved one record at a time (/api/tasks, /api/notes), never as a whole collection (a stale page would wipe other people's work).
 PER_RECORD = {"gov_remediation", "gov_asset_notes"}
@@ -338,6 +338,23 @@ def index():
     return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
+@app.get("/app.js")
+def app_js():
+    """v4.39: the engine and classic pages, shared by both sites (index.html and new/index.html)."""
+    return FileResponse(STATIC_DIR / "app.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/new")
+def new_redirect():
+    return RedirectResponse("/new/", status_code=307)
+
+
+@app.get("/new/")
+def new_index():
+    """v4.39: the new-look site (preview): the same data and rules, one work list per team."""
+    return FileResponse(STATIC_DIR / "new" / "index.html", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/api/health")
 def health():
     try:
@@ -599,6 +616,12 @@ def put_collection(name: str, request: Request, body: dict = Body(...)):
             if u.get("role") != "admin" and not u.get("open"):
                 c.rollback()
                 return JSONResponse({"error": "Only an administrator can change the organisation setup"}, status_code=403)
+        if name == "gov_priority_model":
+            # The new-look site's priority model (preset, sliders, due days) is an administrator's job, like the risk model (v4.39).
+            u = getattr(request.state, "user", None) or {}
+            if u.get("role") != "admin" and not u.get("open"):
+                c.rollback()
+                return JSONResponse({"error": "Only an administrator can change the priority model"}, status_code=403)
         if name == "gov_risk_settings":
             # The Risk Report model (weights, tier multipliers, crown jewels, KEV overrides) is an administrator's job (v4.38).
             u = getattr(request.state, "user", None) or {}

@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- The new-look site lives in /new/ but uses the classic site's engine (app.js) and API, so every address is the site root's. -->
+<base href="../">
+<title>CyberView · New look</title>
+<style>
+/* ---------- theme tokens: Clean (light), Slate and SOC (dark); Auto follows the computer ---------- */
+:root {
+    --bg: #f6f7f9; --surface: #ffffff; --subtle: #f1f3f6; --hover: #f8fafc; --line: #e3e6eb; --line-strong: #c9ced6;
+    --text: #111827; --text2: #4b5563; --muted: #6b7280;
+    --accent: #2563eb; --accent-hover: #1d4ed8; --accent-soft: #eff6ff; --on-accent: #ffffff;
+    --p1: #b91c1c; --p1-bg: #fee2e2; --p2: #c2410c; --p2-bg: #ffedd5; --p3: #a16207; --p3-bg: #fef9c3; --p4: #475569; --p4-bg: #f1f5f9;
+    --ok: #047857; --ok-bg: #d1fae5; --warn: #92400e; --warn-bg: #fef3c7; --bad: #991b1b; --bad-bg: #fee2e2;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 3px rgba(0,0,0,.04);
+    color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #0f172a; --surface: #1e293b; --subtle: #273449; --hover: #243044; --line: #334155; --line-strong: #475569;
+        --text: #f1f5f9; --text2: #cbd5e1; --muted: #94a3b8;
+        --accent: #60a5fa; --accent-hover: #93c5fd; --accent-soft: rgba(96,165,250,.14); --on-accent: #0b1220;
+        --p1: #fca5a5; --p1-bg: rgba(248,113,113,.16); --p2: #fdba74; --p2-bg: rgba(251,146,60,.16); --p3: #fde047; --p3-bg: rgba(250,204,21,.13); --p4: #cbd5e1; --p4-bg: rgba(148,163,184,.14);
+        --ok: #6ee7b7; --ok-bg: rgba(16,185,129,.15); --warn: #fcd34d; --warn-bg: rgba(245,158,11,.15); --bad: #fca5a5; --bad-bg: rgba(239,68,68,.16);
+        --shadow: 0 2px 6px rgba(0,0,0,.25); color-scheme: dark;
+    }
+}
+:root[data-theme="dark"] {
+    --bg: #0f172a; --surface: #1e293b; --subtle: #273449; --hover: #243044; --line: #334155; --line-strong: #475569;
+    --text: #f1f5f9; --text2: #cbd5e1; --muted: #94a3b8;
+    --accent: #60a5fa; --accent-hover: #93c5fd; --accent-soft: rgba(96,165,250,.14); --on-accent: #0b1220;
+    --p1: #fca5a5; --p1-bg: rgba(248,113,113,.16); --p2: #fdba74; --p2-bg: rgba(251,146,60,.16); --p3: #fde047; --p3-bg: rgba(250,204,21,.13); --p4: #cbd5e1; --p4-bg: rgba(148,163,184,.14);
+    --ok: #6ee7b7; --ok-bg: rgba(16,185,129,.15); --warn: #fcd34d; --warn-bg: rgba(245,158,11,.15); --bad: #fca5a5; --bad-bg: rgba(239,68,68,.16);
+    --shadow: 0 2px 6px rgba(0,0,0,.25); color-scheme: dark;
+}
+:root[data-theme="soc"] {
+    --bg: #09090b; --surface: #131316; --subtle: #1c1c21; --hover: #18181c; --line: #27272a; --line-strong: #3f3f46;
+    --text: #fafafa; --text2: #a1a1aa; --muted: #8b8b94;
+    --accent: #34d399; --accent-hover: #6ee7b7; --accent-soft: rgba(52,211,153,.12); --on-accent: #052e1c;
+    --p1: #fca5a5; --p1-bg: rgba(248,113,113,.15); --p2: #fdba74; --p2-bg: rgba(251,146,60,.14); --p3: #fde047; --p3-bg: rgba(250,204,21,.12); --p4: #d4d4d8; --p4-bg: rgba(161,161,170,.13);
+    --ok: #6ee7b7; --ok-bg: rgba(16,185,129,.14); --warn: #fcd34d; --warn-bg: rgba(245,158,11,.14); --bad: #fca5a5; --bad-bg: rgba(239,68,68,.15);
+    --shadow: 0 4px 12px rgba(0,0,0,.45); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; min-height: 100vh; }
+button, input, select { font: inherit; color: inherit; }
+.hidden { display: none !important; }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+.muted { color: var(--muted); }
+.t2 { color: var(--text2); }
+.small { font-size: 12px; }
+.tiny { font-size: 11px; }
+.nowrap { white-space: nowrap; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+a { color: var(--accent); }
+
+/* ---------- header ---------- */
+header.top { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 30; }
+.topbar { display: flex; align-items: center; gap: 12px; height: 56px; }
+.brand { display: flex; align-items: center; gap: 10px; cursor: pointer; background: none; border: 0; padding: 0; }
+.logo { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 800; }
+.brand b { font-size: 15px; }
+.tag { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--subtle); color: var(--text2); border: 1px solid var(--line); }
+.spacer { flex: 1; }
+.ctl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+select.in, input.in { background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 13px; }
+input.in:focus, select.in:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.who { font-size: 12px; color: var(--text2); }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--text); }
+.btn:hover { border-color: var(--line-strong); background: var(--hover); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.sm { padding: 4px 9px; font-size: 12px; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: inherit; }
+
+/* ---------- the four steps ---------- */
+nav.steps { border-top: 1px solid var(--line); }
+.steps-in { display: flex; gap: 6px; align-items: center; padding: 8px 0; overflow-x: auto; }
+.step { display: flex; align-items: center; gap: 10px; border: 1px solid transparent; background: none; border-radius: 12px; padding: 7px 12px; cursor: pointer; color: var(--text2); white-space: nowrap; }
+.step:hover { background: var(--subtle); color: var(--text); }
+.step.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.step .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; background: var(--subtle); border: 1px solid var(--line); }
+.step.on .n { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.step .lab { font-weight: 600; font-size: 13px; }
+.step .sub { font-size: 11px; color: var(--muted); display: block; }
+.arrow { color: var(--muted); }
+
+/* ---------- page ---------- */
+main { padding: 22px 0 60px; }
+.demo { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 12px; padding: 9px 14px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; }
+.pagehead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 16px; }
+.eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--accent); }
+h1 { font-size: 22px; margin: 2px 0 2px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+h3 { font-size: 14px; margin: 0 0 6px; }
+.lead { color: var(--text2); margin: 0; max-width: 760px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.pad { padding: 16px; }
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.g4 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.between { justify-content: space-between; }
+.mt { margin-top: 14px; }
+.mb { margin-bottom: 14px; }
+
+/* home tiles */
+.tile { text-align: left; cursor: pointer; padding: 20px; display: flex; flex-direction: column; gap: 10px; transition: transform .15s ease, border-color .15s ease; color: var(--text); font: inherit; }
+.tile:hover { transform: translateY(-3px); border-color: var(--accent); }
+.tile .ic { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: var(--accent-soft); }
+.tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+.tile .v { font-size: 15px; font-weight: 700; }
+.tile .d { font-size: 12.5px; color: var(--text2); }
+
+/* status words (never colour alone) */
+.st { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.st.ok { background: var(--ok-bg); color: var(--ok); }
+.st.warn { background: var(--warn-bg); color: var(--warn); }
+.st.bad { background: var(--bad-bg); color: var(--bad); }
+.st.info { background: var(--subtle); color: var(--text2); }
+
+/* priority badges: number + word + shape */
+.pb { display: inline-flex; align-items: center; gap: 5px; border-radius: 7px; padding: 2px 7px; font-size: 11.5px; font-weight: 800; white-space: nowrap; border: 1px solid transparent; }
+.pb.p1 { background: var(--p1-bg); color: var(--p1); border-color: var(--p1); }
+.pb.p2 { background: var(--p2-bg); color: var(--p2); }
+.pb.p3 { background: var(--p3-bg); color: var(--p3); }
+.pb.p4 { background: var(--p4-bg); color: var(--p4); }
+.chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 6px; background: var(--subtle); color: var(--text2); border: 1px solid var(--line); margin: 1px 3px 1px 0; white-space: nowrap; }
+.chip.hot { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+.chip.pts { background: var(--accent-soft); color: var(--text); border-color: transparent; }
+
+/* tables */
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; padding: 9px 10px; border-bottom: 1px solid var(--line); background: var(--subtle); position: sticky; top: 0; }
+.tbl td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl tr.click { cursor: pointer; }
+.tbl tr.click:hover td { background: var(--hover); }
+.tbl tr.open td { background: var(--accent-soft); }
+.scroll { overflow-x: auto; }
+.pen { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; border-radius: 5px; font-size: 13px; }
+.pen:hover { color: var(--accent); background: var(--accent-soft); }
+.machine { font-weight: 600; }
+.sub-tbl { margin: 4px 0 6px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.sub-tbl .tbl th { position: static; }
+
+/* model step */
+.preset { text-align: left; cursor: pointer; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); display: flex; gap: 10px; align-items: flex-start; color: var(--text); font: inherit; width: 100%; }
+.preset:hover { border-color: var(--line-strong); }
+.preset.on { border: 2px solid var(--accent); background: var(--accent-soft); padding: 11px 13px; }
+.preset .dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line-strong); flex: 0 0 auto; margin-top: 1px; display: grid; place-items: center; font-size: 10px; }
+.preset.on .dot { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.preset b { display: block; font-size: 13.5px; }
+.preset span.d { font-size: 12px; color: var(--text2); }
+.slider { display: grid; grid-template-columns: 170px 1fr 70px; gap: 10px; align-items: center; padding: 6px 0; }
+.slider label { font-weight: 600; font-size: 13px; }
+.slider .help { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); margin-top: -4px; }
+.slider output { text-align: right; font-weight: 700; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.pyr { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 4px 0; }
+.pyr .lvl { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 9px; font-size: 13px; min-width: 210px; transition: width .25s ease; }
+.pyr .lvl b { font-size: 15px; }
+.pyr .p1 { background: var(--p1-bg); color: var(--p1); border: 1px solid var(--p1); }
+.pyr .p2 { background: var(--p2-bg); color: var(--p2); }
+.pyr .p3 { background: var(--p3-bg); color: var(--p3); }
+.pyr .p4 { background: var(--p4-bg); color: var(--p4); }
+.daysrow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.daysrow label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 3px; }
+.daysrow input { width: 100%; }
+.note { font-size: 12.5px; color: var(--text2); background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.note.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.ssvc { font-size: 12px; border-collapse: collapse; width: 100%; }
+.ssvc td, .ssvc th { border: 1px solid var(--line); padding: 4px 6px; text-align: center; }
+.ssvc th { background: var(--subtle); font-weight: 700; }
+
+/* segmented filter */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--subtle); }
+.seg button { border: 0; background: none; padding: 6px 11px; font-size: 12.5px; cursor: pointer; color: var(--text2); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+
+/* edit dialog (the classic dialog's ids, restyled) */
+.modal { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal .box { background: var(--surface); color: var(--text); border-radius: 14px; border: 1px solid var(--line); width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.modal .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal .full { grid-column: 1 / -1; }
+.modal label.f { display: block; font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
+.modal select, .modal input[type=text] { width: 100%; background: var(--subtle); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+.modal p { font-size: 11.5px; color: var(--muted); margin: 4px 0 0; }
+.modal #edit-asset-mitigations { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
+.modal .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.namebox { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; background: var(--subtle); border-radius: 8px; padding: 7px 10px; margin: 6px 0 14px; word-break: break-all; }
+
+.empty { padding: 26px; text-align: center; color: var(--muted); }
+.loading { padding: 26px; text-align: center; color: var(--muted); font-style: italic; }
+@media (max-width: 900px) { #m-grid { grid-template-columns: 1fr !important; } }
+@media (max-width: 640px) {
+    .slider { grid-template-columns: 1fr 64px; }
+    .slider input[type=range] { grid-column: 1 / -1; grid-row: 2; }
+    .modal .fields { grid-template-columns: 1fr; }
+    .hide-sm { display: none; }
+    .daysrow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media print { header.top, .demo, .noprint { display: none !important; } body { background: #fff; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+    <div class="wrap topbar">
+        <button class="brand" onclick="UI.go('home')" title="Home">
+            <span class="logo">CV</span><b>CyberView</b>
+            <span class="tag hide-sm">New look · preview</span>
+        </button>
+        <span class="spacer"></span>
+        <label class="ctl" title="Every step shows this team's machines and work">Team
+            <select id="team" class="in" onchange="UI.setTeam(this.value)"></select></label>
+        <label class="ctl hide-sm">Theme
+            <select id="theme" class="in" onchange="UI.setTheme(this.value)">
+                <option value="">Auto</option><option value="light">Clean</option><option value="dark">Slate</option><option value="soc">SOC</option>
+            </select></label>
+        <span id="who" class="who hide-sm"></span>
+        <a class="btn sm" href="./" title="The classic site: every page and setting is still there">Classic site ↗</a>
+    </div>
+    <nav class="steps" aria-label="Workflow">
+        <div class="wrap steps-in" id="steps"></div>
+    </nav>
+</header>
+
+<main>
+    <div class="wrap">
+        <div id="demo-strip" class="demo hidden"></div>
+        <div id="page"><p class="loading">Loading CyberView…</p></div>
+    </div>
+</main>
+
+<!-- The classic site's machine dialog, with the same ids, so editing works exactly as it does there (app.editAsset / app.saveAssetEdit). -->
+<div id="modal-edit-asset" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="edit-asset-title">
+    <div class="box">
+        <h2 id="edit-asset-title">Edit machine</h2>
+        <div class="namebox" id="edit-asset-name"></div>
+        <div class="fields">
+            <div><label class="f" for="edit-asset-owner">Team</label><select id="edit-asset-owner"></select></div>
+            <div><label class="f" for="edit-asset-status">Status</label><select id="edit-asset-status"><option value="Approved">Approved</option><option value="Retired">Retired</option><option value="Pending">Pending Review</option></select></div>
+            <div><label class="f" for="edit-asset-env">Environment</label><select id="edit-asset-env"><option value="Production">Production</option><option value="Non-Prod">Non-Prod / Dev</option><option value="DR">Disaster Recovery</option></select></div>
+            <div><label class="f" for="edit-asset-service">Service</label><select id="edit-asset-service" onchange="app.svcNew(this)"></select></div>
+            <div><label class="f" for="edit-asset-exposure">Exposure</label><select id="edit-asset-exposure"><option value="Internal">Internal</option><option value="DMZ">DMZ</option><option value="Internet Facing">Internet Facing</option><option value="Unknown">Unknown</option></select></div>
+            <div><label class="f" for="edit-asset-criticality">Tier</label><select id="edit-asset-criticality"></select><p id="edit-asset-tier-note"></p></div>
+            <div class="full"><label class="small"><input type="checkbox" id="edit-asset-patchna"> Cannot take an Automox agent (appliance, network device): leave it out of the patching check</label></div>
+            <div class="full"><label class="f" for="edit-asset-os">Operating system</label><input type="text" id="edit-asset-os" maxlength="200" placeholder="as Qualys reports it"><p id="edit-asset-os-note"></p></div>
+            <div class="full"><label class="f">Mitigations <span class="muted" style="font-weight:400">(verified compensating controls)</span></label><div id="edit-asset-mitigations"></div></div>
+        </div>
+        <div class="foot">
+            <button class="btn" onclick="app.cancelAssetEdit()">Cancel</button>
+            <button class="btn primary" onclick="app.saveAssetEdit()">Save changes</button>
+        </div>
+    </div>
+</div>
+
+<script src="app.js?v=4.39.0"></script>
+<script>
+// =====================================================================================================
+// CyberView new look (v4.39.0). Four steps: 1 Data, 2 Machines, 3 Priority model, 4 Work list.
+// Everything is read from, and every edit is saved to, the same store as the classic site (app.js).
+// The only thing of its own is the priority model (gov_priority_model): the classic pages never read it.
+// =====================================================================================================
+
+// The classic app, used headless: its data methods (getVulnData, scopedData, planBuckets, stale, healthRows) and its
+// machine editing. Where it would redraw a classic page after a change, it redraws this one instead.
+class NewApp extends App {
+    switchView() { UI.refresh(); }
+    renderRegister() { UI.refresh(); }
+    renderInspect() { UI.refresh(); }
+    renderDashboard() { }
+    renderRiskAcceptances() { }
+    renderVulnDashboard() { }
+    updateGlobalBadges() { }        // the classic sidebar's counters
+}
+
+// ------------------------------------------------------------------ the priority model
+class PriorityModel {
+    static LEVEL = { 1: 'Fix now', 2: 'This sprint', 3: 'Scheduled', 4: 'Routine' };
+    static SHAPE = { 1: '▲▲', 2: '▲', 3: '■', 4: '○' };
+    static PRESETS = [
+        { id: 'cyberview', name: 'CyberView status rules', tag: 'Our own rules', words: { 1: 'P1', 2: 'P2', 3: 'P3', 4: 'P4' },
+          d: 'The rules the classic site uses today: how urgent the finding is (exploited, Qualys score, severity, EPSS) against the machine\'s tier, with your due dates.' },
+        { id: 'ssvc', name: 'CISA SSVC', tag: 'Decision tree', words: { 1: 'Act', 2: 'Attend', 3: 'Track*', 4: 'Track' },
+          d: 'CISA\'s Stakeholder-Specific Vulnerability Categorization: four questions (exploitation, automatable, technical impact, mission and well-being) decide Act, Attend, Track* or Track.' },
+        { id: 'cvss', name: 'CVSS severity bands', tag: 'FIRST CVSS v3', words: { 1: 'Critical', 2: 'High', 3: 'Medium', 4: 'Low' },
+          d: 'The CVSS base score alone, in FIRST\'s bands: Critical 9.0–10, High 7.0–8.9, Medium 4.0–6.9, Low below 4. The classic compliance view.' },
+        { id: 'epss', name: 'EPSS first', tag: 'FIRST EPSS', words: { 1: 'Very likely', 2: 'Likely', 3: 'Possible', 4: 'Unlikely' },
+          d: 'FIRST\'s Exploit Prediction Scoring System: the chance a CVE is exploited in the next 30 days. Fixes what attackers are most likely to use first.' },
+        { id: 'qds', name: 'Qualys TruRisk (QDS)', tag: 'Qualys', words: { 1: 'Critical', 2: 'High', 3: 'Medium', 4: 'Low' },
+          d: 'Qualys\'s own detection score (0–100) in Qualys\'s TruRisk bands: Critical 90+, High 70–89, Medium 40–69, Low below 40.' },
+        { id: 'kev', name: 'CISA KEV deadlines', tag: 'BOD 22-01 + 19-02', words: { 1: 'Known exploited', 2: 'Critical, internet', 3: 'High, internet', 4: 'Everything else' },
+          d: 'The US federal directives: anything on CISA\'s Known Exploited list first (BOD 22-01, two weeks), then critical and high findings on internet-facing machines (BOD 19-02, 15 and 30 days).' },
+        { id: 'custom', name: 'Custom: our weights', tag: 'Sliders', words: { 1: 'P1', 2: 'P2', 3: 'P3', 4: 'P4' },
+          d: 'Your own blend. Six sliders weigh what matters (exploited, EPSS, severity, machine tier, exposure, end-of-life OS); three cut-offs turn the score into P1–P4.' },
+    ];
+    static DAYS = { ssvc: { 1: 3, 2: 14, 3: 30, 4: 90 }, cvss: { 1: 15, 2: 30, 3: 90, 4: 180 }, epss: { 1: 7, 2: 30, 3: 90, 4: 180 },
+        qds: { 1: 15, 2: 30, 3: 90, 4: 180 }, kev: { 1: 14, 2: 15, 3: 30, 4: 180 }, custom: { 1: 7, 2: 30, 3: 90, 4: 180 } };
+    static FACTORS = [
+        ['exploited', 'Known exploited', 'CISA KEV or Qualys threat intel (active attacks, ransomware, wormable, zero day) = full; a public exploit or exploit kit = 60%'],
+        ['epss', 'EPSS likelihood', 'Chance of exploitation in 30 days: 50%+ = full, 10%+ = 75%, 1%+ = 50%, 0.1%+ = 25%'],
+        ['severity', 'Severity (CVSS)', 'CVSS base score ÷ 10 (Qualys severity when there is no CVSS: 5 ≈ 9.5, 4 ≈ 7.5, 3 ≈ 5)'],
+        ['machine', 'Machine tier', 'Crown jewels = full, Tier 1 = 75%, Tier 2 (or not set) = 50%, Tier 3 = 25%'],
+        ['exposure', 'Exposure', 'Internet facing = full, DMZ = 75%, Unknown = 50%, Internal = 25%'],
+        ['eol', 'End-of-life OS', 'Qualys says the operating system is end of life or end of support = full'],
+    ];
+    static DEFAULT = {
+        preset: 'cyberview',
+        days: JSON.parse(JSON.stringify(PriorityModel.DAYS)),
+        // starts from the classic Risk Report's weights (observed 30, asset 25, exposure 20, EPSS 15, CVSS 10)
+        custom: { w: { exploited: 30, epss: 15, severity: 10, machine: 25, exposure: 20, eol: 0 }, cut: { 1: 75, 2: 55, 3: 35 }, kevFloor: 2 },
+        epssCut: { 1: 0.5, 2: 0.1, 3: 0.01 },
+    };
+    static preset(id) { return this.PRESETS.find(p => p.id === id) || this.PRESETS[0]; }
+    static saved() {
+        const o = StorageService.load(StorageService.KEYS.PRIORITY_MODEL), s = (o && !Array.isArray(o)) ? o : {};
+        return this.normal(s);
+    }
+    static normal(s) {
+        const D = this.DEFAULT, days = {};
+        Object.keys(D.days).forEach(k => { days[k] = {}; [1, 2, 3, 4].forEach(p => { const v = parseInt(s.days?.[k]?.[p]); days[k][p] = v > 0 && v <= 3650 ? v : D.days[k][p]; }); });
+        const w = {}; Object.keys(D.custom.w).forEach(k => { const v = +s.custom?.w?.[k]; w[k] = v >= 0 && v <= 100 ? Math.round(v) : D.custom.w[k]; });
+        const cut = {}; [1, 2, 3].forEach(p => { const v = +s.custom?.cut?.[p]; cut[p] = v >= 0 && v <= 100 ? Math.round(v) : D.custom.cut[p]; });
+        if (!(cut[1] >= cut[2] && cut[2] >= cut[3])) Object.assign(cut, D.custom.cut);
+        const ec = {}; [1, 2, 3].forEach(p => { const v = +s.epssCut?.[p]; ec[p] = v > 0 && v <= 1 ? v : D.epssCut[p]; });
+        if (!(ec[1] >= ec[2] && ec[2] >= ec[3])) Object.assign(ec, D.epssCut);
+        const kf = [0, 1, 2, 3].includes(+s.custom?.kevFloor) ? +s.custom.kevFloor : D.custom.kevFloor;
+        return { preset: this.PRESETS.some(p => p.id === s.preset) ? s.preset : D.preset, days, custom: { w, cut, kevFloor: kf }, epssCut: ec,
+            savedBy: s.savedBy || '', savedAt: s.savedAt || '' };
+    }
+    static canSave() { const me = StorageService.me; return StorageService.mode !== 'server' || !!(me && (me.role === 'admin' || me.open)); }
+    static save(M) {
+        const { savedBy, savedAt, ...rest } = M;
+        StorageService.save(StorageService.KEYS.PRIORITY_MODEL, { ...rest, savedBy: RemediationService.me() || (StorageService.mode === 'server' ? '' : 'this browser'), savedAt: new Date().toISOString() });
+    }
+
+    // What we know about one finding, in the words the standards use. Everything comes from data CyberView already holds.
+    static facts(d, r, q, RS) {
+        const rti = q.rti || [];
+        const exploitation = PriorityEngine.isExploited(q) ? 'active' : rti.some(t => ['Public Exploit', 'Exploit Kit', 'Easy Exploit'].includes(t)) ? 'poc' : 'none';
+        const cvss = d.cvss > 0 ? +d.cvss : 0, sevC = { 5: 9.5, 4: 7.5, 3: 5, 2: 3, 1: 1 }[d.sev] || 0, cv = cvss || sevC;
+        const tier = RiskModel.tierOf(r, RS), exposure = (r && r.exposure) || 'Unknown';
+        let kevAdded = 0;
+        if (q.kev && Epss._kev) for (const c of q.cves || []) { const k = Epss._kev.get(Epss._id(c)); const t = k && StatusEngine.time(k.added); if (t && (!kevAdded || t < kevAdded)) kevAdded = t; }
+        return {
+            exploitation, kev: !!q.kev, cvss, cv, cvEst: !cvss, epss: +d.epss || 0, qds: +d.qvs || 0, tier, exposure,
+            eol: /\b(EOL|EOS|end of (life|support)|obsolete|unsupported)\b/i.test((r && r.osLifecycle) || ''),
+            automatable: rti.includes('Wormable') || rti.includes('Remote Code Execution'),
+            total: rti.includes('Remote Code Execution') || cv >= 9,
+            mission: tier <= 1 ? 'high' : tier === 2 ? 'medium' : 'low',
+            first: StatusEngine.time(d.first), kevAdded,
+        };
+    }
+
+    // CISA SSVC (CISA Levels: Exploitation, Automatable, Technical Impact, Mission & Well-being), all 36 outcomes,
+    // as published in CERT/CC's SSVC repository (data/csv/cisa/cisa_coordinator_2_0_3.csv).
+    static SSVC = (() => {
+        const rows = `none,no,partial,track,track,track|none,no,total,track,track,track*|none,yes,partial,track,track,attend|none,yes,total,track,track,attend|`
+            + `poc,no,partial,track,track,track*|poc,no,total,track,track*,attend|poc,yes,partial,track,track,attend|poc,yes,total,track,track*,attend|`
+            + `active,no,partial,track,track,attend|active,no,total,track,attend,act|active,yes,partial,attend,attend,act|active,yes,total,attend,act,act`;
+        const m = new Map();
+        rows.split('|').forEach(r => { const [e, a, t, lo, me, hi] = r.split(','); m.set(`${e},${a},${t},low`, lo); m.set(`${e},${a},${t},medium`, me); m.set(`${e},${a},${t},high`, hi); });
+        return m;
+    })();
+    static SSVC_P = { act: 1, attend: 2, 'track*': 3, track: 4 };
+
+    static epssBand(e) { return e >= 0.5 ? 1 : e >= 0.1 ? 0.75 : e >= 0.01 ? 0.5 : e >= 0.001 ? 0.25 : 0; }
+    static comps(F) {
+        return {
+            exploited: F.exploitation === 'active' ? 1 : F.exploitation === 'poc' ? 0.6 : 0,
+            epss: this.epssBand(F.epss),
+            severity: Math.min(1, F.cv / 10),
+            machine: { 0: 1, 1: 0.75, 2: 0.5, 3: 0.25 }[F.tier] ?? 0.5,
+            exposure: { 'Internet Facing': 1, DMZ: 0.75, Unknown: 0.5 }[F.exposure] ?? 0.25,
+            eol: F.eol ? 1 : 0,
+        };
+    }
+
+    // One finding under the model: p (1-4), score (0-100, the order within a priority), outcome word, why (short reasons), due.
+    static evaluate(d, F, M, now, goLive) {
+        const id = M.preset, pct = (e) => (e * 100 >= 10 ? Math.round(e * 100) : (e * 100).toFixed(1)) + '%';
+        const cvTxt = F.cvss ? 'CVSS ' + F.cvss.toFixed(1) : `CVSS ≈ ${F.cv} (Qualys severity ${d.sev})`;
+        let p = 4, score = 0, why = [], parts = null, start = Math.max(F.first || now, goLive || 0);
+        if (id === 'cyberview') {
+            p = d.p || 4; score = [85, 65, 45, 25][p - 1] + Math.min(14, Math.round(F.qds / 7));
+            why = [F.exploitation === 'active' ? '⚑ known exploited' : '', 'finding ' + (PriorityEngine.LABELS[d.tier] || '').toLowerCase(), 'machine ' + RiskModel.tierLabel(F.tier === 0 ? 0 : F.tier), F.exposure === 'Internet Facing' ? 'internet facing' : ''].filter(Boolean);
+            return { p, score, why, word: 'P' + p, due: d.due || 0, backlog: !!d.backlog };
+        }
+        if (id === 'ssvc') {
+            const e = F.exploitation, key = `${e},${F.automatable ? 'yes' : 'no'},${F.total ? 'total' : 'partial'},${F.mission}`, out = this.SSVC.get(key) || 'track';
+            p = this.SSVC_P[out]; score = { 1: 90, 2: 70, 3: 45, 4: 20 }[p] + Math.round(F.epss * 9);
+            why = [`exploitation: ${e === 'poc' ? 'public PoC' : e}`, `automatable: ${F.automatable ? 'yes' : 'no'}`, `technical impact: ${F.total ? 'total' : 'partial'}`, `mission: ${F.mission}`];
+            return this.finish(d, F, M, p, score, why, out === 'track*' ? 'Track*' : out[0].toUpperCase() + out.slice(1), start);
+        }
+        if (id === 'cvss') {
+            p = F.cv >= 9 ? 1 : F.cv >= 7 ? 2 : F.cv >= 4 ? 3 : 4; score = Math.round(F.cv * 10);
+            return this.finish(d, F, M, p, score, [cvTxt], null, start);
+        }
+        if (id === 'epss') {
+            const c = M.epssCut; p = F.epss >= c[1] ? 1 : F.epss >= c[2] ? 2 : F.epss >= c[3] ? 3 : 4; score = Math.round(F.epss * 100);
+            return this.finish(d, F, M, p, score, [F.epss ? 'EPSS ' + pct(F.epss) : 'no EPSS score (no CVE, or not scored)'], null, start);
+        }
+        if (id === 'qds') {
+            p = F.qds >= 90 ? 1 : F.qds >= 70 ? 2 : F.qds >= 40 ? 3 : 4; score = Math.round(F.qds);
+            return this.finish(d, F, M, p, score, ['Qualys score ' + Math.round(F.qds)], null, start);
+        }
+        if (id === 'kev') {
+            const inet = F.exposure === 'Internet Facing';
+            if (F.kev) { p = 1; why = ['on CISA KEV']; if (F.kevAdded) start = Math.max(start, F.kevAdded); }
+            else if (inet && F.cv >= 9) { p = 2; why = ['internet facing', cvTxt]; }
+            else if (inet && F.cv >= 7) { p = 3; why = ['internet facing', cvTxt]; }
+            else { p = 4; why = [inet ? cvTxt : 'not on KEV, not internet facing']; }
+            score = (F.kev ? 90 : 0) + Math.round(F.cv * (F.kev ? 1 : 8));
+            return this.finish(d, F, M, p, score, why, null, start);
+        }
+        // custom: weighted blend of six factors, each 0-1
+        const W = M.custom.w, C = this.comps(F), tot = Object.values(W).reduce((a, b) => a + b, 0) || 1;
+        parts = [];
+        let s = 0;
+        this.FACTORS.forEach(([k, label]) => { const pts = 100 * W[k] * C[k] / tot; s += pts; if (pts >= 0.5) parts.push([label, Math.round(pts)]); });
+        score = Math.round(s);
+        const cut = M.custom.cut; p = score >= cut[1] ? 1 : score >= cut[2] ? 2 : score >= cut[3] ? 3 : 4;
+        why = parts.sort((a, b) => b[1] - a[1]).map(([l, n]) => `${l} +${n}`);
+        if (M.custom.kevFloor && F.exploitation === 'active' && p > M.custom.kevFloor) { p = M.custom.kevFloor; why.unshift(`⚑ known exploited: at least P${p}`); }
+        return this.finish(d, F, M, p, score, why, null, start, true);
+    }
+    static finish(d, F, M, p, score, why, word, start, pts = false) {
+        const days = M.days[M.preset] || this.DAYS.custom;
+        return { p, score, why, word: word || this.preset(M.preset).words[p], due: start + days[p] * 864e5, pts };
+    }
+}
+
+// ------------------------------------------------------------------ the page
+const UI = {
+    view: 'home', team: 'ALL', M: null, saved: null, data: null, stale: false, seq: 0,
+    work: { p: 'ALL', kev: false, overdue: false, q: '', shown: 40, open: new Set() },
+    mach: { tab: 'noteam', q: '' },
+    get canEdit() { const me = StorageService.me; return !(me && me.role === 'viewer'); },
+
+    // ---------- start
+    async start() {
+        this.applyTheme();
+        const T = OrgSettings.teams();
+        let t = null; try { t = localStorage.getItem('cyberview.new.team'); } catch (e) { }
+        this.team = (t === 'ALL' || T.includes(t)) ? t : App.team();
+        this.saved = PriorityModel.saved(); this.M = structuredClone(this.saved);
+        const me = StorageService.me;
+        document.getElementById('who').textContent = StorageService.mode === 'server' ? (me ? `${me.user} · ${me.role}` : '') : 'Stored in this browser';
+        window.addEventListener('hashchange', () => this.fromHash());
+        this.fromHash();
+    },
+    fromHash() {
+        const h = (location.hash || '').replace('#', ''), v = ['home', 'data', 'machines', 'model', 'work'].includes(h) ? h : 'home';
+        this.view = v; this.render();
+    },
+    go(v) { if (location.hash.replace('#', '') === v) this.render(); else location.hash = v; window.scrollTo(0, 0); },
+    setTeam(t) { this.team = t; try { localStorage.setItem('cyberview.new.team', t); } catch (e) { } this.stale = true; this.work.open.clear(); this.work.shown = 40; this.render(); },
+    setTheme(t) { try { if (t) localStorage.setItem('cyberview.new.theme', t); else localStorage.removeItem('cyberview.new.theme'); } catch (e) { } this.applyTheme(); },
+    applyTheme() {
+        let t = ''; try { t = localStorage.getItem('cyberview.new.theme') || ''; } catch (e) { }
+        if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+        const s = document.getElementById('theme'); if (s) s.value = t;
+    },
+    // after an edit, a sync or new scores: build again and redraw what is on screen
+    refresh() { this.stale = true; this.render(); },
+
+    // ---------- shared data: the team's open findings, each with the model's view
+    async load() {
+        if (this.data && this.data.team === this.team && !this.stale) return this.data;
+        const team = this.team; this.stale = false;
+        const sd = await app.scopedData({ owner: team, official: true, whole: true });
+        let plan = null;
+        if (Demo.api()) { try { const PB = await app.planBuckets(team, 'ALL', true, true); if (PB) { plan = new Map(); ['manual', 'blocked', 'will'].forEach(b => PB.B[b].forEach(x => plan.set(x.asset + '|' + x.qid, { b, why: x._why }))); } } catch (e) { console.warn('[new] plan', e); } }
+        const RS = RiskModel.settings();
+        const facts = sd.dets.map(d => PriorityModel.facts(d, sd.regMap.get(d.asset), sd.vd.qmap.get(d.qid) || {}, RS));
+        this.data = { team, ...sd, plan, facts, at: Date.now() };
+        return this.data;
+    },
+    // the model applied to every finding (fast: run again on each slider move)
+    scored(M = this.M) {
+        const D = this.data, now = Demo.now(), goLive = StatusEngine.time(StatusEngine.settings().goLive);
+        return D.dets.map((d, i) => ({ d, F: D.facts[i], e: PriorityModel.evaluate(d, D.facts[i], M, now, goLive) }));
+    },
+
+    // ---------- header pieces
+    paintSteps() {
+        const S = [['data', '1', 'Data', 'Is it fresh?'], ['machines', '2', 'Machines', 'Is it right?'], ['model', '3', 'Priority model', 'What matters?'], ['work', '4', 'Work list', 'What to fix']];
+        document.getElementById('steps').innerHTML = S.map(([v, n, l, s], i) => `${i ? '<span class="arrow" aria-hidden="true">→</span>' : ''}<button class="step ${this.view === v ? 'on' : ''}" onclick="UI.go('${v}')" ${this.view === v ? 'aria-current="page"' : ''}>
+            <span class="n">${n}</span><span><span class="lab">${l}</span><span class="sub">${s}</span></span></button>`).join('');
+        const T = OrgSettings.teams();
+        document.getElementById('team').innerHTML = ['ALL', ...T].map(t => `<option value="${esc(t)}" ${t === this.team ? 'selected' : ''}>${t === 'ALL' ? 'All teams' : esc(t)}</option>`).join('');
+        const ds = document.getElementById('demo-strip');
+        ds.classList.toggle('hidden', !Demo.ON);
+        if (Demo.ON) ds.innerHTML = `<span>🎭 <strong>Demo · ${esc(Demo.ORG)}</strong>: sample data, nothing here is real. Simulated day ${fmtNum(Demo.state().day || 0)}.</span>
+            <span class="row" style="margin-left:auto"><button class="btn sm" onclick="UI.nextDay(this)">⟳ Simulate next day's sync</button><button class="btn sm" onclick="Demo.reset()">↺ Reset demo</button><button class="btn sm" onclick="Demo.leave()">Leave demo</button></span>`;
+    },
+    async nextDay(btn) { btn.disabled = true; btn.textContent = '⟳ Syncing…'; try { await Demo.nextDay(); } finally { this.refresh(); } },
+    head(n, eyebrow, title, lead, right = '') {
+        return `<div class="pagehead"><div><div class="eyebrow">${n ? 'Step ' + n + ' of 4 · ' : ''}${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lead">${lead}</p></div><div class="row">${right}</div></div>`;
+    },
+    pBadge(p, word) { return `<span class="pb p${p}" title="${esc(PriorityModel.LEVEL[p])}"><span aria-hidden="true">${PriorityModel.SHAPE[p]}</span> P${p}${word && word !== 'P' + p ? ' · ' + esc(word) : ''}</span>`; },
+    pen(name) { return this.canEdit ? `<button class="pen" data-n="${esc(name)}" onclick="event.stopPropagation(); UI.edit(this.dataset.n)" title="Edit this machine: team, service, tier, exposure, OS" aria-label="Edit ${esc(name)}">✎</button>` : ''; },
+    edit(name) { app.fillTeamSelects(); app.editAsset(name); },
+    dueTxt(due, now = Demo.now()) {
+        if (!due) return '';
+        const days = Math.round((due - now) / 864e5);
+        return days < 0 ? `<span class="st bad">✖ ${-days} d overdue</span>` : `<span class="t2 nowrap">due in ${days} d</span>`;
+    },
+    ago(t) { if (!t) return 'never'; const d = (Date.now() - t) / 864e5; return d < 1 / 24 ? 'just now' : d < 1 ? Math.round(d * 24) + ' h ago' : Math.round(d) + ' d ago'; },
+
+    // ---------- draw the current step
+    async render() {
+        this.paintSteps();
+        const el = document.getElementById('page'), seq = ++this.seq;
+        const V = { home: this.vHome, data: this.vData, machines: this.vMachines, model: this.vModel, work: this.vWork }[this.view];
+        try {
+            if (!this.data || this.data.team !== this.team) el.innerHTML = '<p class="loading">Working it out…</p>';
+            const html = await V.call(this);
+            if (seq !== this.seq) return;
+            el.innerHTML = html;
+            if (this.view === 'model') this.paintModel();
+        } catch (e) { console.error('[new]', e); if (seq === this.seq) el.innerHTML = `<div class="card pad"><span class="st bad">✗ Could not draw this page</span> <span class="t2">${esc(e.message)}</span></div>`; }
+    },
+
+    // ---------- Home: where things stand, one tile per step
+    async vHome() {
+        const D = await this.load(), rows = await app.healthRows(), M = this.M, P = PriorityModel.preset(M.preset);
+        const bad = rows.filter(r => r.warn).length, live = StorageService.live().filter(r => this.team === 'ALL' || r.owner === this.team || !r.owner || r.owner === 'Unknown');
+        const gaps = this.gaps();
+        const sc = this.scored(), groups = this.groups(sc), p1 = groups.filter(g => g.p === 1), od = groups.filter(g => g.overdue).length;
+        const teamTxt = this.team === 'ALL' ? 'all teams' : this.team;
+        const tile = (v, ic, k, val, d) => `<button class="card tile" onclick="UI.go('${v}')"><span class="ic" aria-hidden="true">${ic}</span><span class="k">${k}</span><span class="v">${val}</span><span class="d">${d}</span></button>`;
+        return this.head(0, 'CyberView · ' + teamTxt, 'What should we work on?', 'Four steps, left to right: check the data is fresh, put the machines right, choose how to rank the risk, then work down one list. Most days you only need step 4.',
+                `<button class="btn primary" onclick="UI.go('work')">Open the work list →</button>`)
+            + `<div class="grid g4">
+                ${tile('data', '⇩', 'Step 1 · Data', bad ? `<span class="st warn">⚠ ${bad} source${bad === 1 ? '' : 's'} to check</span>` : '<span class="st ok">✓ All sources fresh</span>', `${fmtNum(rows.length)} sources: Qualys, Automox, end-of-life dates, EPSS, Red Hat`)}
+                ${tile('machines', '🖥', 'Step 2 · Machines', gaps.total ? `<span class="st warn">⚠ ${fmtNum(gaps.total)} to put right</span>` : '<span class="st ok">✓ Nothing to put right</span>', `${fmtNum(gaps.noteam.length)} without a team · ${fmtNum(gaps.notier.length)} without a tier · ${fmtNum(gaps.unseen.length)} not seen lately`)}
+                ${tile('model', '⚖', 'Step 3 · Priority model', esc(P.name), esc(P.tag) + (M.preset === 'cyberview' ? ' · the same priorities as the classic site' : ''))}
+                ${tile('work', '🔧', 'Step 4 · Work list', `${fmtNum(p1.length)} P1 fix${p1.length === 1 ? '' : 'es'}`, `${fmtNum(groups.length)} fixes on ${fmtNum(new Set(D.dets.map(d => d.asset)).size)} machines${od ? ` · <strong>✖ ${fmtNum(od)} overdue</strong>` : ''}`)}
+            </div>
+            <div class="card pad mt"><h2>Today for ${esc(teamTxt)}</h2>${this.topList(groups.slice(0, 5))}
+                <div class="mt"><button class="btn" onclick="UI.go('work')">See the whole list →</button></div></div>`;
+    },
+    topList(groups) {
+        if (!groups.length) return '<p class="empty">Nothing open. ✓</p>';
+        return `<table class="tbl"><tbody>${groups.map(g => `<tr class="click" onclick="UI.work.open.add('${g.qid}'); UI.go('work')"><td style="width:1%">${this.pBadge(g.p, g.word)}</td>
+            <td><div class="machine">${esc(g.title)}</div><div class="tiny muted">${g.cve ? esc(g.cve) + ' · ' : ''}${fmtNum(g.machines.size)} machine${g.machines.size === 1 ? '' : 's'}</div></td><td class="nowrap" style="text-align:right">${this.dueTxt(g.due)}</td></tr>`).join('')}</tbody></table>`;
+    },
+
+    // ---------- Step 1: data sources
+    async vData() {
+        const rows = await app.healthRows(), D = await this.load();
+        const card = (r) => {
+            const st = r.run ? '<span class="st info">⟳ Running</span>' : r.warn ? '<span class="st warn">⚠ Check</span>' : r.last ? '<span class="st ok">✓ OK</span>' : '<span class="st info">– Not set up</span>';
+            const btn = r.btn && this.canEdit ? `<button class="btn sm" ${r.run ? 'disabled' : ''} onclick="UI.sync(this, ${esc(JSON.stringify(r.btn))})">${r.run ? '⟳ Running…' : '⟳ Sync now'}</button>` : '';
+            return `<div class="card pad"><div class="row between"><h3>${esc(r.name)}</h3>${st}</div>
+                <p class="small t2" style="margin:2px 0 10px">${esc(r.how)}</p>
+                <div class="small"><strong>Result:</strong> ${esc(r.result)}</div>
+                <div class="row between mt small"><span class="muted">Last: ${r.last ? esc(App.whenText(r.last)) + ' (' + esc(this.ago(r.last)) + ')' : 'never'}${r.sched ? ' · ' + esc(r.sched) : ''}</span>${btn}</div></div>`;
+        };
+        const reg = StorageService.live(), qids = D.vd.qmap.size, scored = [...D.vd.qmap.values()].filter(q => q.epss > 0).length, kev = [...D.vd.qmap.values()].filter(q => q.kev).length;
+        return this.head(1, 'Data', 'Is the data fresh?', 'Where CyberView\'s numbers come from, when each source last ran and whether it worked. Sync one now if it looks old.')
+            + `<div class="grid g3">${rows.map(card).join('')}</div>
+            <div class="card pad mt"><h2>What CyberView holds now</h2><div class="grid g4 small">
+                <div><div class="muted">Machines in the register</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(reg.length)}</div></div>
+                <div><div class="muted">Open findings (every team)</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(D.vd.dets.length)}</div></div>
+                <div><div class="muted">Vulnerabilities (QIDs)</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(qids)}</div></div>
+                <div><div class="muted">With an EPSS score · on CISA KEV</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(scored)} · ${fmtNum(kev)}</div></div>
+            </div></div>`;
+    },
+    async sync(btn, code) {
+        btn.disabled = true; btn.textContent = '⟳ Running…';
+        try { await (new Function('return (async () => { await ' + code + '; })()'))(); }
+        catch (e) { StorageService.toast('Sync failed: ' + e.message); }
+        setTimeout(() => this.refresh(), 1200);
+    },
+
+    // ---------- Step 2: machines that need putting right
+    gaps() {
+        const T = this.team, live = StorageService.live().filter(r => !r.unrecognised);
+        const mine = live.filter(r => T === 'ALL' || r.owner === T);
+        const st = app.stale();
+        return {
+            noteam: live.filter(r => !r.owner || r.owner === 'Unknown' || r.owner === 'Unrecognised'),
+            notier: mine.filter(r => !StatusEngine.tierOf(r)),
+            noexp: mine.filter(r => !r.exposure || r.exposure === 'Unknown'),
+            unseen: mine.filter(r => st.list.has(r.normalizedName)),
+            get total() { return new Set([...this.noteam, ...this.notier, ...this.noexp, ...this.unseen].map(r => r.normalizedName)).size; },
+            st,
+        };
+    },
+    async vMachines() {
+        const G = this.gaps(), T = this.team, tab = this.mach.tab;
+        const pend = (ReviewQueueService.getQueue() || []).filter(q => q.status === 'PENDING' || q.status === 'IN_REVIEW').length;
+        const tabs = [['noteam', 'No team', G.noteam, 'Every team: a machine without a team is on nobody\'s list'], ['notier', 'Tier not set', G.notier, 'Counts as Tier 2 until someone sets it'],
+            ['noexp', 'Exposure unknown', G.noexp, 'Internet facing, DMZ or internal changes the priority'], ['unseen', 'Not seen lately', G.unseen, 'An expected source has not seen it: retired, or an agent problem'], ['all', 'Find any machine', null, '']];
+        const cur = tabs.find(t => t[0] === tab) || tabs[0];
+        let list = cur[2];
+        if (tab === 'all') list = StorageService.live().filter(r => T === 'ALL' || r.owner === T);
+        const q = this.mach.q.trim().toLowerCase();
+        if (q) list = list.filter(r => [r.normalizedName, r.originalName, r.service, r.os, r.owner].some(v => String(v || '').toLowerCase().includes(q)));
+        const shown = list.slice(0, 150);
+        const why = (r) => { const x = G.st.list.get(r.normalizedName); return x ? x.miss.map(id => (G.st.srcs.find(s => s.id === id) || {}).label || id).join(', ') : ''; };
+        return this.head(2, 'Machines', 'Are the machines right?', `The work list is only as good as the register: each machine needs a team, a tier and an exposure. Put them right here with ✎ (the same edit as the classic site). ${T === 'ALL' ? '' : 'Showing ' + esc(T) + '\'s machines (and every machine without a team).'}`)
+            + (pend ? `<div class="note mb">⚠ <strong>${fmtNum(pend)} machine${pend === 1 ? '' : 's'} waiting in the Review Queue</strong> (new from Qualys, team not confirmed). <a href="./" title="Opens the classic site">Review them on the classic site ↗</a></div>` : '')
+            + `<div class="row mb" role="tablist">${tabs.map(([id, l, arr]) => `<button class="btn ${id === tab ? 'primary' : ''}" role="tab" aria-selected="${id === tab}" onclick="UI.mach.tab='${id}'; UI.render()">${l}${arr ? ` <span class="mono">${fmtNum(arr.length)}</span>` : ''}</button>`).join('')}</div>
+            <div class="card"><div class="pad row between"><span class="t2 small">${esc(cur[3])}</span>
+                <input class="in" type="search" placeholder="Search name, service, OS…" value="${esc(this.mach.q)}" oninput="UI.mach.q=this.value; clearTimeout(UI._mt); UI._mt=setTimeout(()=>UI.render(), 250)" aria-label="Search machines"></div>
+            <div class="scroll"><table class="tbl"><thead><tr><th>Machine</th><th>Team</th><th>Service</th><th>Tier</th><th>Exposure</th><th class="hide-sm">OS</th><th>Last seen</th></tr></thead><tbody>
+            ${shown.map(r => `<tr><td><span class="machine">${esc(r.originalName || r.normalizedName)}</span>${this.pen(r.normalizedName)}${tab === 'unseen' ? `<div class="tiny muted">missing from: ${esc(why(r))}</div>` : ''}</td>
+                <td>${!r.owner || r.owner === 'Unknown' || r.owner === 'Unrecognised' ? '<span class="st warn">? none</span>' : esc(r.owner)}</td><td>${esc(r.service || 'Unclassified')}</td>
+                <td>${StatusEngine.tierOf(r) ? 'Tier ' + StatusEngine.tierCode(r) : '<span class="st warn">? not set</span>'}</td>
+                <td>${!r.exposure || r.exposure === 'Unknown' ? '<span class="st warn">? unknown</span>' : esc(r.exposure)}</td>
+                <td class="hide-sm small t2">${esc(r.os || '')}</td><td class="small nowrap">${esc(this.ago(StatusEngine.time(r.lastSeen)))}</td></tr>`).join('') || `<tr><td colspan="7" class="empty">${tab === 'all' ? 'No machine matches.' : '✓ None: nothing to put right here.'}</td></tr>`}
+            </tbody></table></div>${list.length > shown.length ? `<p class="pad small muted">Showing the first ${shown.length} of ${fmtNum(list.length)}: search to narrow it.</p>` : ''}</div>`;
+    },
+
+    // ---------- Step 3: the priority model
+    async vModel() {
+        await this.load();
+        const M = this.M, can = PriorityModel.canSave();
+        const presets = PriorityModel.PRESETS.map(p => `<button class="preset ${M.preset === p.id ? 'on' : ''}" onclick="UI.pick('${p.id}')" aria-pressed="${M.preset === p.id}">
+            <span class="dot" aria-hidden="true">${M.preset === p.id ? '✓' : ''}</span><span><b>${esc(p.name)} <span class="tag">${esc(p.tag)}</span></b><span class="d">${esc(p.d)}</span></span></button>`).join('');
+        return this.head(3, 'Priority model', 'What matters most?', 'Choose a recognised standard or your own blend. The pyramid shows what it does to your findings as you change it. Nothing changes for the team until it is saved.',
+                `<span id="m-state"></span>${can ? `<button class="btn" onclick="UI.revert()">↺ Back to saved</button><button class="btn primary" onclick="UI.saveModel()">Save as the team's model</button>` : '<span class="st info">Only an administrator can save: you are trying it out</span>'}`)
+            + `<div class="grid" style="grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.25fr); align-items:start" id="m-grid">
+                <div class="grid">${presets}</div>
+                <div class="grid">
+                    <div class="card pad"><div class="row between"><h2>The pyramid · ${esc(this.team === 'ALL' ? 'all teams' : this.team)}</h2><span class="small muted">findings · machines</span></div><div id="m-pyr" class="pyr"></div><div id="m-cmp" class="small t2 mt"></div></div>
+                    <div class="card pad" id="m-settings"></div>
+                    <div class="card pad"><h2>Top of the list</h2><div id="m-top"></div></div>
+                </div></div>`;
+    },
+    pick(id) { this.M.preset = id; this.render(); },
+    revert() { this.M = structuredClone(this.saved); this.render(); },
+    saveModel() {
+        PriorityModel.save(this.M); this.saved = PriorityModel.saved(); this.M = structuredClone(this.saved);
+        StorageService.toast('Saved: the work list now uses ' + PriorityModel.preset(this.M.preset).name); this.paintModel();
+    },
+    dirty() { const a = { ...this.M, savedBy: '', savedAt: '' }, b = { ...this.saved, savedBy: '', savedAt: '' }; return JSON.stringify(a) !== JSON.stringify(b); },
+    // the settings panel for the chosen standard (sliders for Custom), then the live pyramid
+    paintModel() {
+        const M = this.M, id = M.preset, P = PriorityModel.preset(id), el = document.getElementById('m-settings'); if (!el) return;
+        const days = id === 'cyberview' ? '' : `<h3 class="mt">Due dates <span class="small muted" style="font-weight:400">(days from first found, or from go-live for older findings${id === 'kev' ? ', or from the date CISA listed it' : ''})</span></h3>
+            <div class="daysrow">${[1, 2, 3, 4].map(p => `<div><label for="d${p}">P${p} · ${esc(P.words[p])}</label><input id="d${p}" class="in" type="number" min="1" max="3650" value="${M.days[id][p]}" oninput="UI.setDays(${p}, this.value)"></div>`).join('')}</div>`;
+        let body = '';
+        if (id === 'cyberview') body = `<div class="note">These are the rules the classic site uses (finding urgency × machine tier, internet-facing steps, due dates and backlog). They are changed in <a href="./">the classic site</a> → Organisation setup → Status rules, so both sites always agree.</div>`;
+        else if (id === 'ssvc') {
+            const T = PriorityModel.SSVC, cell = (e, a, t) => ['low', 'medium', 'high'].map(m => { const o = T.get(`${e},${a},${t},${m}`); return `<td>${o === 'act' ? '<strong>Act</strong>' : o === 'attend' ? 'Attend' : o === 'track*' ? 'Track*' : 'Track'}</td>`; }).join('');
+            body = `<div class="note mb">How CyberView answers CISA's four questions from the data it holds (an approximation, as any tool's is):<br>
+                <strong>Exploitation</strong>: active = CISA KEV or Qualys active attacks, ransomware, wormable, zero day; public PoC = Qualys public exploit, exploit kit or easy exploit; otherwise none.<br>
+                <strong>Automatable</strong>: yes when Qualys tags it wormable or remote code execution.<br><strong>Technical impact</strong>: total for remote code execution or CVSS 9+, otherwise partial.<br>
+                <strong>Mission &amp; well-being</strong>: from the machine's tier: crown jewels and Tier 1 high, Tier 2 (or not set) medium, Tier 3 low.<br>
+                CISA: Act = as soon as possible, with leadership involved; Attend = sooner than standard timelines; Track* = standard timelines, watch closely; Track = standard timelines.</div>
+                <div class="scroll"><table class="ssvc"><thead><tr><th>Exploitation</th><th>Automatable</th><th>Impact</th><th>Mission low</th><th>medium</th><th>high</th></tr></thead><tbody>
+                ${['none', 'poc', 'active'].map(e => ['no', 'yes'].map(a => ['partial', 'total'].map(t => `<tr><td>${e === 'poc' ? 'public PoC' : e}</td><td>${a}</td><td>${t}</td>${cell(e, a, t)}</tr>`).join('')).join('')).join('')}</tbody></table></div>`;
+        }
+        else if (id === 'epss') body = `<h3>Cut-offs</h3>${[1, 2, 3].map(p => `<div class="slider"><label for="e${p}">P${p} from</label><input id="e${p}" type="range" min="0" max="100" step="1" value="${Math.round(Math.log10(M.epssCut[p] * 1000) / 3 * 100)}" oninput="UI.setEpss(${p}, this.value)"><output id="eo${p}">${(M.epssCut[p] * 100).toFixed(M.epssCut[p] < 0.1 ? 1 : 0)}%</output></div>`).join('')}
+            <p class="small muted">FIRST suggests 10% as a sensible line for most organisations; the slider runs on a log scale from 0.1% to 100%.</p>`;
+        else if (id === 'custom') {
+            const W = M.custom.w, tot = Object.values(W).reduce((a, b) => a + b, 0) || 1;
+            body = `<h3>Weights <span class="small muted" style="font-weight:400">(shares of the score: they always add up to 100%)</span></h3>
+                ${PriorityModel.FACTORS.map(([k, l, help]) => `<div class="slider"><label for="w-${k}">${esc(l)}</label><input id="w-${k}" type="range" min="0" max="100" value="${W[k]}" oninput="UI.setW('${k}', this.value)"><output id="wo-${k}">${Math.round(W[k] * 100 / tot)}%</output><div class="help">${esc(help)}</div></div>`).join('')}
+                <h3 class="mt">Cut-offs <span class="small muted" style="font-weight:400">(score 0–100 → priority)</span></h3>
+                ${[1, 2, 3].map(p => `<div class="slider"><label for="c${p}">P${p} from score</label><input id="c${p}" type="range" min="0" max="100" value="${M.custom.cut[p]}" oninput="UI.setCut(${p}, this.value)"><output id="co${p}">${M.custom.cut[p]}</output></div>`).join('')}
+                <div class="slider"><label for="kf">Known exploited</label><select id="kf" class="in" onchange="UI.M.custom.kevFloor = +this.value; UI.liveModel()">${[[0, 'no floor: the score decides'], [1, 'always P1'], [2, 'never below P2'], [3, 'never below P3']].map(([v, l]) => `<option value="${v}" ${M.custom.kevFloor === v ? 'selected' : ''}>${l}</option>`).join('')}</select><span></span></div>
+                <div class="row mt"><button class="btn sm" onclick="UI.M.custom = structuredClone(PriorityModel.DEFAULT.custom); UI.paintModel()">↺ Starting weights</button><span class="small muted">The starting weights are the classic Risk Report's.</span></div>`;
+        }
+        else body = `<div class="note">${esc(P.d)}${id === 'cvss' ? ' When Qualys gives no CVSS score, its severity stands in (5 ≈ 9.5, 4 ≈ 7.5, 3 ≈ 5) and the reason says ≈.' : ''}${id === 'kev' ? ' CISA\'s own due dates are for US federal agencies and are mostly in the past; here the clock starts when CISA listed it, when the finding was first found, or at go-live, whichever is latest.' : ''}</div>`;
+        el.innerHTML = `<div class="row between"><h2>${esc(P.name)}</h2><span class="tag">${esc(P.tag)}</span></div>${body}${days}`;
+        this.liveModel();
+    },
+    setW(k, v) { this.M.custom.w[k] = +v; const W = this.M.custom.w, tot = Object.values(W).reduce((a, b) => a + b, 0) || 1; PriorityModel.FACTORS.forEach(([x]) => { const o = document.getElementById('wo-' + x); if (o) o.textContent = Math.round(W[x] * 100 / tot) + '%'; }); this.liveModel(); },
+    setCut(p, v) {
+        const c = this.M.custom.cut; c[p] = +v;
+        if (p === 1 && c[2] > c[1]) c[2] = c[1]; if (p <= 2 && c[3] > c[2]) c[3] = c[2]; if (p === 3 && c[2] < c[3]) c[2] = c[3]; if (p >= 2 && c[1] < c[2]) c[1] = c[2];
+        [1, 2, 3].forEach(x => { const i = document.getElementById('c' + x), o = document.getElementById('co' + x); if (i) i.value = c[x]; if (o) o.textContent = c[x]; });
+        this.liveModel();
+    },
+    setEpss(p, v) {
+        const c = this.M.epssCut, val = Math.pow(10, (+v / 100) * 3) / 1000; c[p] = Math.round(val * 10000) / 10000;
+        if (p === 1 && c[2] > c[1]) c[2] = c[1]; if (p <= 2 && c[3] > c[2]) c[3] = c[2]; if (p === 3 && c[2] < c[3]) c[2] = c[3]; if (p >= 2 && c[1] < c[2]) c[1] = c[2];
+        [1, 2, 3].forEach(x => { const i = document.getElementById('e' + x), o = document.getElementById('eo' + x); if (i && x !== p) i.value = Math.round(Math.log10(c[x] * 1000) / 3 * 100); if (o) o.textContent = (c[x] * 100).toFixed(c[x] < 0.1 ? 1 : 0) + '%'; });
+        this.liveModel();
+    },
+    setDays(p, v) { const n = parseInt(v); if (n > 0 && n <= 3650) { this.M.days[this.M.preset][p] = n; this.liveModel(); } },
+    liveModel() {
+        cancelAnimationFrame(this._raf);
+        this._raf = requestAnimationFrame(() => {
+            const pyr = document.getElementById('m-pyr'); if (!pyr || !this.data) return;
+            const sc = this.scored(), cnt = { 1: [0, new Set()], 2: [0, new Set()], 3: [0, new Set()], 4: [0, new Set()] };
+            let up = 0, down = 0;
+            sc.forEach(x => { cnt[x.e.p][0]++; cnt[x.e.p][1].add(x.d.asset); if (x.d.p) { if (x.e.p < x.d.p) up++; else if (x.e.p > x.d.p) down++; } });
+            const P = PriorityModel.preset(this.M.preset), max = Math.max(1, ...[1, 2, 3, 4].map(p => cnt[p][0])), total = sc.length || 1;
+            pyr.innerHTML = [1, 2, 3, 4].map((p, i) => `<div class="lvl p${p}" style="width:${Math.round(42 + i * 19)}%"><span><span aria-hidden="true">${PriorityModel.SHAPE[p]}</span> <b>P${p}</b> ${P.words[p] === 'P' + p ? esc(PriorityModel.LEVEL[p]) : esc(P.words[p])}</span><span class="mono"><b>${fmtNum(cnt[p][0])}</b> · ${fmtNum(cnt[p][1].size)} <span class="tiny">(${Math.round(cnt[p][0] * 100 / total)}%)</span></span></div>`).join('');
+            const cmp = document.getElementById('m-cmp');
+            if (cmp) cmp.innerHTML = this.M.preset === 'cyberview' ? 'Exactly the classic site\'s priorities.' : `Compared with the classic site's priorities: <strong>${fmtNum(up)} findings move up</strong>, <strong>${fmtNum(down)} move down</strong>, ${fmtNum(sc.length - up - down)} stay the same.`;
+            const top = document.getElementById('m-top');
+            if (top) top.innerHTML = this.topList(this.groups(sc).slice(0, 8));
+            const st = document.getElementById('m-state');
+            if (st) st.innerHTML = this.dirty() ? '<span class="st warn">● Not saved</span>' : `<span class="st ok">✓ Saved${this.saved.savedBy ? ' by ' + esc(this.saved.savedBy) : ''}</span>`;
+        });
+    },
+
+    // ---------- Step 4: the work list, one row per fix
+    groups(sc) {
+        const D = this.data, m = new Map(), now = Demo.now();
+        for (const x of sc) {
+            const d = x.d; let g = m.get(d.qid);
+            if (!g) {
+                const q = D.vd.qmap.get(d.qid) || {};
+                g = { qid: d.qid, title: q.title || 'QID ' + d.qid, cve: (q.cves && q.cves[0] && (q.cves[0].id || q.cves[0])) || '', cves: (q.cves || []).length, kev: !!q.kev, exploited: PriorityEngine.isExploited(q), epss: x.F.epss, patchable: !!q.patchable,
+                    p: 5, score: 0, word: '', due: 0, overdue: 0, machines: new Set(), items: [], ax: { will: 0, blocked: 0, manual: 0 } };
+                m.set(d.qid, g);
+            }
+            if (x.e.p < g.p || (x.e.p === g.p && x.e.score > g.score)) { g.p = x.e.p; g.word = x.e.word; g.why = x.e.why; }
+            g.score = Math.max(g.score, x.e.score);
+            if (x.e.due && (!g.due || x.e.due < g.due)) g.due = x.e.due;
+            if (x.e.due && x.e.due < now) g.overdue++;
+            g.machines.add(d.asset); g.items.push(x);
+            const a = D.plan && D.plan.get(d.asset + '|' + d.qid); if (a) g.ax[a.b]++;
+        }
+        return [...m.values()].sort((a, b) => (a.p - b.p) || (b.overdue > 0) - (a.overdue > 0) || (b.score - a.score) || (b.machines.size - a.machines.size));
+    },
+    tasksByQid() {
+        const m = new Map();
+        RemediationService.list().filter(t => RemediationService.OPEN.has(t.status)).forEach(t => (t.source?.qids || []).forEach(q => { const k = String(q); if (!m.has(k)) m.set(k, []); m.get(k).push(t); }));
+        return m;
+    },
+    async vWork() {
+        await this.load();
+        const W = this.work, P = PriorityModel.preset(this.saved.preset), sc = this.scored(this.saved);
+        let groups = this.groups(sc);
+        const all = groups;
+        if (W.p !== 'ALL') groups = groups.filter(g => g.p <= +W.p);
+        if (W.kev) groups = groups.filter(g => g.exploited);
+        if (W.overdue) groups = groups.filter(g => g.overdue);
+        const q = W.q.trim().toLowerCase();
+        if (q) groups = groups.filter(g => g.title.toLowerCase().includes(q) || String(g.qid).includes(q) || g.cve.toLowerCase().includes(q) || [...g.machines].some(n => n.toLowerCase().includes(q)));
+        const tasks = this.tasksByQid(), shown = groups.slice(0, W.shown);
+        const cnt = (p) => all.filter(g => g.p === p).length, od = all.filter(g => g.overdue).length;
+        const seg = [['ALL', 'All'], ['1', 'P1'], ['2', 'P1–P2'], ['3', 'P1–P3']].map(([v, l]) => `<button aria-pressed="${W.p === v}" onclick="UI.work.p='${v}'; UI.work.shown=40; UI.render()">${l}</button>`).join('');
+        const savedNote = this.dirty() ? `<div class="note warn mb">● The priority model has unsaved changes in step 3: this list still uses the saved one (${esc(PriorityModel.preset(this.saved.preset).name)}).</div>` : '';
+        const ax = (g) => {
+            if (!this.data.plan) return '<span class="muted small">–</span>';
+            const a = g.ax, parts = [];
+            if (a.will) parts.push(`<span class="nowrap" title="Automox will install the patch within the plan window">⟳ ${a.will} will patch</span>`);
+            if (a.blocked) parts.push(`<span class="nowrap" title="Automox has a patch but something stops it">⚠ ${a.blocked} blocked</span>`);
+            if (a.manual) parts.push(`<span class="nowrap" title="No Automox agent or patch: someone has to fix it">✋ ${a.manual} manual</span>`);
+            return `<div class="small">${parts.join('<br>') || '<span class="muted">–</span>'}</div>`;
+        };
+        const rowsHTML = shown.map(g => {
+            const open = W.open.has(String(g.qid)), tk = tasks.get(String(g.qid)) || [];
+            const main = `<tr class="click ${open ? 'open' : ''}" onclick="UI.toggle('${g.qid}')" aria-expanded="${open}">
+                <td style="width:1%">${this.pBadge(g.p, g.word)}</td>
+                <td><div class="machine">${open ? '▾' : '▸'} ${esc(g.title)}</div>
+                    <div class="tiny muted">QID ${esc(g.qid)}${g.cve ? ' · ' + esc(g.cve) + (g.cves > 1 ? ` +${g.cves - 1}` : '') : ''}</div>
+                    <div>${g.kev ? '<span class="chip hot">⚑ CISA KEV</span>' : g.exploited ? '<span class="chip hot">⚑ exploited</span>' : ''}${g.epss ? `<span class="chip">EPSS ${(g.epss * 100).toFixed(g.epss < 0.1 ? 1 : 0)}%</span>` : ''}${g.patchable ? '' : '<span class="chip">no patch</span>'}${tk.length ? `<span class="chip pts" title="${esc(tk.map(t => t.title + ' · ' + t.status).join('\n'))}">📋 task: ${esc(tk[0].status)}</span>` : ''}</div>
+                    <div class="tiny t2">Why: ${esc((g.why || []).join(' · '))}</div></td>
+                <td class="mono nowrap" style="text-align:right">${fmtNum(g.machines.size)}</td>
+                <td class="nowrap">${this.dueTxt(g.due)}${g.overdue ? `<div class="tiny muted">${fmtNum(g.overdue)} of ${fmtNum(g.items.length)} overdue</div>` : ''}</td>
+                <td class="hide-sm">${ax(g)}</td></tr>`;
+            if (!open) return main;
+            const items = g.items.slice().sort((a, b) => (a.e.p - b.e.p) || (a.e.due - b.e.due));
+            const sub = `<tr><td colspan="5" style="padding:0 10px 10px 34px"><div class="sub-tbl scroll"><table class="tbl"><thead><tr><th>Machine</th><th>Priority</th><th>Why</th><th>Tier · exposure</th><th>Due</th><th class="hide-sm">Automox</th></tr></thead><tbody>
+                ${items.map(x => { const r = this.data.regMap.get(x.d.asset) || {}, a = this.data.plan && this.data.plan.get(x.d.asset + '|' + x.d.qid);
+                    return `<tr><td><span class="machine">${esc(r.originalName || x.d.asset)}</span>${this.pen(x.d.asset)}<div class="tiny muted">${esc(r.owner || 'Unknown')} · ${esc(r.service || 'Unclassified')}</div></td>
+                        <td>${this.pBadge(x.e.p, x.e.word)}<div class="tiny muted mono">score ${x.e.score}</div></td>
+                        <td class="small">${x.e.why.map(w => `<span class="chip ${x.e.pts ? 'pts' : ''}">${esc(w)}</span>`).join('')}</td>
+                        <td class="small">${esc(RiskModel.tierLabel(x.F.tier))}<br>${esc(x.F.exposure)}${x.F.eol ? '<br><span class="chip hot">end-of-life OS</span>' : ''}</td>
+                        <td>${this.dueTxt(x.e.due)}</td>
+                        <td class="hide-sm small">${a ? { will: '⟳ will patch', blocked: '⚠ blocked', manual: '✋ manual' }[a.b] + `<div class="tiny muted">${esc(a.why || '')}</div>` : '–'}</td></tr>`; }).join('')}
+                </tbody></table></div></td></tr>`;
+            return main + sub;
+        }).join('');
+        return this.head(4, 'Work list', 'What to fix, in order', `One row per fix, worst first, for ${esc(this.team === 'ALL' ? 'all teams' : this.team)}. Ranked by <strong>${esc(P.name)}</strong> (<button class="linkbtn" onclick="UI.go('model')">change</button>). Open a row for its machines and the reasons; ✎ edits a machine.`,
+                `<button class="btn" onclick="UI.csv()">⇩ CSV</button><button class="btn" onclick="window.print()">Print</button>`)
+            + savedNote
+            + `<div class="grid g4 mb">${[1, 2, 3, 4].map(p => `<div class="card pad"><div class="row between">${this.pBadge(p, P.words[p])}<span class="mono" style="font-size:20px;font-weight:800">${fmtNum(cnt(p))}</span></div><div class="tiny muted" style="margin-top:4px">fixes · ${esc(PriorityModel.LEVEL[p])}</div></div>`).join('')}</div>
+            <div class="card"><div class="pad row between">
+                <div class="row"><div class="seg" role="group" aria-label="Priority">${seg}</div>
+                    <label class="small row" style="gap:5px"><input type="checkbox" ${W.kev ? 'checked' : ''} onchange="UI.work.kev=this.checked; UI.render()"> ⚑ Known exploited only</label>
+                    <label class="small row" style="gap:5px"><input type="checkbox" ${W.overdue ? 'checked' : ''} onchange="UI.work.overdue=this.checked; UI.render()"> ✖ Overdue only${od ? ` (${fmtNum(od)})` : ''}</label></div>
+                <input class="in" type="search" placeholder="Search fix, CVE, QID or machine…" value="${esc(W.q)}" oninput="UI.work.q=this.value; clearTimeout(UI._wt); UI._wt=setTimeout(()=>UI.render(), 250)" aria-label="Search the work list"></div>
+            <div class="scroll"><table class="tbl"><thead><tr><th>Priority</th><th>Fix</th><th style="text-align:right">Machines</th><th>Due</th><th class="hide-sm">Automox</th></tr></thead>
+                <tbody>${rowsHTML || '<tr><td colspan="5" class="empty">Nothing matches. ✓</td></tr>'}</tbody></table></div>
+            ${groups.length > shown.length ? `<div class="pad row between"><span class="small muted">Showing ${fmtNum(shown.length)} of ${fmtNum(groups.length)} fixes</span><button class="btn" onclick="UI.work.shown += 40; UI.render()">Show 40 more</button></div>` : `<p class="pad small muted" style="margin:0">${fmtNum(groups.length)} fix${groups.length === 1 ? '' : 'es'} · risk-accepted machines and findings are left out, as in the classic site's official numbers.</p>`}</div>`;
+    },
+    toggle(qid) { const k = String(qid); if (this.work.open.has(k)) this.work.open.delete(k); else this.work.open.add(k); this.render(); },
+    csv() {
+        const sc = this.scored(this.saved), P = PriorityModel.preset(this.saved.preset), rows = [['Priority', 'Level', 'Fix', 'QID', 'CVE', 'Machine', 'Team', 'Service', 'Tier', 'Exposure', 'Score', 'Why', 'Due', 'Overdue', 'Automox']];
+        const now = Demo.now();
+        this.groups(sc).forEach(g => g.items.forEach(x => { const r = this.data.regMap.get(x.d.asset) || {}, a = this.data.plan && this.data.plan.get(x.d.asset + '|' + x.d.qid);
+            rows.push(['P' + x.e.p, x.e.word, g.title, g.qid, g.cve, r.originalName || x.d.asset, r.owner || '', r.service || '', RiskModel.tierLabel(x.F.tier), x.F.exposure, x.e.score, x.e.why.join('; '),
+                x.e.due ? new Date(x.e.due).toISOString().slice(0, 10) : '', x.e.due && x.e.due < now ? 'yes' : '', a ? a.b : '']); }));
+        const q = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? '"' + (/^[=+\-@]/.test(s) ? "'" : '') + s.replace(/"/g, '""') + '"' : s; };
+        const blob = new Blob([rows.map(r => r.map(q).join(',')).join('\n')], { type: 'text/csv' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = `cyberview-work-list-${(this.team === 'ALL' ? 'all-teams' : this.team).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${P.id}-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    },
+};
+
+window.onload = async () => {
+    if (window.app) return;
+    Demo.boot();
+    try { await StorageService.init(); }
+    catch (e) { document.getElementById('page').innerHTML = `<div class="card pad"><span class="st bad">✗ CyberView could not start</span><p>${esc(e.message)}</p><p><a href="./">Try the classic site</a></p></div>`; return; }
+    if (StorageService.me && StorageService.me.mustChange) { document.getElementById('page').innerHTML = '<div class="card pad"><h2>Choose a new password first</h2><p><a class="btn primary" href="./">Open the classic site to change it</a></p></div>'; return; }
+    window.app = new NewApp(); app.currentView = 'new';
+    app.fillTeamSelects();
+    if (Demo.ON && StorageService.mode !== 'server') { try { await Demo.firstLoad(app); } catch (e) { console.error('[Demo]', e); } }
+    else if (StorageService.mode === 'server' && UI.canEdit) app.qxApply(true).then(() => UI.refresh()).catch(() => { });     // a finished Qualys sync is applied, as the classic site does
+    if (StorageService.mode !== 'server' && !Demo.ON && !StorageService.live().length) {
+        document.getElementById('page').innerHTML = `<div class="card pad"><h2>No data in this browser</h2><p class="t2">This copy has no server and no data yet.</p><p><a class="btn primary" href="new/?demo">Load the ${esc(Demo.ORG)} demo</a> <a class="btn" href="./">Classic site</a></p></div>`;
+        return;
+    }
+    await UI.start();
+    Epss.warm();        // EPSS scores and the CISA KEV list, then the page is drawn again with them
+};
+</script>
+</body>
+</html>

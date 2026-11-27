@@ -101,6 +101,10 @@ check("no session: api -> 401", nobody.call("GET", "/api/state")[0] == 401)
 st, page = nobody.call("GET", "/", raw=True)
 check("no session: page is the login form", st == 200 and b"Sign in" in page and b"api/login" in page)
 check("health stays open", nobody.call("GET", "/api/health")[0] == 200)
+st, page = nobody.call("GET", "/new/", raw=True)
+check("no session: the new-look site is the login form too", st == 200 and b"Sign in" in page)
+st, page = nobody.call("GET", "/app.js", raw=True)
+check("no session: the app code is the login form too", st == 200 and b"class StorageService" not in page)
 
 # ---------------------------------------------------------------- roles
 for name, role, must in [("ed1", "editor", False), ("view1", "viewer", False), ("temp1", "editor", True)]:
@@ -330,6 +334,17 @@ riskS = {"weights": {"obs": 0.30, "asset": 0.25, "exposure": 0.20, "epss": 0.15,
 check("risk model: editor cannot save it", ed.call("PUT", "/api/collections/gov_risk_settings", {"data": riskS, "baseRevision": None})[0] == 403)
 st, r = admin.call("PUT", "/api/collections/gov_risk_settings", {"data": riskS, "baseRevision": None})
 check("risk model: administrator can save it", st == 200, (st, r))
+# New-look site (v4.39): its pages are served after sign-in; its priority model is the administrators', like the risk model
+st, page = admin.call("GET", "/new/", raw=True)
+check("new-look site: served after sign-in", st == 200 and b"CyberView" in page and b'<base href="../">' in page, st)
+st, page = admin.call("GET", "/app.js", raw=True)
+check("app code: served after sign-in (shared by both sites)", st == 200 and b"class StorageService" in page and b"class App" in page, st)
+st, page = admin.call("GET", "/", raw=True)
+check("classic site: loads the shared app code", st == 200 and b'src="app.js' in page, st)
+pm = {"preset": "custom", "custom": {"w": {"exploited": 40, "epss": 10, "severity": 10, "machine": 20, "exposure": 20, "eol": 0}, "cut": {"1": 75, "2": 55, "3": 35}, "kevFloor": 2}}
+check("priority model: editor cannot save it", ed.call("PUT", "/api/collections/gov_priority_model", {"data": pm, "baseRevision": None})[0] == 403)
+st, r = admin.call("PUT", "/api/collections/gov_priority_model", {"data": pm, "baseRevision": None})
+check("priority model: administrator can save it, everyone reads it", st == 200 and vw.call("GET", "/api/state")[1].get("gov_priority_model", {}).get("data", {}).get("preset") == "custom", (st, r))
 st, r = ed.call("PUT", "/api/collections/gov_risk_history", {"data": [{"date": "2026-11-25", "team": "ALL", "open": 3, "total": 12}], "baseRevision": None})
 check("risk history: an editor can save the daily snapshot array", st == 200 and ed.call("GET", "/api/state")[1]["gov_risk_history"]["data"][0]["open"] == 3, (st, r))
 

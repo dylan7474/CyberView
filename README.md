@@ -4,7 +4,7 @@ CyberView shows a security or infrastructure team where to focus. It joins your 
 
 - **One page of setup for your organisation:** teams, how machine names are matched, and the rules that suggest an owner for new machines (⚙ Organisation setup). Nothing about any one organisation is built into the code.
 - **Runs on your own server:** three small containers (web app, MariaDB, HTTPS proxy), built from Debian packages, with users and roles. The Qualys and Automox connections are read-only.
-- **Or with no server at all:** open `index.html` in a browser and the data stays in that browser. That is enough to try it with CSV exports.
+- **Or with no server at all:** open `index.html` (it loads `app.js` beside it) in a browser and the data stays in that browser. That is enough to try it with CSV exports.
 - **Never colour alone:** every status has a word or a symbol, so it works for colour-blind readers and in print.
 - **Simple by default:** most people only need four pages (Dashboard, Patch Plan, Team Risk Report, End of Life Report); one click on **Advanced** opens the rest.
 
@@ -30,6 +30,31 @@ Then open the portal, switch to **Advanced** (top of the sidebar), create the ad
 - Everything you change stays in your browser until **↺ Reset demo** (start again) or **Leave demo** (remove it). It is kept apart from any real data in the same browser. Restoring a real backup is refused in the demo, so real data cannot end up mixed with ACME's.
 
 **Nothing in the demo is real.** Machine names, check numbers (QIDs 9xxxxx), titles, owners and figures are invented. The CVE numbers are real public ones, so *Public fix data* can look them up. Users, roles and the History page need the real server, so they are not in the demo.
+
+## New look (preview, v4.39)
+
+**`/new/`** on your server (demo: **https://dylan7474.github.io/CyberView/new/?demo**) is a second, simpler front end over the **same data, users and rules**. The classic site stays exactly as it is; a link at the top of each goes to the other.
+
+It is four steps, left to right, with one report at the end:
+
+1. **Data — is it fresh?** Each source (Qualys, Automox, end-of-life dates, EPSS, Red Hat, the register) with its last run, result (✓ OK / ⚠ Check) and ⟳ Sync now. The same rows as the classic Data Health page.
+2. **Machines — is it right?** The machines that make the work list wrong: no team, tier not set, exposure unknown, not seen lately, plus a search over every machine. **✎** opens the same machine editor as the classic site, and it is on every machine name in steps 2 and 4.
+3. **Priority model — what matters?** Pick one of six recognised ways to rank findings, or your own sliders. A **pyramid** shows how many findings (and machines) land in P1–P4 as you change it, and how many move up or down compared with the classic site's priorities. **Save as the team's model** (administrators) makes it the work list's order for everyone.
+4. **Work list — what to fix.** One row per fix for the chosen team, worst first: priority and its word, why (the reasons, or the slider points), machines, due date and overdue, Automox (⟳ will patch / ⚠ blocked / ✋ manual), CISA KEV and EPSS, and any open task. Open a row for its machines. Filters: P1 / P1–P2 / P1–P3, ⚑ Known exploited only, ✖ Overdue only, search. CSV and Print. Risk-accepted machines and findings are left out, as in the official numbers.
+
+The models (step 3), each with its own due days (days from first found, or from go-live for older findings):
+
+| Model | How a finding gets P1–P4 |
+|---|---|
+| **CyberView status rules** (default) | Exactly the classic site's priorities and due dates (Organisation setup → Status rules). |
+| **CISA SSVC** | CISA's decision tree (Exploitation, Automatable, Technical impact, Mission & well-being → Act / Attend / Track* / Track), all 36 outcomes from CERT/CC's published table. The answers come from data CyberView holds: exploitation = CISA KEV or Qualys threat intel (active) / public exploit or exploit kit (PoC); automatable = Qualys wormable or remote code execution; total impact = remote code execution or CVSS 9+; mission = the machine's tier. These are approximations and the page says so. |
+| **CVSS severity bands** | FIRST's bands: Critical 9.0+, High 7.0+, Medium 4.0+, Low. Qualys severity stands in (marked ≈) when there is no CVSS score. |
+| **EPSS first** | The chance of exploitation in 30 days, with three cut-offs on sliders (default 50% / 10% / 1%). |
+| **Qualys TruRisk (QDS)** | Qualys's detection score in its bands: 90+, 70+, 40+. |
+| **CISA KEV deadlines** | BOD 22-01: on CISA's KEV list = P1 (14 days from when CISA listed it, the finding was found, or go-live, whichever is latest); BOD 19-02: critical / high on internet-facing machines = P2 / P3 (15 / 30 days); everything else P4. |
+| **Custom: our weights** | Six sliders (known exploited, EPSS, severity, machine tier, exposure, end-of-life OS) that always add up to 100%, three cut-offs from score to priority, and a floor for known-exploited findings. Starts from the classic Risk Report's weights. |
+
+The chosen model is saved in `gov_priority_model` (administrators only on the server; included in backups). The classic pages never read it, so trying models cannot change what the team sees there. How it is built: the classic site's code moved unchanged from `index.html` into **`app.js`**, which both sites load; the new site uses its data, Automox plan and machine editor directly (`new/index.html`).
 
 ## Overview
 

@@ -30,7 +30,7 @@ import kev
 import relational
 import rules
 
-VERSION = "4.44.0"
+VERSION = "4.45.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -515,17 +515,20 @@ def q_worklist(team: str = "ALL", at: str = "", limit: int = 500):
 
 
 @app.get("/api/q/findings")
-def q_findings(team: str = "ALL", qid: str = "", asset: str = "", at: str = ""):
-    """A team's counted findings with their priority and due date, optionally for one QID or one machine."""
+def q_findings(team: str = "ALL", qid: str = "", asset: str = "", at: str = "", full: int = 0, official: int = 1):
+    """A team's counted findings with their priority and due date, optionally for one QID or one machine.
+    full=1: each finding as stored plus the server's answers (what the new-look site works from, v4.45).
+    official=0: include risk-accepted machines (a machine's own page)."""
     now = _q_now(at)
     with conn_ctx() as c, c.cursor() as cur:
         D = _q_data(cur)
-    dets, _ = rules.scope(D, team, now, _q_ann(D, now))
+    dets, _ = rules.scope(D, team, now, _q_ann(D, now), official=bool(official))
     if qid:
         dets = [d for d in dets if d["qid"] == qid]
     if asset:
         dets = [d for d in dets if d["asset"] == asset]
-    return {"team": team, "at": now, "count": len(dets), "findings": dets}
+    rows = [rules.full_row(d) if full else rules.public(d) for d in dets]
+    return Response(json.dumps({"team": team, "at": now, "count": len(rows), "findings": rows}, separators=(",", ":")), media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/q/vectors")

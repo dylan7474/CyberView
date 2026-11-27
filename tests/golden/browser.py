@@ -54,6 +54,7 @@ class Browser:
         self.mode = mode
         self.errors = []
         self.refused = set()
+        self.local = []          # the page's own requests (the tests check what a page downloads)
         self.width, self.height = width, height
 
     async def __aenter__(self):
@@ -123,6 +124,7 @@ class Browser:
         rid, url = p["requestId"], p["request"]["url"]
         try:
             if is_local(url):
+                self.local.append(url)
                 if self.mode == "record" and "responseStatusCode" in p:
                     await self.call("Fetch.continueResponse", requestId=rid)
                 else:

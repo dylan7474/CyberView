@@ -347,7 +347,7 @@ details.tv th:first-child, details.tv td:first-child { text-align: left; }
 
 <div id="drawer" class="drawer hidden" onclick="if (event.target === this) UI.closeDrawer()"><div class="panel" id="drawer-panel" role="dialog" aria-modal="true" aria-label="Details"></div></div>
 
-<script src="app.js?v=4.44.0"></script>
+<script src="app.js?v=4.45.0"></script>
 <script>
 // Phosphor Icons 2.1.1 (MIT licence, phosphoricons.com): only the icons this page uses, inline, so they show without the internet.
 // d- = duotone (large), b- = bold (small). Drawn as inline SVG (not <use href="#...">, which <base href="../"> would point at the wrong page).
@@ -540,7 +540,7 @@ const UI = {
     async start() {
         document.querySelectorAll('i[data-ic]').forEach(el => { el.outerHTML = ic(el.dataset.ic); });
         { const v = document.getElementById('nx-version'); if (v) v.textContent = `New look · v${APP_VERSION}`; }
-        { const f = document.getElementById('nx-foot'); if (f) f.textContent = `CyberView v${APP_VERSION} · ${APP_VERSION_DATE} · new look (preview); the classic site runs the same release.`; }
+        this.paintFoot();
         // the server runs a newer release than this page (it was open during an update): say so, once
         if (StorageService.mode === 'server') fetch('api/health', { cache: 'no-store' }).then(r => r.json()).then(h => { if (h.version && h.version !== APP_VERSION) StorageService.toast(`CyberView v${h.version} is on the server; this page is v${APP_VERSION}. Reload to update.`); }).catch(() => { });
         this.applyTheme();
@@ -553,6 +553,11 @@ const UI = {
         window.addEventListener('hashchange', () => this.fromHash());
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.getElementById('drawer').classList.contains('hidden') && document.getElementById('modal-edit-asset').classList.contains('hidden')) this.closeDrawer(); });
         this.fromHash();
+    },
+    paintFoot() {
+        const f = document.getElementById('nx-foot'); if (!f) return;
+        const src = StorageService.mode !== 'server' ? 'data in this browser' : this.q.state === 'on' ? 'priorities worked out by the server' : this.q.state === 'unknown' ? 'server' : 'priorities worked out in this browser (the server\'s answers are not available)';
+        f.textContent = `CyberView v${APP_VERSION} · ${APP_VERSION_DATE} · new look (preview); the classic site runs the same release · ${src}`;
     },
     fromHash() {
         const h = (location.hash || '').replace('#', ''), v = ['home', 'data', 'machines', 'model', 'work'].includes(h) ? h : 'home';
@@ -567,7 +572,7 @@ const UI = {
         const s = document.getElementById('theme'); if (s) s.value = t;
     },
     // after an edit, a sync or new scores: build again and redraw what is on screen
-    refresh() { this.stale = true; this.render(); if (this.dstack.length && !document.getElementById('drawer').classList.contains('hidden')) this.paintDrawer(); },
+    refresh() { this.stale = true; this.qGen++; this.render(); if (this.dstack.length && !document.getElementById('drawer').classList.contains('hidden')) this.paintDrawer(); },
 
     // ---------- shared data: the team's open findings, each with the model's view
     async load() {
@@ -577,12 +582,58 @@ const UI = {
         return this.data;
     },
     async build(team) {
-        const sd = await app.scopedData({ owner: team, official: true, whole: true });
+        // v4.45 (database stage 4): on the server, only this team's findings, with the server's priorities and due dates
+        const srv = await this.serverFindings({ team });
+        const sd = srv ? { dets: srv.dets, regMap: srv.regMap, vd: { qmap: srv.qmap }, hidden: {}, source: 'server', total: srv.total }
+            : await app.scopedData({ owner: team, official: true, whole: true });
         let plan = null;
-        if (Demo.api()) { try { const PB = await app.planBuckets(team, 'ALL', true, true); if (PB) { plan = new Map(); ['manual', 'blocked', 'will', 'done'].forEach(b => PB.B[b].forEach(x => plan.set(x.asset + '|' + x.qid, { b, why: x._why, when: x._when || 0 }))); } } catch (e) { console.warn('[new] plan', e); } }
+        if (srv) plan = await this.planFor(sd.dets, sd.regMap, sd.vd.qmap);
+        else if (Demo.api()) { try { const PB = await app.planBuckets(team, 'ALL', true, true); if (PB) { plan = new Map(); ['manual', 'blocked', 'will', 'done'].forEach(b => PB.B[b].forEach(x => plan.set(x.asset + '|' + x.qid, { b, why: x._why, when: x._when || 0 }))); } } catch (e) { console.warn('[new] plan', e); } }
         const RS = RiskModel.settings();
         const facts = sd.dets.map(d => PriorityModel.facts(d, sd.regMap.get(d.asset), sd.vd.qmap.get(d.qid) || {}, RS));
         return { team, ...sd, plan, facts, at: Date.now() };
+    },
+    // ---- v4.45: the server's answers (/api/q). null = not on a server, or the server cannot answer (then the page works as before)
+    q: { state: 'unknown', qmap: null, qmapRev: -1 },
+    async serverFindings({ team = 'ALL', asset = '', official = 1 }) {
+        if (StorageService.mode !== 'server' || this.q.state === 'off') return null;
+        try {
+            const u = `api/q/findings?full=1&team=${encodeURIComponent(team)}${asset ? '&asset=' + encodeURIComponent(asset) : ''}&official=${official}`;
+            const r = await fetch(u, { cache: 'no-store' });
+            if (r.status === 404) { this.q.state = 'off'; return null; }          // an older server: never ask again
+            if (!r.ok) { this.q.state = 'unavailable'; return null; }            // 503: its tables are not in use right now
+            const j = await r.json();
+            this.q.state = 'on';
+            const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), regMap = new Map(reg.map(x => [x.normalizedName, x]));
+            // the order the browser has always worked in (register order, then each machine's findings as stored), so rows
+            // that rank equal stay in the same place whichever side worked them out (the sort below is stable)
+            const at = new Map(reg.map((x, i) => [x.normalizedName, i]));
+            const dets = j.findings.sort((x, y) => (at.get(x.asset) ?? 1e9) - (at.get(y.asset) ?? 1e9));
+            return { dets, regMap, qmap: await this.qidMap(), total: j.count };
+        } catch (e) { console.warn('[new] server answers', e); this.q.state = 'unavailable'; return null; }
+    },
+    // the QID catalogue (titles, CVEs, threat intel): small, fetched once per data change, with the EPSS / KEV marks
+    async qidMap() {
+        if (this.q.qmap && this.q.qmapRev === this.qGen) return this.q.qmap;
+        const l = await VulnStore.all('qids');
+        const m = new Map(l.map(x => [String(x.qid), x]));
+        Epss.attach(m);
+        this.q.qmap = m; this.q.qmapRev = this.qGen;
+        return m;
+    },
+    qGen: 0,
+    // the Automox plan for these findings (the classic Patch Plan's own rules, finding by finding)
+    async planFor(dets, regMap, qmap) {
+        if (!Demo.api()) return null;
+        let A = null; try { A = await AutomoxService.ensure(); } catch (e) { A = null; }
+        if (!A) return null;
+        const m = AutomoxService.match(), S = StatusEngine.settings(), end = Demo.now() + (+S.patchPlanDays || 7) * 864e5, auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
+        const plan = new Map();
+        for (const d of dets) {
+            const r = regMap.get(d.asset) || {}, c = App.planClassify(d, r, m, end, S, qmap.get(String(d.qid)) || {}, auto.has(String(r.owner || '').toLowerCase()));
+            plan.set(d.asset + '|' + d.qid, { b: c.b, why: c.why, when: c.when || 0 });
+        }
+        return plan;
     },
     // every team (for a fix or machine outside the chosen team); built once per data change
     async allData() { if (this.team === 'ALL') return this.load(); if (!this._all || this.stale) this._all = await this.build('ALL'); return this._all; },
@@ -636,6 +687,7 @@ const UI = {
             if (seq !== this.seq) return;
             el.innerHTML = html;
             if (this.view === 'model') this.paintModel();
+            this.paintFoot();
             this.bindCharts(el);
             if (this.view === 'home' || this.view === 'work') this.paintSteps();      // badges follow the newest numbers
         } catch (e) { console.error('[new]', e); if (seq === this.seq) el.innerHTML = `<div class="card pad"><span class="st bad">✗ Could not draw this page</span> <span class="t2">${esc(e.message)}</span></div>`; }
@@ -689,10 +741,15 @@ const UI = {
             + `<div class="grid g3">${rows.map(card).join('')}</div>
             <div class="card pad mt"><h2>What CyberView holds now</h2><div class="grid g4 small">
                 <div><div class="muted">Machines in the register</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(reg.length)}</div></div>
-                <div><div class="muted">Open findings (every team)</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(D.vd.dets.length)}</div></div>
+                <div><div class="muted">Open findings (every team)</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(await this.allOpen(D))}</div></div>
                 <div><div class="muted">Vulnerabilities (QIDs)</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(qids)}</div></div>
                 <div><div class="muted">With an EPSS score · on CISA KEV</div><div class="mono" style="font-size:20px;font-weight:700">${fmtNum(scored)} · ${fmtNum(kev)}</div></div>
             </div></div>`;
+    },
+    async allOpen(D) {
+        if (D.vd.dets) return D.vd.dets.length;
+        try { const r = await fetch('api/q/summary?team=ALL', { cache: 'no-store' }); if (r.ok) return (await r.json()).findings; } catch (e) { }
+        return D.total || 0;
     },
     async sync(btn, code) {
         btn.disabled = true; btn.innerHTML = ic('b-arrows-clockwise') + ' Running…';
@@ -1165,9 +1222,13 @@ const UI = {
 
     // ---- a machine: everything open on it, what Automox will do, who sees it, tasks and comments
     async machineHTML(name) {
-        const D = await this.allData(), reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), r = reg.find(x => x.normalizedName === name) || { normalizedName: name };
+        const reg = StorageService.peek(StorageService.KEYS.ASSET_REGISTER), r = reg.find(x => x.normalizedName === name) || { normalizedName: name };
+        // v4.45: on the server, only this machine's findings (risk-accepted machines included, as on its classic page)
+        const srv = await this.serverFindings({ team: 'ALL', asset: name, official: 0 });
+        let D, dets;
+        if (srv) { D = { dets: srv.dets, regMap: srv.regMap, vd: { qmap: srv.qmap }, plan: await this.planFor(srv.dets, srv.regMap, srv.qmap), source: 'server' }; dets = srv.dets; }
+        else { D = await this.allData(); dets = D.vd.byAsset.get(name) || []; }
         const vd = D.vd, RS = RiskModel.settings(), now = Demo.now(), goLive = StatusEngine.time(StatusEngine.settings().goLive);
-        const dets = vd.byAsset.get(name) || [];
         const sc = dets.map(d => { const q = vd.qmap.get(d.qid) || {}, F = PriorityModel.facts(d, r, q, RS); return { d, F, e: PriorityModel.evaluate(d, F, this.saved, now, goLive) }; });
         const groups = this.groups(sc, D);
         let dev = null; if (Demo.api()) { try { if (await AutomoxService.ensure()) dev = AutomoxService.devFor(name); } catch (e) { dev = null; } }

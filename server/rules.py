@@ -226,20 +226,30 @@ def annotate(D, now_ms):
         backlog, du = due(d, p, S, SLA, r, now_ms)
         out.append({"k": d.get("k"), "asset": d.get("asset"), "qid": str(d.get("qid")), "tier": t, "p": p, "due": int(du), "backlog": backlog,
                     "overdue": du < now_ms, "exploited": is_exploited(q), "epss": q.get("epss") or 0, "sev": d.get("sev"), "qvs": d.get("qvs"),
-                    "patchable": bool(d.get("patchable")), "first": d.get("first")})
+                    "patchable": bool(d.get("patchable")), "first": d.get("first"), "_doc": d})
     return out, reg, ex
 
 
-def scope(D, team, now_ms, ann=None):
+def scope(D, team, now_ms, ann=None, official=True):
     """scopedData({owner: team, official: true, whole: true}): the team's live machines, without risk-accepted machines.
     ann: annotate(D, now_ms) worked out already (the server caches it)."""
     found, reg, ex = ann or annotate(D, now_ms)
     live = [r for r in D["register"] if isinstance(r, dict) and r.get("status") != "Retired"]
     team_scope = [r for r in live if team == "ALL" or r.get("owner") == team]
-    accepted = {r.get("normalizedName") for r in team_scope if machine_accepted(r, ex)}
+    accepted = {r.get("normalizedName") for r in team_scope if official and machine_accepted(r, ex)}
     names = {r.get("normalizedName") for r in team_scope} - accepted
     dets = [f for f in found if f["asset"] in names]
     return dets, {"machines": len(accepted & {f["asset"] for f in found})}
+
+
+def full_row(f):
+    """The finding as stored, with the server's answers on top (tier, p, due, backlog, overdue, exploited, epss): what a page
+    needs to show it and to apply any other priority model to it."""
+    return {**f["_doc"], **{k: v for k, v in f.items() if k != "_doc"}}
+
+
+def public(f):
+    return {k: v for k, v in f.items() if k != "_doc"}
 
 
 def summary(dets):

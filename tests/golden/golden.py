@@ -117,11 +117,14 @@ async def probe_pages(b, base, demo):
     await asyncio.sleep(1)
     await b.js(PROBE)
     classic = await b.js("goldenClassic()", 300)
+    b.local.clear()
     await b.goto(f"{base}/new/{q}", 2)
     await b.wait_for("window.app && typeof UI !== 'undefined' && UI.saved && UI.data && Epss.ready", 180)
     await asyncio.sleep(1)
     await b.js(PROBE)
     new = await b.js("goldenNew()", 300)
+    b.new_requests = list(b.local)
+    b.new_source = await b.js("UI.q.state")
     return {"classic": classic, "new": new}
 
 
@@ -273,6 +276,12 @@ async def server(url, update, user, password):
         if st != 200:
             raise SystemExit(f"browser sign-in failed: {st}")
         got = await probe_pages(b, url.rstrip("/"), demo=False)
+        # v4.45 stage 4: the new site took its numbers from the server's answers, without the whole download
+        whole = [u for u in b.new_requests if "/api/vuln/detections" in u]
+        asked = [u for u in b.new_requests if "/api/q/findings" in u]
+        q_ok = b.new_source == "on" and asked and not whole
+        print(f"  {'PASS' if q_ok else 'FAIL'} the new site used the server's answers ({len(asked)} team requests) and never downloaded every finding{' (it did: ' + str(len(whole)) + ')' if whole else ''} [source: {b.new_source}]")
+        ok &= bool(q_ok)
         # v4.44 stage 3: the server's rules against the browser's, finding by finding, for every team
         await b.goto(url.rstrip("/") + "/", 2)
         await b.wait_for("window.app && StorageService.live().length > 0 && Epss.ready && Epss._kevDone", 180)

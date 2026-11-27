@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.40.0 · 27 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.41.0 · 27 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -1111,7 +1111,7 @@
         </div>
     </main>
 
-    <script src="app.js?v=4.40.0"></script>
+    <script src="app.js?v=4.41.0"></script>
     <script>
         window.onload = async () => {
             if (window.app) return;
@@ -1129,6 +1129,9 @@
                 try { await Demo.firstLoad(window.app); } catch (e) { console.error('[Demo]', e); StorageService.toast('The demo could not be built: ' + e.message); }
                 window.app.fillTeamSelects(); window.app.switchView('dashboard'); Demo.paintBanner();
             }
+            // v4.41: ?open=qid:<QID> or ?open=asset:<name> opens that fix or machine page (links from the new-look site)
+            { const o = new URLSearchParams(location.search).get('open') || '', i = o.indexOf(':');
+              if (i > 0) { const k = o.slice(0, i), v = o.slice(i + 1); if (k === 'qid') window.app.inspectQid(v); else if (k === 'asset') window.app.inspectAsset(v); } }
             Epss.warm();        // v4.35: fetch EPSS scores + the CISA KEV list, then re-rank the current page
         };
     </script>

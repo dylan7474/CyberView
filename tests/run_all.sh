@@ -19,7 +19,7 @@ python3 tests/golden/golden.py check || fail=1
 [ "${1:-}" = "--no-server" ] && exit $fail
 
 ENVF=$(mktemp)
-printf 'DB_PASSWORD=%s\nBIND_ADDRESS=127.0.0.1\nHTTPS_PORT=18943\nHTTP_PORT=18980\nCERT_HOST=localhost\nEOL_SYNC_HOURS=0\nREDHAT_SYNC_HOURS=0\nEPSS_SYNC_HOURS=0\nAUTOMOX_SYNC_HOURS=0\n' "$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$ENVF"
+printf 'DB_PASSWORD=%s\nBIND_ADDRESS=127.0.0.1\nHTTPS_PORT=18943\nHTTP_PORT=18980\nCERT_HOST=localhost\nEOL_SYNC_HOURS=0\nREDHAT_SYNC_HOURS=0\nEPSS_SYNC_HOURS=0\nAUTOMOX_SYNC_HOURS=0\nKEV_SYNC_HOURS=0\n' "$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$ENVF"
 cleanup() {
   docker compose --env-file "$ENVF" -p cvtest down -v --rmi local >/dev/null 2>&1
   docker run --rm -v "$PWD":/w alpine sh -c 'rm -rf /w/certs' >/dev/null 2>&1 || true     # the proxy writes its self-signed cert as root

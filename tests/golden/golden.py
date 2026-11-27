@@ -204,10 +204,14 @@ async def server(url, update, user, password):
         raise SystemExit(f"restore refused: {st} {r}")
     print(f"  loaded the fixture: {len(sent)} collections, {len(F['detections'])} findings, {len(F['qids'])} QIDs")
     # v4.45.1: no CISA KEV list on the server yet -> no server answers (the new site then works the old way)
-    st, r = api.call("GET", "/api/q/summary?team=ALL")
-    nokev = st == 503 and "KEV" in json.dumps(r)
-    print(f"  {'PASS' if nokev else 'FAIL'} without the CISA KEV list the server gives no answers ({st})")
-    ok_kev = nokev
+    st0, ks = api.call("GET", "/api/kev/status")
+    if (ks or {}).get("last"):
+        print("  SKIP without the CISA KEV list the server gives no answers: this server already has the list (set KEV_SYNC_HOURS=0 for a test stack)")
+        ok_kev = True
+    else:
+        st, r = api.call("GET", "/api/q/summary?team=ALL")
+        ok_kev = st == 503 and "KEV" in json.dumps(r)
+        print(f"  {'PASS' if ok_kev else 'FAIL'} without the CISA KEV list the server gives no answers ({st})")
     net = load(NET)
     kevcat = next((json.loads(v["body"]) for u, v in net.items() if "kev" in u.lower()), None)
     ep = {}

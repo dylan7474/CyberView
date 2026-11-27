@@ -198,6 +198,18 @@ async def server(url, update, user, password):
         raise SystemExit(f"restore refused: {st} {r}")
     print(f"  loaded the fixture: {len(sent)} collections, {len(F['detections'])} findings, {len(F['qids'])} QIDs")
     ok = True
+    # v4.42 stage 1: the relational tables, rebuilt from the fixture, hold exactly the same (every document and column checked)
+    want = {"assets": len(sent.get("gov_asset_register", [])), "findings": len(F["detections"]), "vulns": len(F["qids"]), "tasks": len(sent.get("gov_remediation", [])),
+            "notes": len(sent.get("gov_asset_notes", [])), "risk_acceptances": len(sent.get("gov_risk_acceptances", [])), "review_queue": len(sent.get("gov_review_queue", []))}
+    st, rb = api.call("POST", "/api/admin/relational/rebuild")
+    rel_ok = st == 200 and rb.get("verify", {}).get("ok") and all(rb["build"]["counts"].get(k) == v for k, v in want.items())
+    print(f"  {'PASS' if rel_ok else 'FAIL'} relational tables rebuilt from the fixture and verified ({', '.join(f'{k} {v}' for k, v in want.items())})")
+    if not rel_ok:
+        print("     ", json.dumps(rb)[:1500])
+    for c in (rb.get("verify", {}).get("checks", []) if isinstance(rb, dict) else []):
+        if not c["ok"]:
+            print(f"      ✗ {c['name']} {c['detail']}")
+    ok &= bool(rel_ok)
     # API round trip: what goes in comes back out unchanged (the contract stage 2 must keep)
     st, state = api.call("GET", "/api/state")
     bad = [n for n, v in sent.items() if state.get(n, {}).get("data") != v]
@@ -224,6 +236,14 @@ async def server(url, update, user, password):
     print(f"  {'PASS' if logged else 'FAIL'} the change is in the history")
     print(f"  {'PASS' if st4 == 409 else 'FAIL'} a save from an out-of-date copy is refused (409, got {st4})")
     ok &= saved_ok and logged and st4 == 409
+    st5, rb2 = api.call("POST", "/api/admin/relational/rebuild")
+    st6, rel = api.call("GET", "/api/admin/relational")
+    follows = st5 == 200 and rb2["verify"]["ok"] and st6 == 200 and rel.get("verify", {}).get("ok")
+    print(f"  {'PASS' if follows else 'FAIL'} a rebuild after the save picks up the edit and still verifies")
+    ok &= bool(follows)
+    st7, _ = Api(url).call("POST", "/api/admin/relational/rebuild")
+    print(f"  {'PASS' if st7 in (401, 403) else 'FAIL'} the rebuild is refused without signing in ({st7})")
+    ok &= st7 in (401, 403)
     api.call("PUT", "/api/collections/gov_asset_register", {"data": reg, "baseRevision": again["gov_asset_register"]["revision"]})     # put it back
     # both sites, signed in, from the server's data
     net = load(NET)

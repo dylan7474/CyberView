@@ -1,5 +1,7 @@
         // CyberView engine and classic pages (v4.39.0): moved out of index.html unchanged so the new-look site (new/index.html)
         // can use the very same data, rules and editing code. index.html loads this file, then starts the classic app.
+        // The release, shown by both sites (classic sidebar, new-look header). Bump it with server/app.py VERSION and the ?v= on both pages.
+        const APP_VERSION = '4.42.0', APP_VERSION_DATE = '27 Nov 2026';
         // ==========================================
         // SINGLE INSTANCE CLASSES
         // ==========================================

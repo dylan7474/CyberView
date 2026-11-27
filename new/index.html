@@ -297,7 +297,7 @@ details.tv th:first-child, details.tv td:first-child { text-align: left; }
     <div class="wrap topbar">
         <button class="brand" onclick="UI.go('home')" title="Home">
             <span class="logo"><i data-ic="d-eye"></i></span><b>CyberView</b>
-            <span class="tag hide-sm">New look · preview</span>
+            <span class="tag hide-sm" id="nx-version" title="The release: the same number as the classic site">New look · preview</span>
         </button>
         <span class="spacer"></span>
         <label class="ctl" title="Every step shows this team's machines and work">Team
@@ -320,6 +320,7 @@ details.tv th:first-child, details.tv td:first-child { text-align: left; }
         <div id="page"><p class="loading">Loading CyberView…</p></div>
     </div>
 </main>
+<footer class="wrap tiny muted" style="padding-bottom:24px" id="nx-foot"></footer>
 
 <!-- The classic site's machine dialog, with the same ids, so editing works exactly as it does there (app.editAsset / app.saveAssetEdit). -->
 <div id="modal-edit-asset" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="edit-asset-title">
@@ -346,7 +347,7 @@ details.tv th:first-child, details.tv td:first-child { text-align: left; }
 
 <div id="drawer" class="drawer hidden" onclick="if (event.target === this) UI.closeDrawer()"><div class="panel" id="drawer-panel" role="dialog" aria-modal="true" aria-label="Details"></div></div>
 
-<script src="app.js?v=4.41.1"></script>
+<script src="app.js?v=4.42.0"></script>
 <script>
 // Phosphor Icons 2.1.1 (MIT licence, phosphoricons.com): only the icons this page uses, inline, so they show without the internet.
 // d- = duotone (large), b- = bold (small). Drawn as inline SVG (not <use href="#...">, which <base href="../"> would point at the wrong page).
@@ -538,6 +539,10 @@ const UI = {
     // ---------- start
     async start() {
         document.querySelectorAll('i[data-ic]').forEach(el => { el.outerHTML = ic(el.dataset.ic); });
+        { const v = document.getElementById('nx-version'); if (v) v.textContent = `New look · v${APP_VERSION}`; }
+        { const f = document.getElementById('nx-foot'); if (f) f.textContent = `CyberView v${APP_VERSION} · ${APP_VERSION_DATE} · new look (preview); the classic site runs the same release.`; }
+        // the server runs a newer release than this page (it was open during an update): say so, once
+        if (StorageService.mode === 'server') fetch('api/health', { cache: 'no-store' }).then(r => r.json()).then(h => { if (h.version && h.version !== APP_VERSION) StorageService.toast(`CyberView v${h.version} is on the server; this page is v${APP_VERSION}. Reload to update.`); }).catch(() => { });
         this.applyTheme();
         const T = OrgSettings.teams();
         let t = null; try { t = localStorage.getItem('cyberview.new.team'); } catch (e) { }

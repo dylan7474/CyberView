@@ -10,6 +10,7 @@ import hmac
 import json
 import os
 import secrets
+import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -25,8 +26,9 @@ import eol
 import epss
 import redhat
 import qualys
+import relational
 
-VERSION = "4.41.1"
+VERSION = "4.42.0"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -174,9 +176,24 @@ def migrate(wait_seconds=90):
 app = FastAPI(title="CyberView", version=VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
 
+def rebuild_relational(why="start-up"):
+    """v4.42 (database stage 1): fill the new relational tables from the old storage and check them. They are not
+    used by the app yet; a failure is logged and never stops the portal."""
+    try:
+        with conn_ctx() as c, c.cursor() as cur:
+            meta = relational.rebuild(cur)
+            res = relational.verify(cur)
+        print(f"[relational] rebuilt ({why}) in {meta['seconds']} s: {meta['counts']}; check {'OK' if res['ok'] else 'FAILED: ' + '; '.join(x['name'] for x in res['checks'] if not x['ok'])}", flush=True)
+        return meta, res
+    except Exception as e:      # noqa: BLE001 - stage 1 must never break the portal
+        print(f"[relational] rebuild failed ({why}): {e}", flush=True)
+        return None, {"ok": False, "checks": [{"name": "rebuild", "ok": False, "detail": str(e)[:300]}]}
+
+
 @app.on_event("startup")
 def _startup():
     migrate()
+    threading.Thread(target=rebuild_relational, daemon=True).start()
     automox.init(conn_ctx, audit)
     qualys.init(conn_ctx, audit)
     eol.init(conn_ctx, audit)
@@ -353,6 +370,28 @@ def new_redirect():
 def new_index():
     """v4.39: the new-look site (preview): the same data and rules, one work list per team."""
     return FileResponse(STATIC_DIR / "new" / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/api/admin/relational")
+def relational_status(request: Request):
+    """v4.42: what the last rebuild of the relational tables found (administrators)."""
+    u = getattr(request.state, "user", None) or {}
+    if u.get("role") != "admin" and not u.get("open"):
+        return JSONResponse({"error": "Administrators only"}, status_code=403)
+    with conn_ctx() as c, c.cursor() as cur:
+        return relational.status(cur)
+
+
+@app.post("/api/admin/relational/rebuild")
+def relational_rebuild(request: Request):
+    """v4.42: rebuild the relational tables from the current data now and check them (administrators)."""
+    u = getattr(request.state, "user", None) or {}
+    if u.get("role") != "admin" and not u.get("open"):
+        return JSONResponse({"error": "Administrators only"}, status_code=403)
+    meta, res = rebuild_relational("asked by " + current_user(request))
+    with conn_ctx() as c, c.cursor() as cur:
+        audit(cur, current_user(request), "relational-rebuild", "ok" if res.get("ok") else "FAILED")
+    return {"build": meta, "verify": res}
 
 
 @app.get("/api/health")

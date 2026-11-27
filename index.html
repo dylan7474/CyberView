@@ -77,7 +77,7 @@
                 <div class="min-w-0"><h1 class="text-lg font-bold tracking-tight text-slate-900 leading-tight">CyberView</h1>
                 <p id="org-name" class="text-xs text-slate-500 truncate"></p></div>
             </div>
-            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.37.0 · 25 Nov 2026</p>
+            <p id="app-version" class="text-[10px] text-slate-400 mt-3 font-mono" title="Bumped on every change, so you can tell when the site has updated">v4.38.3 · 27 Nov 2026</p>
             <p id="save-status" class="text-[10px] text-slate-500 mt-1" title="Where this data is kept"></p>
             <div id="account-box" class="hidden mt-3 text-xs">
                 <div class="text-slate-700"><span id="account-name" class="font-semibold"></span> <span id="account-role" class="ml-1 px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] uppercase"></span></div>
@@ -102,6 +102,7 @@
             <p class="nav-group simple-ok px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Reports</p>
             <button onclick="app.switchView('status')" class="nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🚦 Status</button>
             <button onclick="app.switchView('reports')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">📄 Team Risk Reports</button>
+            <button onclick="app.switchView('risk-report')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⚖️ Risk Report</button>
             <button onclick="app.switchView('eol')" class="simple-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">⏳ End of Life Report</button>
             <button onclick="app.switchView('automox')" class="server-only demo-ok nav-btn w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">🩹 Patch Coverage</button>
             <p class="nav-group px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Register and data</p>
@@ -503,6 +504,7 @@
                         <div>
                             <h2 class="text-2xl font-bold text-slate-800">🔎 CVE Lookup</h2>
                             <p class="text-sm text-gray-500 mt-1">Which machines have a CVE, and whether Automox has a fix for them. Paste one or more CVE numbers.</p>
+                            <p id="cve-expl-note" class="hidden text-xs text-red-900 mt-1">⚑ The Known exploited switch is on, but this page still lists every machine with the CVE open, so it never says "not affected" by mistake.</p>
                             <p class="text-xs text-gray-400 mt-1" id="cve-asof"></p>
                         </div>
                         <div class="flex flex-wrap items-center gap-2 print-hide">
@@ -555,6 +557,13 @@
                 <div><h3 class="text-xl font-semibold">Status rules</h3>
                 <p class="text-sm text-gray-600">How findings become priorities and due dates, and the limits the status checks use. The design is in <code>docs/vulnerability-status-design.md</code>; the README explains each rule.</p></div>
                 <div id="sr-body" class="space-y-4 text-sm"></div>
+            </section>
+
+            <section id="view-risk-model" class="view-section space-y-4">
+                <div class="settings-parts"></div>
+                <div><h3 class="text-xl font-semibold">Risk model</h3>
+                <p class="text-sm text-gray-600">The scoring behind the ⚖️ Risk Report: a weighted component score per finding (observed exploitation, asset criticality, exposure, EPSS, CVSS) times a Service Tier multiplier, with contextual modifiers. The defaults are industry-standard (the README spec); change them to suit your organisation. This never changes the P1–P4 action engine or the team Status.</p></div>
+                <div id="risk-model-body" class="space-y-4 text-sm"></div>
             </section>
 
             <section id="view-health" class="view-section space-y-6">
@@ -675,6 +684,23 @@
                     </div>
                     <div id="ax-status" class="mb-4 text-sm"></div>
                     <div id="ax-body"></div>
+                </div>
+            </section>
+
+            <section id="view-risk-report" class="view-section">
+                <div class="space-y-6" id="risk-report-body">
+                    <div id="risk-report-narrative" class="rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-900 px-5 py-4 text-sm leading-relaxed"></div>
+                    <div id="risk-report-kpis" class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3"></div>
+                    <div class="bg-white rounded-lg shadow border overflow-x-auto"><div class="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-2"><h3 class="text-lg font-semibold">Service tier × priority</h3><span class="text-xs text-gray-500">Click a cell to filter the queue below; click again to clear. The numbers are open findings.</span></div>
+                        <div class="p-3" id="risk-heatmap"></div></div>
+                    <div class="bg-white rounded-lg shadow border overflow-x-auto"><div class="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-2"><h3 class="text-lg font-semibold">Top 20 remediation targets <span class="text-sm font-normal text-gray-500">(grouped by CVE + service + priority; expand to see the hosts)</span></h3><span class="text-xs text-gray-500" id="risk-queue-filter"></span></div>
+                        <div id="risk-queue" class="overflow-x-auto"></div></div>
+                    <div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-2"><h3 class="text-lg font-semibold">Tier 0 crown jewels</h3><span class="text-xs text-gray-500">Identity, recovery, hypervisor and storage management — compromise of these is a full estate takeover or loss of recovery.</span></div>
+                        <div class="p-3" id="risk-crown"></div></div>
+                    <div class="bg-white rounded-lg shadow border"><div class="px-5 py-3 border-b flex flex-wrap items-center justify-between gap-2"><h3 class="text-lg font-semibold">Risk burn-down</h3>
+                        <span class="flex items-center gap-1 text-xs"><button onclick="app.riskTrendDays(30)" class="risk-trend-btn px-2 py-1 rounded border border-slate-800 bg-slate-800 text-white">30 d</button><button onclick="app.riskTrendDays(90)" class="risk-trend-btn px-2 py-1 rounded border border-gray-300 bg-white text-gray-700">90 d</button><button onclick="app.riskTrendDays(365)" class="risk-trend-btn px-2 py-1 rounded border border-gray-300 bg-white text-gray-700">12 mo</button></span></div>
+                        <div class="p-3"><canvas id="risk-trend" height="220"></canvas></div></div>
+                    <p class="text-xs text-gray-500">Scores: observed exploitation 30% + asset criticality 25% + exposure 20% + EPSS 15% + CVSS 10%, × service-tier multiplier, plus ransomware (+1), no patch (+0.5) and verified mitigations (−0.5 each, cap −2), floored at 1. Hover any score for its breakdown. The P1–P4 action engine and team Status are unchanged by this page.</p>
                 </div>
             </section>
 
@@ -974,6 +1000,8 @@
                     <div class="col-span-2"><label class="inline-flex items-center gap-2"><input type="checkbox" id="edit-asset-patchna"> Cannot take an Automox agent (appliance, network device): leave it out of the patching check</label></div>
                     <div class="col-span-2"><label class="block font-medium mb-1">Operating system</label><input type="text" id="edit-asset-os" maxlength="200" class="w-full border rounded p-2" placeholder="as Qualys reports it">
                         <p id="edit-asset-os-note" class="text-[11px] text-gray-500 mt-1"></p></div>
+                    <div class="col-span-2"><label class="block font-medium mb-1">Mitigations <span class="text-[11px] font-normal text-gray-500">(verified compensating controls: lower the Risk Report's score and can step a KEV down a priority)</span></label>
+                        <div id="edit-asset-mitigations" class="flex flex-wrap gap-2"></div></div>
                 </div>
                 <div class="flex justify-end space-x-3 mt-4 pt-4 border-t">
                     <button onclick="app.cancelAssetEdit()" class="px-4 py-2 border rounded">Cancel</button>
@@ -1192,7 +1220,9 @@
                 PLAN_FORECAST: 'gov_plan_forecast',
                 CVE_WATCH: 'gov_cve_watch',
                 ORG_SETTINGS: 'gov_org_settings',
-                ASSET_NOTES: 'gov_asset_notes'
+                ASSET_NOTES: 'gov_asset_notes',
+                RISK_SETTINGS: 'gov_risk_settings',
+                RISK_HISTORY: 'gov_risk_history'
             };
             // Saved record by record through api/tasks and api/notes in server mode, never as a whole collection.
             static PER_RECORD = new Set(['gov_remediation', 'gov_asset_notes']);
@@ -1432,7 +1462,7 @@
                 a.click();
             }
 
-            static BACKUP_KEYS = { assetRegister: 'ASSET_REGISTER', reviewQueue: 'REVIEW_QUEUE', ownershipLedger: 'OWNERSHIP_LEDGER', platformInventory: 'PLATFORM_INVENTORY', vulnAssetSummary: 'VULN_ASSET_SUMMARY', vulnServiceSummary: 'VULN_SERVICE_SUMMARY', vulnCveSummary: 'VULN_CVE_SUMMARY', vulnDetails: 'VULN_DETAILS', vulnMeta: 'VULN_META', riskAcceptances: 'RISK_ACCEPTANCES', eolDates: 'EOL_DATES', remediation: 'REMEDIATION', remediationSettings: 'REMEDIATION_SETTINGS', automoxLinks: 'AUTOMOX_LINKS', statusSettings: 'STATUS_SETTINGS', statusHistory: 'STATUS_HISTORY', scanDates: 'SCAN_DATES', planForecast: 'PLAN_FORECAST', cveWatch: 'CVE_WATCH', orgSettings: 'ORG_SETTINGS', assetNotes: 'ASSET_NOTES' };
+            static BACKUP_KEYS = { assetRegister: 'ASSET_REGISTER', reviewQueue: 'REVIEW_QUEUE', ownershipLedger: 'OWNERSHIP_LEDGER', platformInventory: 'PLATFORM_INVENTORY', vulnAssetSummary: 'VULN_ASSET_SUMMARY', vulnServiceSummary: 'VULN_SERVICE_SUMMARY', vulnCveSummary: 'VULN_CVE_SUMMARY', vulnDetails: 'VULN_DETAILS', vulnMeta: 'VULN_META', riskAcceptances: 'RISK_ACCEPTANCES', eolDates: 'EOL_DATES', remediation: 'REMEDIATION', remediationSettings: 'REMEDIATION_SETTINGS', automoxLinks: 'AUTOMOX_LINKS', statusSettings: 'STATUS_SETTINGS', statusHistory: 'STATUS_HISTORY', scanDates: 'SCAN_DATES',                 planForecast: 'PLAN_FORECAST', cveWatch: 'CVE_WATCH', orgSettings: 'ORG_SETTINGS', assetNotes: 'ASSET_NOTES', riskSettings: 'RISK_SETTINGS', riskHistory: 'RISK_HISTORY' };
 
             // Replace everything with the contents of a backup made by exportDatabase. Fields the backup lacks are cleared, so the result matches the backup.
             static async importDatabase(db) {
@@ -2166,7 +2196,7 @@
             static weekOf(t) { const d = new Date(t); d.setUTCHours(0, 0, 0, 0); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); }
             static async update(app) {
                 if (app.me && app.me.role === 'viewer') return null;
-                const PB = await app.planBuckets('ALL', 'ALL', true);      // official: never risk-accepted
+                const PB = await app.planBuckets('ALL', 'ALL', true, true);      // official: never risk-accepted; whole: every finding, never just the Known exploited ones (v4.38.2)
                 if (!PB || !PB.policiesRead) return null;            // no promises without Automox's schedules
                 const F = this.load(), now = this.now(), day = 864e5, vd = PB.vd;
                 const reg = new Map(StorageService.peek(StorageService.KEYS.ASSET_REGISTER).map(r => [r.normalizedName, r]));
@@ -3619,7 +3649,147 @@
                 const pct = (e * 100).toFixed(0);
                 return hot
                     ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-fuchsia-100 text-fuchsia-800" title="EPSS ${(e * 100).toFixed(1)}% — at or above the ${PriorityEngine._epssTh} threshold on Status rules, so it is ranked one tier more urgent">⦿ EPSS ${pct}%</span>`
-                    : `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600" title="EPSS ${(e * 100).toFixed(1)}% chance of exploitation in 30 days (FIRST)">EPSS ${pct}%</span>`;
+                     : `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600" title="EPSS ${(e * 100).toFixed(1)}% chance of exploitation in 30 days (FIRST)">EPSS ${pct}%</span>`;
+            }
+        }
+
+        // ==========================================
+        // RISK MODEL (v4.38): the remediation-prioritisation report's scoring, separate from the P1-P4 action engine.
+        // A weighted, component score per finding (observed exploitation 30%, asset criticality 25%, exposure 20%,
+        // EPSS 15%, CVSS 10%) x a Service Tier multiplier (Tier 0 crown jewels x2.0, Tier 1 x1.5, Tier 2 x1.2,
+        // Tier 3 x1.0), plus contextual modifiers (known ransomware +1.0, no patch +0.5, verified mitigations -0.5
+        // each to -2.0), floored at 1.0. Scores map to a report priority P1-P5 with mandatory CISA KEV overrides and
+        // SLA due dates (the earliest of the priority target and the KEV due date). Everything is configurable in
+        // Organisation setup -> Risk model, with the values below as the industry-standard defaults; every score
+        // keeps its breakdown (RiskModel.score returns it) so the report can show exactly how it was reached.
+        // The P1-P4 action engine and the team Status are untouched: this is a risk lens, not the operational queue.
+        // ==========================================
+        class RiskModel {
+            static KEY = 'gov_risk_settings';
+            static DEFAULTS = {
+                weights: { obs: 0.30, asset: 0.25, exposure: 0.20, epss: 0.15, cvss: 0.10 },
+                tierMultiplier: { 0: 2.0, 1: 1.5, 2: 1.2, 3: 1.0 },
+                crownJewels: [],                                  // none until an admin names them (suggestions in CROWN_SUGGEST); whole words of the service name
+                bands: [                                          // Final Risk Score -> report priority
+                    { min: 8, p: 1 }, { min: 6, p: 2 }, { min: 4, p: 3 }, { min: 2, p: 4 }, { min: 0, p: 5 }],
+                kevOverrides: { tier01: true, internetFacing: true, baselineFloor: 2, stepDown: true },
+                slaDays: { 1: 3, 2: 7, 3: 30, 4: 90, 5: 0 },      // P1 is 72 hours; P5 = next cycle (0)
+                mods: { ransomware: 1.0, noPatch: 0.5, mitigation: -0.5, mitigationCap: 2.0 },
+                mitigations: ['Compensating control', 'Service disabled', 'Unreachable path', 'Microsegmented'],
+            };
+            static CROWN_SUGGEST = ['Active Directory', 'Entra', 'PKI', 'PAM', 'Backup', 'Hypervisor', 'VM Orchestration', 'Storage'];
+            static PRIORITY = { 1: 'P1 Emergency', 2: 'P2 High', 3: 'P3 Medium', 4: 'P4 Low', 5: 'P5 Monitor' };
+            static PRI_CLS = { 1: 'bg-red-100 text-red-800', 2: 'bg-orange-100 text-orange-800', 3: 'bg-amber-100 text-amber-800', 4: 'bg-yellow-50 text-yellow-800', 5: 'bg-gray-100 text-gray-600' };
+
+            static settings() {
+                const o = StorageService.load(this.KEY);
+                const D = this.DEFAULTS, s = (o && !Array.isArray(o)) ? o : {};
+                return { ...D, ...s, weights: { ...D.weights, ...(s.weights || {}) }, tierMultiplier: { ...D.tierMultiplier, ...(s.tierMultiplier || {}) },
+                    bands: Array.isArray(s.bands) ? s.bands.map(b => ({ min: +b.min || 0, p: +b.p })) : D.bands, kevOverrides: { ...D.kevOverrides, ...(s.kevOverrides || {}), baselineFloor: Math.min(5, Math.max(1, parseInt((s.kevOverrides || {}).baselineFloor ?? D.kevOverrides.baselineFloor) || 2)) },
+                    slaDays: { ...D.slaDays, ...(s.slaDays || {}) }, mods: { ...D.mods, ...(s.mods || {}) },
+                    crownJewels: Array.isArray(s.crownJewels) ? s.crownJewels : [], mitigations: Array.isArray(s.mitigations) ? s.mitigations : D.mitigations };
+            }
+            static saveSettings(s) { StorageService.save(this.KEY, s); }
+
+            // The register's tier -> the spec's service tier. Crown-jewels services are Tier 0 whatever the register says.
+            static tierOf(r, S = this.settings()) {
+                const svc = String(r?.service || '').toLowerCase();
+                if (svc && S.crownJewels.some(j => { const w = String(j || '').trim().toLowerCase(); return w && new RegExp('(^|[^a-z0-9])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9])').test(svc); })) return 0;   // whole words: PAM never matches "Spam filter"
+                const t = +(r && r.tier); return (t === 1 || t === 2 || t === 3) ? t : 2;      // not set counts as Tier 2
+            }
+            static tierLabel(t) { return t === 0 ? 'Tier 0 · Crown jewels' : ['', 'Tier 1', 'Tier 2', 'Tier 3'][t] || 'Tier ?'; }
+
+            // Component scores, 1-5, strictly separated (never double-count a signal).
+            static obsScore(d, q, kev) {
+                const rti = q.rti || [];
+                if (kev || rti.includes('Active Attacks')) return 5;
+                if (rti.includes('Public Exploit')) return 4;
+                if (rti.some(t => ['Ransomware', 'Wormable', 'Zero Day', 'Easy Exploit', 'Exploit Kit'].includes(t))) return 2;
+                return 1;
+            }
+            static assetScore(r, S) { return { 0: 5, 1: 4, 2: 3, 3: 2 }[this.tierOf(r, S)] ?? 3; }
+            static exposureScore(r) {
+                switch (String(r?.exposure || '')) {
+                    case 'Internet Facing': return 5;
+                    case 'DMZ': return 4;
+                    default: return 3;                            // Internal / Unknown (Segmented / Isolated map here for now)
+                }
+            }
+            static epssScore(q) {
+                const e = Epss.score(q);
+                if (e > 0.50) return 5;
+                if (e >= 0.10) return 4;
+                if (e >= 0.01) return 3;
+                if (e >= 0.001) return 2;
+                return 1;
+            }
+            static cvssScore(d) {
+                const c = d.cvss || 0;
+                if (c >= 9) return 5;
+                if (c >= 7) return 4;
+                if (c >= 4) return 3;
+                if (c > 0) return 2;
+                // No CVSS in the data: fall back to Qualys severity (5 ~= critical) so the model is not skewed to neutral.
+                return d.sev >= 5 ? 4 : d.sev === 4 ? 3 : 1;
+            }
+
+            static mitigationCount(r) {
+                const M = (r && Array.isArray(r.mitigations)) ? r.mitigations : [];
+                return M.length;
+            }
+            static hasMitigation(r, flag) { return (r && Array.isArray(r.mitigations)) ? r.mitigations.includes(flag) : false; }
+
+            // The full breakdown for one finding. kev = the CISA KEV record for the CVE (or null). r = register record.
+            static score(d, r, q, kev, S = this.settings(), now = Demo.now()) {
+                const parts = {
+                    obs: this.obsScore(d, q, kev), asset: this.assetScore(r, S), exposure: this.exposureScore(r),
+                    epss: this.epssScore(q), cvss: this.cvssScore(d) };
+                const base = parts.obs * S.weights.obs + parts.asset * S.weights.asset + parts.exposure * S.weights.exposure
+                    + parts.epss * S.weights.epss + parts.cvss * S.weights.cvss;          // 1..5
+                const tier = this.tierOf(r, S);
+                const multiplier = S.tierMultiplier[tier] ?? 1.0;
+                let adjusted = base * multiplier;
+                let mod = 0;
+                if (kev?.ransomware === 'Known' || (q.rti || []).includes('Ransomware')) mod += S.mods.ransomware;
+                if (!d.patchable) mod += S.mods.noPatch;
+                const mc = this.mitigationCount(r);
+                if (mc) mod += Math.max(-S.mods.mitigationCap, mc * S.mods.mitigation);
+                adjusted = Math.max(1.0, adjusted + mod);
+                let priority = 5;
+                for (const b of S.bands) { if (adjusted >= b.min) { priority = b.p; break; } }
+                // Mandatory CISA KEV overrides (in order), with the verified-mitigation step-down exception.
+                let override = '';
+                const blockedByM = S.kevOverrides.stepDown && (this.hasMitigation(r, 'Service disabled') || this.hasMitigation(r, 'Unreachable path'));
+                if (kev) {
+                    if (S.kevOverrides.tier01 && tier <= 1) { priority = 1; override = 'KEV · Tier 0/1'; }
+                    else if (S.kevOverrides.internetFacing && r?.exposure === 'Internet Facing') { priority = 1; override = 'KEV · Internet facing'; }
+                    else if (priority > S.kevOverrides.baselineFloor) { priority = S.kevOverrides.baselineFloor; override = 'KEV floor'; }
+                    if (blockedByM) { priority = Math.min(5, priority + 1); override += ' · mitigated'; }   // v4.38: a neutralised vector is stepped DOWN a level (P1 -> P2)
+                }
+                // Due = when Qualys first found it + the priority's days, like the rest of CyberView (a finding first found before
+                // go-live counts from go-live). CISA's KEV due date is set for US federal agencies: shown for information only.
+                const kevDue = kev?.due || '';
+                const slaDays = S.slaDays[priority] ?? 0;
+                let due = 0;
+                if (slaDays > 0) {
+                    const first = StatusEngine.time(d.first) || now, live = StatusEngine.time(StatusEngine.settings().goLive);
+                    due = Math.max(first, live || 0) + slaDays * 864e5;
+                }
+                return { score: Math.round(adjusted * 100) / 100, base: +base.toFixed(3), parts, tier, multiplier, mod: Math.round(mod * 100) / 100,
+                    priority, override, kevDue, due: due || null, breakdown: { ...parts, base: +base.toFixed(3), adjusted: Math.round(adjusted * 100) / 100, mod: Math.round(mod * 100) / 100 } };
+            }
+
+            static priBadge(p, override = '') {
+                return `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${this.PRI_CLS[p] || ''}" title="${esc(this.PRIORITY[p])}${override ? ' · ' + esc(override) : ''}">P${p}${override ? ' ⚑' : ''}</span>`;
+            }
+
+            // A tiny score badge whose hover shows the breakdown (auditability).
+            static scoreBadge(s) {
+                if (!s) return '';
+                const p = s.parts;
+                const tip = p ? `Obs ${p.obs} · Asset ${p.asset} · Exposure ${p.exposure} · EPSS ${p.epss} · CVSS ${p.cvss} → base ${s.base} × Tier ${s.tier} (×${s.multiplier}) ${s.mod >= 0 ? '+' : '−'} ${Math.abs(s.mod)} = ${s.score}${s.kevDue ? ` · CISA KEV date ${s.kevDue} (US federal, for information)` : ''}`
+                    : `Risk ${s.score}`;
+                return `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-900 border border-indigo-200" title="${esc(tip)}">Risk ${s.score}</span>`;
             }
         }
 
@@ -4857,20 +5027,22 @@
                 this.accNote(null);
                 OrgSettings.invalidate(); this.fillTeamSelects();     // team lists follow the register (a new owner appears without a reload)
                 this.applyTeamSwitch(); this.applyTeam(viewId);
-                const TITLES = { import: Demo.api() ? 'Manual import' : 'Import Data', plan: 'Patch Plan', cve: 'CVE Lookup', dashboard: 'Dashboard', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Organisation setup · Status rules', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
+                const TITLES = { import: Demo.api() ? 'Manual import' : 'Import Data', plan: 'Patch Plan', cve: 'CVE Lookup', dashboard: 'Dashboard', review: 'Review Queue', register: 'Asset Register', vuln: 'Vulnerability Management', remediation: 'Remediation', 'risk-accept': 'Risk Acceptances', status: 'Status', health: 'Data Health', 'status-rules': 'Organisation setup · Status rules', 'risk-model': 'Organisation setup · Risk model', 'risk-report': 'Risk Report', org: 'Organisation setup', reports: 'Team Risk Reports', eol: 'End of Life Report', automox: 'Patch Coverage', history: 'History', backup: 'Backup & Restore', users: 'Users', inspect: 'Details' };
                 const pt = document.getElementById('page-title'); if (pt) pt.textContent = (TITLES[viewId] || 'CyberView') + (App.TEAM_VIEWS.includes(viewId) ? ' · ' + App.teamLabel() : '');
-                const navView = viewId === 'inspect' ? (this.inspectReturn || '') : ((viewId === 'import' && Demo.api()) || viewId === 'status-rules' ? 'org' : viewId);
+                const navView = viewId === 'inspect' ? (this.inspectReturn || '') : ((viewId === 'import' && Demo.api()) || viewId === 'status-rules' || viewId === 'risk-model' ? 'org' : viewId);
                 document.querySelectorAll('aside .nav-btn').forEach(b => { const on = (b.getAttribute('onclick') || '').includes(`'${navView}'`); b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
                 
                 if (viewId === 'dashboard') this.renderDashboard();
                 if (viewId === 'review') this.renderReviewQueue();
                 if (viewId === 'register') this.renderRegister();
                 if (viewId === 'health') this.renderHealth();
-                if (viewId === 'status-rules' || viewId === 'org') document.querySelectorAll('.settings-parts').forEach(el => { el.innerHTML = App.settingsPartsHTML(viewId); });
+                if (viewId === 'status-rules' || viewId === 'risk-model' || viewId === 'org') document.querySelectorAll('.settings-parts').forEach(el => { el.innerHTML = App.settingsPartsHTML(viewId); });
                 if (viewId === 'status-rules') this.renderStatusRules();
+                if (viewId === 'risk-model') this.renderRiskModel();
                 if (viewId === 'org') this.renderOrgSetup();
                 if (viewId === 'status') this.renderStatus();
                 if (viewId === 'reports') this.renderReports();
+                if (viewId === 'risk-report') this.renderRiskReport();
                 if (viewId === 'eol') this.renderEOL();
                 if (viewId === 'automox') this.renderAutomox();
                 if (viewId === 'plan') this.renderPlan();
@@ -5187,7 +5359,7 @@
             // their own team pickers become a label saying the team. The register and Review Queue keep their own filters (they
             // need Unknown and Unrecognised, which are not teams). Starts on the main team from Organisation setup.
             static TEAM_PICKERS = { 'vuln-filter-owner': 'vuln', 'plan-team': 'plan', 'cve-scope': 'cve', 'report-scope-selector': 'reports', 'eol-scope-selector': 'eol', 'ax-scope': 'automox', 'st-scope': 'status', 'rem-f-team': 'remediation' };
-            static TEAM_VIEWS = ['dashboard', 'plan', 'cve', 'vuln', 'remediation', 'status', 'reports', 'eol', 'automox', 'register', 'review', 'risk-accept', 'health'];
+            static TEAM_VIEWS = ['dashboard', 'plan', 'cve', 'vuln', 'remediation', 'status', 'reports', 'eol', 'automox', 'register', 'review', 'risk-accept', 'health', 'risk-report'];
             static team() { const T = OrgSettings.teams(), v = Prefs.get('team', null); return v === 'ALL' || T.includes(v) ? v : (OrgSettings.mainTeam() || 'ALL'); }
             static teamLabel(t = App.team()) { return t === 'ALL' ? 'All teams' : t; }
             applyTeamSwitch() {
@@ -5578,7 +5750,7 @@
             // Organisation setup is the one settings page (v4.5.1): its two parts, the chosen one marked with ● and a heavy outline.
             static settingsPartsHTML(active) {
                 const b = (v, label, help) => { const on = v === active; return `<button role="tab" aria-selected="${on}" onclick="app.switchView('${v}')" title="${esc(help)}" class="px-4 py-2 rounded-lg text-sm ${on ? 'border-2 border-slate-800 bg-slate-800 text-white font-semibold' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}">${on ? '●' : '○'} ${label}</button>`; };
-                return `<div role="tablist" class="flex flex-wrap gap-2 print-hide">${b('org', '⚙ Organisation', 'Teams, tiers, name matching, rules, manual imports')}${b('status-rules', '📐 Status rules', 'Priorities, due dates, backlog, status checks, Patch Plan period')}<button onclick="app.openAISettings()" class="ml-auto px-4 py-2 rounded-lg text-sm border border-slate-300 bg-white hover:bg-slate-50" title="Which AI writes the remediation plan (kept in this browser)">🤖 AI settings</button></div>`;
+                return `<div role="tablist" class="flex flex-wrap gap-2 print-hide">${b('org', '⚙ Organisation', 'Teams, tiers, name matching, rules, manual imports')}${b('status-rules', '📐 Status rules', 'Priorities, due dates, backlog, status checks, Patch Plan period')}${b('risk-model', '📊 Risk model', 'The Risk Report scoring: weights, tier multipliers, crown jewels, bands, KEV overrides, SLAs')}<button onclick="app.openAISettings()" class="ml-auto px-4 py-2 rounded-lg text-sm border border-slate-300 bg-white hover:bg-slate-50" title="Which AI writes the remediation plan (kept in this browser)">🤖 AI settings</button></div>`;
             }
 
             // The findings CSV import lives on Vuln Management (its progress shows there): go there, open the panel, pick the file.
@@ -6060,6 +6232,7 @@
                 if ($('cve-scope') && [...$('cve-scope').options].some(o => o.value === team)) $('cve-scope').value = team;
                 if (document.activeElement !== $('cve-input')) $('cve-input').value = pref.q || '';
                 const ids = App.cveIds(pref.q), out = $('cve-out');
+                $('cve-expl-note')?.classList.toggle('hidden', !RiskView.exploitedOnly());   // v4.38.2: this page ignores the switch, and says so
                 this.renderCveWatch();
                 const asOf = (this.loadVulnMeta().imports || []).slice(-1)[0];
                 $('cve-asof').textContent = asOf ? `Qualys data as of ${new Date(asOf.at || asOf.date || Date.now()).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
@@ -6240,10 +6413,10 @@
             }
 
             // The four Patch Plan sections for a team and urgency (shared by the Patch Plan page and the Team Risk Report). null = no Automox data.
-            async planBuckets(team, pmax, official = false) {
+            async planBuckets(team, pmax, official = false, whole = false) {
                 const S = StatusEngine.settings(), days = +S.patchPlanDays || 7, end = Demo.now() + days * 864e5;     // Demo.now() = the real clock outside the demo
                 let D = null; if (Demo.api()) { try { D = await AutomoxService.ensure(); } catch (e) { D = null; } }
-                const { dets, vd, regMap, hidden } = await this.scopedData({ owner: team, p: pmax, official });
+                const { dets, vd, regMap, hidden } = await this.scopedData({ owner: team, p: pmax, official, whole });
                 if (!D) return null;
                 const m = AutomoxService.match(), auto = new Set((S.automoxTeams || []).map(x => String(x).toLowerCase()));
                 const B = { manual: [], blocked: [], will: [], done: [] };
@@ -6476,6 +6649,265 @@
                 this.invalidateVulnData();
                 StorageService.toast(reset ? 'Rules back to the defaults' : 'Rules saved');
                 this.renderStatusRules();
+            }
+
+            // ---------- Risk model (v4.38): the Risk Report scoring, configurable with industry-standard defaults.
+            renderRiskModel() {
+                const S = RiskModel.settings(), admin = !this.me || this.me.role === 'admin', dis = admin ? '' : 'disabled';
+                const num = (k, v, step = 0.01, min = 0, max = 20, w = 'w-20') => `<input type="number" step="${step}" min="${min}" max="${max}" data-k="${k}" value="${v}" class="rm-in border rounded px-2 py-1 ${w}" ${dis}>`;
+                const wg = (k) => num('weights.' + k, S.weights[k]);
+                const el = document.getElementById('risk-model-body');
+                el.innerHTML = `
+                    <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Component weights <span class="text-xs font-normal text-gray-500">(must add to 1.0; they set the 1–5 base score)</span></h4>
+                        <div class="flex flex-wrap gap-4 items-end text-xs">
+                            <label>Observed exploitation<br>${wg('obs')}</label>
+                            <label>Asset criticality (tier)<br>${wg('asset')}</label>
+                            <label>Exposure<br>${wg('exposure')}</label>
+                            <label>EPSS<br>${wg('epss')}</label>
+                            <label>CVSS<br>${wg('cvss')}</label>
+                        </div>
+                    </div>
+                    <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Service tiers & crown jewels</h4>
+                        <div class="flex flex-wrap gap-4 items-end text-xs">
+                            <label>Multiplier Tier 0 (crown jewels)<br>${num('tierMultiplier.0', S.tierMultiplier[0], 0.1, 0, 20)}</label>
+                            <label>Multiplier Tier 1<br>${num('tierMultiplier.1', S.tierMultiplier[1], 0.1, 0, 20)}</label>
+                            <label>Multiplier Tier 2<br>${num('tierMultiplier.2', S.tierMultiplier[2], 0.1, 0, 20)}</label>
+                            <label>Multiplier Tier 3<br>${num('tierMultiplier.3', S.tierMultiplier[3], 0.1, 0, 20)}</label>
+                        </div>
+                        <label class="block text-xs">Crown-jewels services (comma separated) — an asset whose service is here is Tier 0 (identity, recovery, hypervisor/storage management etc.), whatever its register tier:<br>
+                            <input type="text" data-k="crownJewels" value="${esc((S.crownJewels || []).join(', '))}" class="rm-in border rounded px-2 py-1 w-full" ${dis}></label>
+                        <p class="text-[11px] text-gray-500">Empty by default, so nothing is Tier 0 until you name your services (whole words of the service name; suggestions: ${esc(RiskModel.CROWN_SUGGEST.join(', '))}). The report's Tier 0 panel flags AD, PKI, PAM, backup, hypervisor and storage management systems.</p>
+                    </div>
+                    <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Final score → priority bands</h4>
+                        <div class="flex flex-wrap gap-4 items-end text-xs">
+                            <label>P1 Emergency ≥<br>${num('bands.0', S.bands[0].min, 0.1, 0, 20, 'w-16')}</label>
+                            <label>P2 High ≥<br>${num('bands.1', S.bands[1].min, 0.1, 0, 20, 'w-16')}</label>
+                            <label>P3 Medium ≥<br>${num('bands.2', S.bands[2].min, 0.1, 0, 20, 'w-16')}</label>
+                            <label>P4 Low ≥<br>${num('bands.3', S.bands[3].min, 0.1, 0, 20, 'w-16')}</label>
+                            <label>P5 Monitor below<br>${num('bands.4', S.bands[4].min, 0.1, 0, 20, 'w-16')}</label>
+                        </div>
+                        <div class="flex flex-wrap gap-4 text-xs">
+                            <label class="flex items-center gap-2"><input type="checkbox" data-k="kevOverrides.tier01" class="rm-in" ${S.kevOverrides.tier01 ? 'checked' : ''} ${dis}> KEV on Tier 0/1 is forced to P1</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" data-k="kevOverrides.internetFacing" class="rm-in" ${S.kevOverrides.internetFacing ? 'checked' : ''} ${dis}> KEV Internet-facing is forced to P1</label>
+                            <label class="flex items-center gap-2"><input type="checkbox" data-k="kevOverrides.stepDown" class="rm-in" ${S.kevOverrides.stepDown ? 'checked' : ''} ${dis}> A verified Service-disabled / Unreachable-path mitigation steps a KEV down one priority</label>
+                            <label class="flex items-center gap-2">Other KEV findings are at least P<input type="number" min="1" max="5" data-k="kevOverrides.baselineFloor" value="${S.kevOverrides.baselineFloor}" class="rm-in border rounded px-2 py-1 w-16" ${dis}></label>
+                        </div>
+                    </div>
+                    <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">Contextual modifiers</h4>
+                        <div class="flex flex-wrap gap-4 items-end text-xs">
+                            <label>Known ransomware +<br>${num('mods.ransomware', S.mods.ransomware, 0.1, 0, 20)}</label>
+                            <label>No patch available +<br>${num('mods.noPatch', S.mods.noPatch, 0.1, 0, 20)}</label>
+                            <label>Each verified mitigation −<br>${num('mods.mitigation', Math.abs(S.mods.mitigation), 0.1, 0, 20)}</label>
+                            <label>… up to a maximum reduction of<br>${num('mods.mitigationCap', S.mods.mitigationCap, 0.1, 0, 20)}</label>
+                        </div>
+                        <label class="block text-xs">Mitigation options available on the asset edit form (comma separated):<br>
+                            <input type="text" data-k="mitigations" value="${esc((S.mitigations || []).join(', '))}" class="rm-in border rounded px-2 py-1 w-full" ${dis}></label>
+                    </div>
+                    <div class="bg-white border rounded p-4 space-y-3"><h4 class="font-bold">SLA targets (days from when Qualys first found it, or from go-live for older findings; CISA KEV dates are US federal and shown for information only)</h4>
+                        <div class="flex flex-wrap gap-4 items-end text-xs">
+                            <label>P1 (72 hours)<br>${num('slaDays.1', S.slaDays[1], 1, 0, 3650, 'w-16')}</label>
+                            <label>P2<br>${num('slaDays.2', S.slaDays[2], 1, 0, 3650, 'w-16')}</label>
+                            <label>P3<br>${num('slaDays.3', S.slaDays[3], 1, 0, 3650, 'w-16')}</label>
+                            <label>P4<br>${num('slaDays.4', S.slaDays[4], 1, 0, 3650, 'w-16')}</label>
+                            <label>P5 (0 = next cycle)<br>${num('slaDays.5', S.slaDays[5] || 0, 1, 0, 3650, 'w-16')}</label>
+                        </div>
+                    </div>
+                    ${admin ? `<div class="flex gap-3"><button onclick="app.saveRiskModel()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">Save risk model</button><button onclick="app.saveRiskModel(true)" class="border px-4 py-2 rounded text-sm">Back to the defaults</button></div>` : '<p class="text-xs text-gray-500">Only an administrator can change the risk model.</p>'}`;
+            }
+            saveRiskModel(reset = false) {
+                let S;
+                if (reset) { S = JSON.parse(JSON.stringify(RiskModel.DEFAULTS)); }
+                else {
+                    S = RiskModel.settings();
+                    document.querySelectorAll('#risk-model-body .rm-in').forEach(el => {
+                        const k = el.dataset.k, v = el.type === 'checkbox' ? el.checked : el.value;
+                        if (k === 'crownJewels') S.crownJewels = String(v).split(',').map(x => x.trim()).filter(Boolean);
+                        else if (k === 'mitigations') S.mitigations = String(v).split(',').map(x => x.trim()).filter(Boolean);
+                        else if (k.startsWith('weights.')) S.weights[k.slice(8)] = Math.min(1, Math.max(0, parseFloat(v) || 0));
+                        else if (k.startsWith('tierMultiplier.')) S.tierMultiplier[k.slice(15)] = Math.min(20, Math.max(0, parseFloat(v) || 0));
+                        else if (k.startsWith('bands.')) { const i = +k.slice(6); S.bands[i] = { min: Math.min(20, Math.max(0, parseFloat(v) || 0)), p: i + 1 }; }
+                        else if (k === 'kevOverrides.baselineFloor') S.kevOverrides.baselineFloor = Math.min(5, Math.max(1, parseInt(v) || 2));
+                        else if (k.startsWith('kevOverrides.')) S.kevOverrides[k.slice(13)] = v;
+                        else if (k.startsWith('mods.')) S.mods[k.slice(5)] = k === 'mods.mitigation' ? -Math.abs(parseFloat(v) || 0) : Math.min(20, Math.max(0, parseFloat(v) || 0));
+                        else if (k.startsWith('slaDays.')) S.slaDays[k.slice(8)] = Math.max(0, parseInt(v) || 0);
+                    });
+                }
+                RiskModel.saveSettings(S);
+                this._vd = null; this.vulnData = null; this._status = null;
+                StorageService.toast(reset ? 'Risk model back to the defaults' : 'Risk model saved');
+                this.renderRiskModel();
+            }
+
+            // ---------- ⚖️ Risk Report (v4.38): the remediation-prioritisation lens, from the RiskModel scores.
+            // Whole-estate measurement (getVulnData whole:true) so the sidebar "Known exploited" lens does not distort it;
+            // it follows the sidebar Team like the other pages. P1-P4 and the team Status are untouched.
+            async renderRiskReport() {
+                const $ = (id) => document.getElementById(id);
+                const body = $('risk-report-body'); if (!body) return;
+                const seq = this._rrSeq = (this._rrSeq || 0) + 1, stale = () => seq !== this._rrSeq || this.currentView !== 'risk-report';
+                const tm = App.team();
+                const vd = await this.getVulnData({ whole: true });
+                if (stale()) return;
+                const reg = StorageService.live(), regMap = new Map(reg.map(r => [r.normalizedName, r]));
+                const inScope = reg.filter(r => tm === 'ALL' || r.owner === tm), names = new Set(inScope.map(r => r.normalizedName));
+                const kev = await WebResearch.kev().catch(() => new Map());
+                if (stale()) return;
+                const S = RiskModel.settings();
+                const cveOf = (q) => { const c = (q.cves || [])[0]; return c ? String(typeof c === 'string' ? c : c.id || '').toUpperCase() : ''; };
+                const kevFor = (q) => { for (const c of (q.cves || [])) { const id = String(typeof c === 'string' ? c : c.id || '').toUpperCase(); const k = id && kev.get(id); if (k) return k; } return null; };
+                const now = Demo.now(), today = new Date(now).toISOString().slice(0, 10);
+                const rows = [];
+                for (const d of vd.dets) {
+                    if (!names.has(d.asset)) continue;
+                    const r = regMap.get(d.asset) || {}, q = vd.qmap.get(d.qid) || {}, k = kevFor(q);
+                    const s = RiskModel.score(d, r, q, k, S, now);
+                    s.d = d; s.r = r; s.q = q; s.cve = cveOf(q); s.kev = k; s.overdue = s.due ? s.due < now : false;
+                    rows.push(s);
+                }
+                const totalRisk = rows.reduce((a, r) => a + r.score, 0);
+                const assets = new Set(rows.map(r => r.d.asset));
+                const byTier = { 0: [], 1: [], 2: [], 3: [] }; rows.forEach(r => (byTier[r.tier] || (byTier[r.tier] = [])).push(r));
+
+                // Executive KPIs with a 30-day delta where history exists
+                const hist = StorageService.load(StorageService.KEYS.RISK_HISTORY) || [];
+                const myHist = hist.filter(h => h.team === tm);
+                const then = [...myHist].reverse().find(h => (now - Date.parse(h.date)) >= 29 * 864e5) || null;   // no 30-day-old point yet: no change shown
+                const delta = (cur, k) => { if (!then || then[k] === undefined) return ''; const d = cur - then[k]; return d === 0 ? '' : ` <span class="text-[10px] ${d < 0 ? 'text-emerald-700' : 'text-red-700'}">${d < 0 ? '▼' : '▲'} ${Math.abs(d)}</span>`; };
+                const kpis = [
+                    ['Open vulnerabilities', rows.length, delta(rows.length, 'open')],
+                    ['P1 + P2', rows.filter(r => r.priority <= 2).length, delta(rows.filter(r => r.priority <= 2).length, 'p1p2')],
+                    ['Active KEV', rows.filter(r => r.kev).length, delta(rows.filter(r => r.kev).length, 'kev')],
+                    ['KEV past due', rows.filter(r => r.kev && r.overdue).length, delta(rows.filter(r => r.kev && r.overdue).length, 'kevOverdue')],
+                    ['Internet-facing P1/P2', rows.filter(r => r.priority <= 2 && r.r?.exposure === 'Internet Facing').length, ''],
+                    ['SLA breaches', rows.filter(r => r.overdue).length, ''],
+                    ['Tier 0 open', (byTier[0] || []).length, delta((byTier[0] || []).length, 't0')],
+                    ['Aggregate risk', Math.round(totalRisk), delta(Math.round(totalRisk), 'total')],
+                ];
+                $('risk-report-kpis').innerHTML = kpis.map(([l, v, d]) => `<div class="rounded-lg border bg-white px-4 py-3"><p class="text-[10px] uppercase font-semibold text-gray-500">${l}</p><p class="text-xl font-bold text-gray-900">${fmtNum(v)}</p>${d ? `<p class="text-[11px] text-gray-600">30d${d}</p>` : ''}</div>`).join('');
+
+                // Service tier × priority heatmap (count · aggregate risk · % of total)
+                const heat = this._rrFilter || null;
+                const cells = [];
+                for (const t of [0, 1, 2, 3]) for (const p of [1, 2, 3, 4, 5]) {
+                    const r = rows.filter(x => x.tier === t && x.priority === p), agg = r.reduce((a, x) => a + x.score, 0);
+                    const on = heat && heat.tier === t && heat.p === p;
+                    cells.push(`<button onclick="app.riskHeat(${t}, ${p})" title="${fmtNum(r.length)} findings · aggregate risk ${fmtNum(Math.round(agg))} · ${totalRisk ? Math.round(agg * 100 / totalRisk) : 0}% of total risk" class="rounded border px-2 py-1.5 text-left ${on ? 'border-slate-800 bg-slate-800 text-white' : r.length ? 'border-slate-200 bg-white hover:bg-slate-50' : 'border-gray-100 bg-gray-50 text-gray-400'}">
+                        <div class="text-xs font-bold">${r.length ? fmtNum(r.length) : '—'}</div><div class="text-[10px] ${on ? 'text-slate-300' : 'text-gray-500'}">${r.length ? fmtNum(Math.round(agg)) + ' · ' + (totalRisk ? Math.round(agg * 100 / totalRisk) : 0) + '%' : '&nbsp;'}</div></button>`);
+                }
+                const rowsP = [1, 2, 3, 4, 5], head = '<div></div>' + rowsP.map(p => `<div class="text-[10px] uppercase font-semibold text-gray-500">${RiskModel.PRIORITY[p]}</div>`).join('');
+                const grid = [0, 1, 2, 3].map(t => `<div class="text-[10px] uppercase font-semibold text-gray-500">${RiskModel.tierLabel(t)}</div>` + rowsP.map(p => cells[(t) * 5 + (p - 1)]).join('')).join('');
+                $('risk-heatmap').innerHTML = `<div class="grid gap-1" style="grid-template-columns: 9rem repeat(5, 1fr)">${head}${grid}</div>`;
+
+                // Top 20 grouped remediation queue (CVE + service + priority), expandable hosts
+                const group = new Map();
+                rows.forEach(s => {
+                    const k = [s.cve, s.r?.service || 'Unclassified', s.priority].join('\u0001');
+                    if (!group.has(k)) group.set(k, { key: k, cve: s.cve, service: s.r?.service || 'Unclassified', tier: s.tier, priority: s.priority,
+                        max: 0, hosts: new Map(), due: 9e15, owner: '', patch: true, kev: !!s.kev, override: s.override });
+                    const g = group.get(k);
+                    if (s.score > g.max) { g.max = s.score; g.top = s; }
+                    g.hosts.set(s.d.asset, s);
+                    if (s.due && s.due < g.due) g.due = s.due;
+                    if (s.r?.owner) g.owner = s.r.owner;
+                    if (!s.d.patchable) g.patch = false;
+                });
+                let queue = [...group.values()].filter(g => !heat || (g.tier === heat.tier && g.priority === heat.p))
+                    .sort((a, b) => b.max - a.max || (a.due || 9e15) - (b.due || 9e15)).slice(0, 20);
+                const open = this._rrOpen || new Set();
+                const fmtDue = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                $('risk-queue-filter').textContent = heat ? `${RiskModel.tierLabel(heat.tier)} · ${RiskModel.PRIORITY[heat.p]} — click the cell again to clear` : '';
+                $('risk-queue').innerHTML = queue.length ? `<table class="min-w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs uppercase"><tr>
+                        <th class="px-3 py-2 text-left">#</th><th class="px-3 py-2 text-left">CVE</th><th class="px-3 py-2 text-left">Service</th><th class="px-3 py-2">Tier</th><th class="px-3 py-2 text-right">Hosts</th>
+                        <th class="px-3 py-2 text-right">Max risk</th><th class="px-3 py-2">Priority</th><th class="px-3 py-2">Patch</th><th class="px-3 py-2 text-left">Due</th><th class="px-3 py-2 text-left">Owner</th></tr></thead>
+                    <tbody class="divide-y">${queue.map((g, i) => {
+                        const dueTxt = g.due < 9e15 ? (g.due < now ? `<span class="text-red-700 font-bold">✖ ${fmtDue(g.due)}</span>` : fmtDue(g.due)) : '—';
+                        const expanded = open.has(g.key);
+                        const hosts = [...g.hosts.entries()].sort((a, b) => b[1].score - a[1].score);
+                        return `<tr class="align-top cursor-pointer ${expanded ? 'bg-indigo-50' : 'hover:bg-blue-50'}" onclick="app.riskToggleEl(this)" title="${expanded ? 'Click to hide the machines' : 'Click to show the machines'}" data-rr="${esc(g.key)}">
+                            <td class="px-3 py-2 text-gray-500">${i + 1}</td><td class="px-3 py-2 font-mono text-xs text-blue-700">${esc(g.cve || '—')}${g.kev ? ' <span class="text-red-800 font-bold" title="On the CISA KEV list">⚑</span>' : ''}</td>
+                            <td class="px-3 py-2">${esc(g.service)}</td><td class="px-3 py-2 text-center">${g.tier === 0 ? '<span class="font-bold text-red-800">T0</span>' : 'T' + g.tier}</td>
+                            <td class="px-3 py-2 text-right font-mono">${fmtNum(g.hosts.size)}</td><td class="px-3 py-2 text-right">${RiskModel.scoreBadge(g.top)}</td>
+                            <td class="px-3 py-2 text-center">${RiskModel.priBadge(g.priority, g.override)}</td>
+                            <td class="px-3 py-2 text-center">${g.patch ? '<span class="text-emerald-700">✅</span>' : '<span class="text-red-700 font-semibold" title="No vendor patch: mitigation required">✖</span>'}</td>
+                            <td class="px-3 py-2 text-xs whitespace-nowrap">${dueTxt}</td><td class="px-3 py-2 text-xs">${esc(g.owner || '—')}</td></tr>
+                            ${expanded ? hosts.map(([name, s]) => `<tr class="bg-indigo-50/50 text-xs"><td></td><td colspan="4" class="px-3 py-1.5 font-mono">${esc(name)}${s.overdue ? ' <span class="text-red-700 font-bold">overdue</span>' : ''}</td><td class="px-3 py-1.5 text-right">${RiskModel.scoreBadge(s)}</td><td class="px-3 py-1.5 text-center">${RiskModel.priBadge(s.priority, s.override)}</td><td colspan="4" class="px-3 py-1.5 text-xs text-gray-600">${esc([s.r?.exposure || '', s.q?.title ? String(s.q.title).slice(0, 60) : 'QID ' + s.d.qid].filter(Boolean).join(' · '))}</td></tr>`).join('') : ''}`; }).join('')}</tbody></table>`
+                    : '<p class="px-5 py-8 text-center text-gray-500 italic">No findings in this scope' + (heat ? ' for the selected tier × priority' : '') + '.</p>';
+
+                // Tier 0 crown jewels panel
+                const t0 = rows.filter(r => r.tier === 0);
+                const t0badge = (cond, txt, cls) => cond ? `<span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${cls}">${txt}</span>` : '';
+                const t0BySvc = new Map();
+                t0.forEach(s => { if (!t0BySvc.has(s.r?.service || 'Unclassified')) t0BySvc.set(s.r?.service || 'Unclassified', []); t0BySvc.get(s.r?.service || 'Unclassified').push(s); });
+                $('risk-crown').innerHTML = t0.length ? `<table class="w-full text-sm"><thead class="bg-gray-50 text-gray-600 text-xs uppercase"><tr><th class="px-3 py-2 text-left">Service</th><th class="px-3 py-2 text-right">Hosts</th><th class="px-3 py-2 text-right">Aggregate risk</th><th class="px-3 py-2 text-left">Status</th></tr></thead>
+                    <tbody class="divide-y">${[...t0BySvc.entries()].sort((a, b) => b[1].reduce((n, x) => n + x.score, 0) - a[1].reduce((n, x) => n + x.score, 0)).map(([svc, list]) => {
+                        const agg = list.reduce((n, x) => n + x.score, 0), hosts = new Set(list.map(s => s.d.asset)).size;
+                        const flag = { kev: list.some(s => s.kev), expl: list.some(s => s.q?.rti?.includes('Public Exploit')), unpatched: list.some(s => !s.d.patchable), breach: list.some(s => s.overdue) };
+                        return `<tr><td class="px-3 py-2 font-semibold">${esc(svc)}</td><td class="px-3 py-2 text-right font-mono">${fmtNum(hosts)}</td><td class="px-3 py-2 text-right font-mono">${fmtNum(Math.round(agg))}</td>
+                            <td class="px-3 py-2">${t0badge(flag.kev, '⚑ KEV', 'bg-red-100 text-red-800')}${t0badge(flag.expl, '⚔ public exploit', 'bg-orange-100 text-orange-800')}${t0badge(flag.unpatched, '✖ no patch', 'bg-amber-100 text-amber-900')}${t0badge(flag.breach, '✖ SLA breach', 'bg-red-100 text-red-800')}${!flag.kev && !flag.expl && !flag.unpatched && !flag.breach ? '<span class="text-emerald-700 text-xs">✓ no flags</span>' : ''}</td></tr>`; }).join('')}</tbody></table>`
+                    : '<p class="px-5 py-6 text-center text-gray-500 italic">Name your crown-jewels services in ⚙ Organisation setup → Risk model to see Tier 0 here.</p>';
+
+                // Deterministic narrative (rule-based, numbers straight from this computation)
+                const t01 = rows.filter(r => r.tier <= 1), t01Pct = totalRisk ? Math.round(t01.reduce((n, x) => n + x.score, 0) * 100 / totalRisk) : 0;
+                const rawCrit = rows.filter(r => (r.d.cvss || 0) >= 9 || r.d.sev >= 5).length;
+                const p1 = rows.filter(r => r.priority === 1).length;
+                const topT0 = [...t0BySvc.entries()].sort((a, b) => b[1].reduce((n, x) => n + x.score, 0) - a[1].reduce((n, x) => n + x.score, 0)).slice(0, 3).map(([s]) => s);
+                const kevOver = rows.filter(r => r.kev && r.overdue).length;
+                const n1 = `Current vulnerability exposure is concentrated within Tier 0 and Tier 1 infrastructure services, which account for ${t01Pct}% of aggregate organisational risk.`;
+                const n2 = rawCrit ? ` Whilst ${rawCrit} vulnerabilities carry a Critical CVSS score, risk prioritisation identifies ${p1} P1 Emergency findings requiring remediation within the P1 target—driven primarily by ${topT0.length ? topT0.join(', ') : 'the top services'}.` : ` Risk prioritisation identifies ${p1} P1 Emergency findings requiring remediation within the P1 target.`;
+                const n3 = kevOver ? ` Currently, ${kevOver} CISA KEV-listed vulnerabilities are past their remediation target and require immediate operational intervention.` : '';
+                $('risk-report-narrative').innerHTML = `<span class="font-semibold">⚖️ Executive summary.</span> ${n1}${n2}${n3} ${totalRisk ? `Aggregate open risk is <strong>${fmtNum(Math.round(totalRisk))}</strong> across ${fmtNum(rows.length)} findings on ${fmtNum(assets.size)} machines.` : 'No open findings in this scope.'}`;
+
+                // Risk burn-down snapshot + chart
+                const hist2 = this.riskSnapshot(rows, tm, { total: totalRisk, open: rows.length, p1: p1, kev: rows.filter(r => r.kev).length, kevOverdue: kevOver, t0: (byTier[0] || []).length });
+                this.riskTrend(hist2.filter(h => h.team === tm));
+            }
+            riskHeat(tier, p) {
+                const cur = this._rrFilter;
+                this._rrFilter = (cur && cur.tier === tier && cur.p === p) ? null : { tier, p };
+                this.renderRiskReport();
+            }
+            riskToggle(key) {
+                this._rrOpen = this._rrOpen || new Set();
+                if (this._rrOpen.has(key)) this._rrOpen.delete(key); else this._rrOpen.add(key);
+                this.renderRiskReport();
+            }
+            riskToggleEl(el) { if (el && el.dataset.rr) this.riskToggle(el.dataset.rr); }
+            riskTrendDays(n) {
+                this._rrTrendDays = n;
+                document.querySelectorAll('.risk-trend-btn').forEach(b => {
+                    const on = String(b.textContent.trim()) === (n === 365 ? '12 mo' : n + ' d');
+                    b.className = 'risk-trend-btn px-2 py-1 rounded border ' + (on ? 'border-slate-800 bg-slate-800 text-white' : 'border-gray-300 bg-white text-gray-700');
+                });
+                const hist = (StorageService.load(StorageService.KEYS.RISK_HISTORY) || []).filter(h => h.team === App.team());
+                this.riskTrend(hist);
+            }
+            riskSnapshot(rows, team, agg) {
+                const hist = StorageService.load(StorageService.KEYS.RISK_HISTORY) || [];
+                const now = Demo.now(), today = new Date(now).toISOString().slice(0, 10);
+                if (hist.some(h => h.team === team && h.date === today)) return hist;      // one point per team per day
+                if (StorageService.me && StorageService.me.role === 'viewer') return hist;   // read-only: the next editor records it
+                hist.push({ date: today, team, open: agg.open, total: Math.round(agg.total), mean: agg.open ? Math.round(agg.total / Math.max(1, new Set(rows.map(r => r.d.asset)).size) * 10) / 10 : 0,
+                    p1: agg.p1, p1p2: rows.filter(r => r.priority <= 2).length, kev: agg.kev, kevOverdue: agg.kevOverdue, t0: agg.t0 });
+                StorageService.save(StorageService.KEYS.RISK_HISTORY, hist.filter(h => now - Date.parse(h.date) <= 400 * 864e5));   // about 13 months for every team
+                return hist;
+            }
+            riskTrend(hist) {
+                const c = document.getElementById('risk-trend'); if (!c) return;
+                const n = this._rrTrendDays || 30, ctx = c.getContext('2d'), W = c.width = c.offsetWidth || 900, H = c.height = 220;
+                ctx.clearRect(0, 0, W, H);
+                const pts = hist.filter(h => Demo.now() - Date.parse(h.date) <= n * 864e5).sort((a, b) => a.date < b.date ? -1 : 1);
+                if (pts.length < 2) { ctx.fillStyle = '#64748b'; ctx.font = '12px sans-serif'; ctx.fillText('Collecting history: the report records one point a day; revisit over the coming days.', 16, H / 2); return; }
+                const xs = (i) => 8 + i * (W - 16) / (pts.length - 1), max = Math.max(1, ...pts.map(p => p.total)), min = Math.min(0, ...pts.map(p => p.total));
+                const y = (v) => H - 24 - (v - min) / (max - min || 1) * (H - 40);
+                ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 2; ctx.beginPath();
+                pts.forEach((p, i) => i ? ctx.lineTo(xs(i), y(p.total)) : ctx.moveTo(xs(i), y(p.total)));
+                ctx.stroke();
+                ctx.lineTo(xs(pts.length - 1), H - 24); ctx.lineTo(xs(0), H - 24); ctx.closePath();
+                ctx.fillStyle = 'rgba(99,102,241,0.08)'; ctx.fill();
+                ctx.fillStyle = '#475569'; ctx.font = '11px sans-serif';
+                [0, pts.length - 1].forEach(i => { ctx.fillText(pts[i].date.slice(5), xs(i), H - 8); });
+                ctx.fillText('Aggregate risk', 8, 14);
+                pts.forEach((p, i) => { if (i % Math.ceil(pts.length / 10) === 0) { ctx.fillStyle = '#94a3b8'; ctx.beginPath(); ctx.arc(xs(i), y(p.total), 2, 0, 2 * Math.PI); ctx.fill(); } });
             }
 
             // ---------- Qualys API sync (server mode, server/qualys.py). The login never reaches the page.
@@ -7090,13 +7522,13 @@
                 const on = RiskView.exploitedOnly(), el = document.getElementById('exploited-switch'), strip = document.getElementById('exploited-strip');
                 if (el) el.innerHTML = `<button role="switch" aria-checked="${on}" onclick="app.setShowExploited(${!on})" title="Known exploited only: ${on ? 'every report shows only findings on the CISA KEV list or flagged by Qualys threat intel' : 'every report shows all findings'}. Team status and targets always cover everything." class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs border ${on ? 'border-red-500 bg-red-50 text-red-900 font-semibold' : 'border-gray-300 bg-white text-gray-700'}"><span>⚑ Known exploited</span><span>${on ? '● Only' : '○ All'}</span></button>`;
                 if (strip) { strip.classList.toggle('hidden', !on);
-                    strip.innerHTML = on ? `<span>⚑ <strong>Showing only known-exploited vulnerabilities</strong> (CISA KEV list or Qualys threat intel). Team status and targets still cover everything.</span><button onclick="app.setShowExploited(false)" class="ml-auto underline print-hide">Show everything</button>` : ''; }
+                    strip.innerHTML = on ? `<span>⚑ <strong>Showing only known-exploited vulnerabilities</strong> (CISA KEV list or Qualys threat intel). Team status and targets still cover everything, and CVE Lookup always lists every machine with the CVE open.</span><button onclick="app.setShowExploited(false)" class="ml-auto underline print-hide">Show everything</button>` : ''; }
             }
             setShowExploited(v) {
                 PerfLog.begin('action: exploited ' + (v ? 'only' : 'all'));
                 Prefs.set('showExploitedOnly', !!v);
                 this.applyExploited();
-                this._vd = null; this.vulnData = null;
+                this.vulnData = null;                               // v4.38.3: the whole build stays; the narrow one is made from it
                 this.switchView(this.currentView || 'dashboard');
             }
             // Each page puts its hidden/shown counts here (cleared on every page change).
@@ -7530,6 +7962,8 @@
                       + `Qualys criticality: ${h || 'none'} (a hint only: it follows Qualys tags).${r.criticality && r.criticality !== 'Medium' ? ` Old criticality: <strong>${esc(r.criticality)}</strong>.` : ''}`; }
                 document.getElementById('edit-asset-os').value = r.os || '';
                 document.getElementById('edit-asset-os').dataset.orig = r.os || '';
+                { const el = document.getElementById('edit-asset-mitigations'), cur = r.mitigations || [];
+                  el.innerHTML = RiskModel.settings().mitigations.map(m => `<label class="inline-flex items-center gap-1.5 text-xs"><input type="checkbox" value="${esc(m)}" ${cur.includes(m) ? 'checked' : ''}> ${esc(m)}</label>`).join(''); }
                 document.getElementById('edit-asset-os-note').innerHTML = r.osOverride
                     ? `Edited here; Qualys reports <strong>${esc(r.qualysOs || '-')}</strong>.${r.osOverrideCheck ? ' <span class="text-amber-800 font-semibold">⚠ Qualys changed its value since the edit: check it.</span>' : ''} Imports keep your value. Empty the field to use Qualys again.`
                     : 'From Qualys. Change it if Qualys detected the wrong OS: imports will then keep your value.';
@@ -7550,6 +7984,8 @@
                     reg[idx].exposure = document.getElementById('edit-asset-exposure').value;
                     StatusEngine.setTier(reg[idx], document.getElementById('edit-asset-criticality').value);
                     if (document.getElementById('edit-asset-patchna').checked) reg[idx].patchNA = true; else delete reg[idx].patchNA;
+                    const mits = [...document.querySelectorAll('#edit-asset-mitigations input:checked')].map(el => el.value);
+                    if (mits.length) reg[idx].mitigations = mits; else delete reg[idx].mitigations;
                     const osEl = document.getElementById('edit-asset-os'), osNew = osEl.value.trim();
                     if (osNew !== (osEl.dataset.orig || '').trim() || (!osNew && reg[idx].osOverride)) Lifecycle.setOs(reg[idx], osNew);
                     else if (reg[idx].osOverrideCheck) delete reg[idx].osOverrideCheck;      // saved again = checked
@@ -8154,9 +8590,19 @@
                 // whole: true = the Status measurement (headline and targets) always covers everything, whatever the
                 // sidebar "Known exploited" lens is set to. Everything else follows the lens. When the lens is off
                 // both builds are the same, so they share one cache entry (no reload when moving Status <-> reports).
-                const on = RiskView.exploitedOnly();
-                const lens = !whole && on;
-                const retKey = StorageService.retiredKey() + (lens ? ':expl' : '');
+                // v4.38.3: the findings are read from the browser store ONCE (the whole build, this._vd); the known-exploited
+                // build is made from it in memory (this._vdL, same finding objects, narrower byAsset / byQid / exBy), so
+                // pages that need both (Dashboard, Team Risk Report) no longer reload everything twice.
+                const lens = !whole && RiskView.exploitedOnly();
+                const W = await this.getVulnWhole();
+                if (!lens) return W;
+                if (this._vdL && this._vdL._base === W) return this._vdL;
+                const narrow = (m) => { const o = new Map(); (m || new Map()).forEach((list, k) => { const f = list.filter(d => d.exploited); if (f.length) o.set(k, f); }); return o; };
+                this._vdL = { ...W, byAsset: narrow(W.byAsset), byQid: narrow(W.byQid), exBy: narrow(W.exBy), lens: true, _base: W };
+                return this._vdL;
+            }
+            async getVulnWhole() {
+                const retKey = StorageService.retiredKey();
                 if (this._vd && this._vdRet === retKey) return this._vd;
                 this._vdRet = retKey;
                 let dets = [], qs = [];
@@ -8178,13 +8624,12 @@
                 const excepted = dets.filter(isEx);                 // in-date per-finding exceptions: shown apart, never counted
                 dets = dets.filter(d => !isEx(d));
                 const exBy = new Map();                             // v4.13: listed (flagged ⚑) when the Risk-accepted switch is on
-                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.epss = q.epss || 0; d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (lens && !d.exploited) return; if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
+                excepted.forEach(d => { const q = qmap.get(d.qid) || {}; d.tier = PriorityEngine.tier(d, q); d.exploited = PriorityEngine.isExploited(q); d.epss = q.epss || 0; d.accF = ex.get(d.asset).qids.get(String(d.qid)); if (!exBy.has(d.asset)) exBy.set(d.asset, []); exBy.get(d.asset).push(d); });
                 dets.forEach(d => {
                     const q = qmap.get(d.qid) || {};
                     d.tier = PriorityEngine.tier(d, q);
                     d.exploited = PriorityEngine.isExploited(q);
                     d.epss = q.epss || 0;
-                    if (lens && !d.exploited) return;               // v4.37: known exploited only
                     if (!byAsset.has(d.asset)) byAsset.set(d.asset, []);
                     byAsset.get(d.asset).push(d);
                     if (!byQid.has(d.qid)) byQid.set(d.qid, []);
@@ -8202,8 +8647,8 @@
             // Registered assets in scope joined to their detections, with the filters applied at detection level.
             // v4.13: risk-accepted machines and accepted findings follow the Risk-accepted switch (official: true = never included).
             // The old riskStatus filter is gone; hidden = what the switch leaves out within the other filters.
-            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false } = {}) {
-                const vd = await this.getVulnData();
+            async scopedData({ owner = 'ALL', exposure = 'ALL', patchable = 'ALL', severity = 'ALL', tier = 'ALL', p = 'ALL', official = false, whole = false } = {}) {
+                const vd = await this.getVulnData({ whole });      // whole: true = every finding, whatever the Known exploited switch says (v4.38.2)
                 const reg = StorageService.live();
                 const regMap = new Map(reg.map(r => [r.normalizedName, r]));
                 const sums = new Map((StorageService.peek(StorageService.KEYS.VULN_ASSET_SUMMARY) || []).map(s => [s.name, s]));
@@ -10172,6 +10617,9 @@
                 all.forEach(d => PriorityEngine.accumulate(st, d));
                 this.inspectCtx = { name, all, vd };
                 const meta = this.loadVulnMeta();
+                // v4.38.3: with the Known exploited switch on, say plainly that this is not every finding on the machine
+                const fullN = (!retired && vd.lens) ? (vd._base.byAsset.get(name) || []).length : all.length;
+                const lensHTML = fullN !== all.length ? `<div class="rounded-lg border-2 border-red-400 bg-red-50 text-red-900 p-3 text-sm flex flex-wrap items-center gap-3"><span>⚑ <strong>Known exploited only:</strong> showing ${fmtNum(all.length)} of this machine's ${fmtNum(fullN)} open findings.</span><button onclick="app.setShowExploited(false)" class="underline font-semibold">Show all ${fmtNum(fullN)}</button></div>` : '';
                 const kpi = (label, v, cls = 'bg-gray-50 border') => `<div class="${cls} p-3 rounded"><p class="text-[10px] uppercase font-semibold opacity-70">${label}</p><p class="text-xl font-bold">${v}</p></div>`;
 
                 const ns = !retired && this.stale().list.get(name);
@@ -10180,8 +10628,8 @@
                         <button class="write-only underline font-semibold" data-n="${esc(name)}" onclick="app.unretire(this.dataset.n)">Bring it back</button></div>`
                     : ns ? `<div class="rounded-lg border ${ns.all ? 'border-gray-500 bg-gray-100 text-gray-900' : 'border-amber-300 bg-amber-50 text-amber-950'} p-3 text-sm flex flex-wrap items-center gap-3"><span>${ns.all ? '🕳' : '⏳'} <strong>${esc(this.missLabel(ns))}</strong>: ${esc(this.missLines(ns).join(' · '))}. ${esc(this.missAdvice(ns))}</span>
                         <button class="write-only underline font-semibold" data-n="${esc(name)}" onclick="app.retireOne(this.dataset.n)">⊘ Retire it</button></div>` : '';
-                body.innerHTML = `${retiredHTML}
-                    <div class="bg-white rounded-lg shadow border p-5">
+                body.innerHTML = `${retiredHTML}${lensHTML}
+                    <div id="insp-head" class="bg-white rounded-lg shadow border p-5">
                         <div class="flex flex-wrap justify-between gap-4">
                             <div>
                                 <h3 class="text-2xl font-bold text-gray-800">${esc(name)}${retired ? ' <span class="text-sm font-semibold text-gray-500 align-middle">⊘ Retired</span>' : ''}</h3>
@@ -10197,7 +10645,7 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4">
-                            ${kpi('Detections', fmtNum(st.detections))}
+                            ${kpi(fullN !== all.length ? 'Detections ⚑ exploited' : 'Detections', fmtNum(st.detections) + (fullN !== all.length ? `<span class="text-xs font-normal text-gray-500"> of ${fmtNum(fullN)}</span>` : ''))}
                             ${kpi('Fix now', fmtNum(st.t1), 'bg-red-50 border border-red-200 text-red-800')}
                             ${kpi('This sprint', fmtNum(st.t2), 'bg-orange-50 border border-orange-200 text-orange-800')}
                             ${kpi('Severity 5', fmtNum(st.sev5))}
@@ -10247,7 +10695,7 @@
                             </table>
                         </div>
                     </div>`;
-                body.firstElementChild.insertAdjacentHTML('afterend', this.assetNotesPanelHTML(name) + '<div id="insp-ax" class="print-hide"></div>' + this.assetTasksHTML(name));
+                (body.querySelector('#insp-head') || body.firstElementChild).insertAdjacentHTML('afterend', this.assetNotesPanelHTML(name) + '<div id="insp-ax" class="print-hide"></div>' + this.assetTasksHTML(name));
                 AssetNotes.refresh(30000).then(ch => { if (ch) this.afterNoteChange(true); });
                 this.fillAutomoxAsset(name);
                 const cached = this.aiCache.get('asset:' + name);

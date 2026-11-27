@@ -26,7 +26,7 @@ import epss
 import redhat
 import qualys
 
-VERSION = "4.37.0"
+VERSION = "4.38.3"
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
 COOKIE = "portal_session"
 SESSION_IDLE = timedelta(hours=12)
@@ -43,6 +43,7 @@ FIELD_MAP = {
     "eolDates": "gov_eol_dates", "remediation": "gov_remediation", "remediationSettings": "gov_remediation_settings",
     "automoxLinks": "gov_automox_links", "statusSettings": "gov_status_settings", "statusHistory": "gov_status_history", "scanDates": "gov_scan_dates",
     "orgSettings": "gov_org_settings", "planForecast": "gov_plan_forecast", "cveWatch": "gov_cve_watch",
+    "riskSettings": "gov_risk_settings", "riskHistory": "gov_risk_history",
     "assetNotes": "gov_asset_notes",
 }
 # collections whose edits are written to the change history, and the field that identifies a record
@@ -55,7 +56,7 @@ COLLECTIONS = {
     "gov_vuln_asset_summary", "gov_vuln_service_summary", "gov_vuln_cve_summary", "gov_vuln_details",
     "gov_vuln_meta", "gov_risk_acceptances", "gov_eol_dates", "gov_remediation", "gov_remediation_settings",
     "gov_automox_links", "gov_status_settings", "gov_status_history", "gov_scan_dates", "gov_org_settings", "gov_plan_forecast",
-    "gov_cve_watch", "gov_asset_notes",
+    "gov_cve_watch", "gov_risk_settings", "gov_risk_history", "gov_asset_notes",
 }
 # Saved one record at a time (/api/tasks, /api/notes), never as a whole collection (a stale page would wipe other people's work).
 PER_RECORD = {"gov_remediation", "gov_asset_notes"}
@@ -598,6 +599,12 @@ def put_collection(name: str, request: Request, body: dict = Body(...)):
             if u.get("role") != "admin" and not u.get("open"):
                 c.rollback()
                 return JSONResponse({"error": "Only an administrator can change the organisation setup"}, status_code=403)
+        if name == "gov_risk_settings":
+            # The Risk Report model (weights, tier multipliers, crown jewels, KEV overrides) is an administrator's job (v4.38).
+            u = getattr(request.state, "user", None) or {}
+            if u.get("role") != "admin" and not u.get("open"):
+                c.rollback()
+                return JSONResponse({"error": "Only an administrator can change the risk model"}, status_code=403)
         if name in TRACKED and kind == "array":
             cur.execute("SELECT doc FROM records WHERE collection=%s", (name,))
             log_changes(cur, user, name, [r[0] for r in cur.fetchall()], data)

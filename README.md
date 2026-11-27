@@ -42,6 +42,8 @@ It is four steps, left to right, with one report at the end:
 3. **Priority model — what matters?** Pick one of six recognised ways to rank findings, or your own sliders. A **pyramid** shows how many findings (and machines) land in P1–P4 as you change it, and how many move up or down compared with the classic site's priorities. **Save as the team's model** (administrators) makes it the work list's order for everyone.
 4. **Work list — what to fix.** One row per fix for the chosen team, worst first: priority and its word, why (the reasons, or the slider points), machines, due date and overdue, Automox (⟳ will patch / ⚠ blocked / ✋ manual), CISA KEV and EPSS, and any open task. Open a row for its machines. Filters: P1 / P1–P2 / P1–P3, ⚑ Known exploited only, ✖ Overdue only, search. CSV and Print. Risk-accepted machines and findings are left out, as in the official numbers.
 
+**Look (v4.39.1):** the POC's design: each step has its own icon and colour (blue Data, amber Machines, purple Priority model, green Work list) in the step bar, the page header and the large home tiles, with live counts in the corner badges. The icons are Phosphor Icons (MIT), only the ones used, inside the page, so they show without the internet. Two charts on the Work list, each with hover, keyboard reading and a table view: **P1–P2 over time** (open and overdue, from the daily status snapshots, so counted with the CyberView status rules) and **Who fixes it** (Automox will patch / blocked / manual for the findings in the list, following its filters). The home Work list tile carries the same trend as a sparkline.
+
 The models (step 3), each with its own due days (days from first found, or from go-live for older findings):
 
 | Model | How a finding gets P1–P4 |

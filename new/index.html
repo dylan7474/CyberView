@@ -44,6 +44,31 @@
     --shadow: 0 4px 12px rgba(0,0,0,.45); color-scheme: dark;
 }
 
+/* step colours (as in the POC: blue data, amber machines, purple model, green work) and chart tokens (dataviz reference palette) */
+:root {
+    --s1: #2563eb; --s1-bg: rgba(37,99,235,.10); --s2: #d97706; --s2-bg: rgba(217,119,6,.12); --s3: #7c3aed; --s3-bg: rgba(124,58,237,.10); --s4: #059669; --s4-bg: rgba(5,150,105,.11);
+    --src-q: #7c3aed; --src-a: #2563eb; --src-e: #d97706; --src-p: #e11d48; --src-r: #dc2626; --src-d: #475569;
+    --series-1: #257de0; --series-2: #f47230; --grid: #e7e7e7; --axis: #c2c2c2;
+    --st-good: #0aac23; --st-warn: #fbb315; --st-crit: #dc3c3d;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --s1: #60a5fa; --s1-bg: rgba(96,165,250,.15); --s2: #fbbf24; --s2-bg: rgba(251,191,36,.14); --s3: #a78bfa; --s3-bg: rgba(167,139,250,.15); --s4: #34d399; --s4-bg: rgba(52,211,153,.14);
+        --src-q: #a78bfa; --src-a: #60a5fa; --src-e: #fbbf24; --src-p: #fb7185; --src-r: #f87171; --src-d: #94a3b8;
+        --series-1: #338ced; --series-2: #e76624; --grid: #303030; --axis: #474747;
+    }
+}
+:root[data-theme="dark"], :root[data-theme="soc"] {
+    --s1: #60a5fa; --s1-bg: rgba(96,165,250,.15); --s2: #fbbf24; --s2-bg: rgba(251,191,36,.14); --s3: #a78bfa; --s3-bg: rgba(167,139,250,.15); --s4: #34d399; --s4-bg: rgba(52,211,153,.14);
+    --src-q: #a78bfa; --src-a: #60a5fa; --src-e: #fbbf24; --src-p: #fb7185; --src-r: #f87171; --src-d: #94a3b8;
+    --series-1: #338ced; --series-2: #e76624; --grid: #303030; --axis: #474747;
+}
+.sc1 { --c: var(--s1); --cb: var(--s1-bg); } .sc2 { --c: var(--s2); --cb: var(--s2-bg); } .sc3 { --c: var(--s3); --cb: var(--s3-bg); } .sc4 { --c: var(--s4); --cb: var(--s4-bg); }
+.icn { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -0.2em; fill: currentColor; flex: 0 0 auto; }
+.icbox { display: grid; place-items: center; border-radius: 12px; background: var(--cb, var(--accent-soft)); color: var(--c, var(--accent)); flex: 0 0 auto; }
+.icbox.sm { width: 36px; height: 36px; border-radius: 10px; font-size: 20px; }
+.icbox.md { width: 44px; height: 44px; font-size: 24px; }
+.icbox.lg { width: 80px; height: 80px; border-radius: 20px; font-size: 46px; transition: transform .2s ease; }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; min-height: 100vh; }
@@ -62,7 +87,7 @@ a { color: var(--accent); }
 header.top { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 30; }
 .topbar { display: flex; align-items: center; gap: 12px; height: 56px; }
 .brand { display: flex; align-items: center; gap: 10px; cursor: pointer; background: none; border: 0; padding: 0; }
-.logo { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 800; }
+.logo { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 19px; }
 .brand b { font-size: 15px; }
 .tag { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--subtle); color: var(--text2); border: 1px solid var(--line); }
 .spacer { flex: 1; }
@@ -81,11 +106,13 @@ input.in:focus, select.in:focus, button:focus-visible { outline: 2px solid var(-
 /* ---------- the four steps ---------- */
 nav.steps { border-top: 1px solid var(--line); }
 .steps-in { display: flex; gap: 6px; align-items: center; padding: 8px 0; overflow-x: auto; }
-.step { display: flex; align-items: center; gap: 10px; border: 1px solid transparent; background: none; border-radius: 12px; padding: 7px 12px; cursor: pointer; color: var(--text2); white-space: nowrap; }
+.steps-in > :first-child { margin-left: auto; } .steps-in > :last-child { margin-right: auto; }     /* centred, but never cut off when it scrolls */
+.step { display: flex; align-items: center; gap: 10px; border: 1px solid transparent; background: none; border-radius: 14px; padding: 7px 14px 7px 8px; cursor: pointer; color: var(--text2); white-space: nowrap; transition: background .15s ease; }
 .step:hover { background: var(--subtle); color: var(--text); }
-.step.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
-.step .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; background: var(--subtle); border: 1px solid var(--line); }
-.step.on .n { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.step .n { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 21px; background: var(--cb); color: var(--c); }
+.step.on { background: var(--cb); border-color: var(--c); color: var(--text); }
+.step.on .n { background: var(--c); color: var(--surface); }
+.step .badge { font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); margin-left: 2px; }
 .step .lab { font-weight: 600; font-size: 13px; }
 .step .sub { font-size: 11px; color: var(--muted); display: block; }
 .arrow { color: var(--muted); }
@@ -94,7 +121,8 @@ nav.steps { border-top: 1px solid var(--line); }
 main { padding: 22px 0 60px; }
 .demo { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 12px; padding: 9px 14px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; }
 .pagehead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 16px; }
-.eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--accent); }
+.eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--c, var(--accent)); }
+.headrow { display: flex; gap: 14px; align-items: flex-start; }
 h1 { font-size: 22px; margin: 2px 0 2px; }
 h2 { font-size: 16px; margin: 0 0 8px; }
 h3 { font-size: 14px; margin: 0 0 6px; }
@@ -111,9 +139,12 @@ h3 { font-size: 14px; margin: 0 0 6px; }
 .mb { margin-bottom: 14px; }
 
 /* home tiles */
-.tile { text-align: left; cursor: pointer; padding: 20px; display: flex; flex-direction: column; gap: 10px; transition: transform .15s ease, border-color .15s ease; color: var(--text); font: inherit; }
-.tile:hover { transform: translateY(-3px); border-color: var(--accent); }
-.tile .ic { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: var(--accent-soft); }
+.tile { position: relative; text-align: center; align-items: center; cursor: pointer; padding: 26px 18px 20px; border-radius: 22px; display: flex; flex-direction: column; gap: 9px; transition: transform .2s cubic-bezier(.16,1,.3,1), border-color .2s ease, box-shadow .2s ease; color: var(--text); font: inherit; }
+.tile:hover { transform: translateY(-4px); border-color: var(--c); }
+.tile:hover .icbox { transform: scale(1.05); }
+.tile .corner { position: absolute; top: 14px; right: 14px; font-size: 12px; font-weight: 800; font-family: ui-monospace, Menlo, Consolas, monospace; padding: 2px 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); }
+.tile .corner.ok { background: var(--ok-bg); color: var(--ok); }
+.tile .spark { margin-top: 2px; }
 .tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
 .tile .v { font-size: 15px; font-weight: 700; }
 .tile .d { font-size: 12.5px; color: var(--text2); }
@@ -196,6 +227,26 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .namebox { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; background: var(--subtle); border-radius: 8px; padding: 7px 10px; margin: 6px 0 14px; word-break: break-all; }
 
 .empty { padding: 26px; text-align: center; color: var(--muted); }
+/* charts */
+.chart { position: relative; }
+.chart svg.plot { width: 100%; height: auto; display: block; overflow: visible; }
+.chart svg.plot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text2); margin: 2px 0 8px; }
+.legend .key { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.legend .key.dash { border-top-style: dashed; }
+.vtip { position: absolute; pointer-events: none; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 7px 10px; font-size: 12px; z-index: 5; min-width: 130px; white-space: nowrap; }
+.vtip .d { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+.vtip .r { display: flex; align-items: center; gap: 7px; }
+.vtip .r b { font-variant-numeric: tabular-nums; min-width: 28px; }
+.seg-bar { display: flex; gap: 2px; height: 28px; margin: 4px 0 10px; }
+.seg-bar .part { border-radius: 4px; display: flex; align-items: center; padding-left: 7px; font-size: 12px; font-weight: 700; overflow: hidden; white-space: nowrap; cursor: default; min-width: 3px; }
+.seg-bar .part:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.seg-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--text2); }
+.seg-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+details.tv summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-top: 8px; }
+details.tv table { font-size: 12px; margin-top: 6px; border-collapse: collapse; }
+details.tv td, details.tv th { padding: 2px 10px 2px 0; text-align: right; font-variant-numeric: tabular-nums; }
+details.tv th:first-child, details.tv td:first-child { text-align: left; }
 .loading { padding: 26px; text-align: center; color: var(--muted); font-style: italic; }
 @media (max-width: 900px) { #m-grid { grid-template-columns: 1fr !important; } }
 @media (max-width: 640px) {
@@ -213,7 +264,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 <header class="top">
     <div class="wrap topbar">
         <button class="brand" onclick="UI.go('home')" title="Home">
-            <span class="logo">CV</span><b>CyberView</b>
+            <span class="logo"><i data-ic="d-eye"></i></span><b>CyberView</b>
             <span class="tag hide-sm">New look · preview</span>
         </button>
         <span class="spacer"></span>
@@ -224,7 +275,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
                 <option value="">Auto</option><option value="light">Clean</option><option value="dark">Slate</option><option value="soc">SOC</option>
             </select></label>
         <span id="who" class="who hide-sm"></span>
-        <a class="btn sm" href="./" title="The classic site: every page and setting is still there">Classic site ↗</a>
+        <a class="btn sm" href="./" title="The classic site: every page and setting is still there">Classic site <i data-ic="b-arrow-square-out"></i></a>
     </div>
     <nav class="steps" aria-label="Workflow">
         <div class="wrap steps-in" id="steps"></div>
@@ -241,7 +292,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 <!-- The classic site's machine dialog, with the same ids, so editing works exactly as it does there (app.editAsset / app.saveAssetEdit). -->
 <div id="modal-edit-asset" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="edit-asset-title">
     <div class="box">
-        <h2 id="edit-asset-title">Edit machine</h2>
+        <h2 id="edit-asset-title"><i data-ic="b-pencil-simple"></i> Edit machine</h2>
         <div class="namebox" id="edit-asset-name"></div>
         <div class="fields">
             <div><label class="f" for="edit-asset-owner">Team</label><select id="edit-asset-owner"></select></div>
@@ -256,13 +307,17 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
         </div>
         <div class="foot">
             <button class="btn" onclick="app.cancelAssetEdit()">Cancel</button>
-            <button class="btn primary" onclick="app.saveAssetEdit()">Save changes</button>
+            <button class="btn primary" onclick="app.saveAssetEdit()"><i data-ic="b-floppy-disk"></i> Save changes</button>
         </div>
     </div>
 </div>
 
-<script src="app.js?v=4.39.0"></script>
+<script src="app.js?v=4.39.1"></script>
 <script>
+// Phosphor Icons 2.1.1 (MIT licence, phosphoricons.com): only the icons this page uses, inline, so they show without the internet.
+// d- = duotone (large), b- = bold (small). Drawn as inline SVG (not <use href="#...">, which <base href="../"> would point at the wrong page).
+const ICONS = {"d-cloud-arrow-down":"<path d=\"M240,128a80,80,0,0,1-80,80H72A56,56,0,1,1,85.92,97.74l0,.1A80,80,0,0,1,240,128Z\" opacity=\"0.2\"/><path d=\"M248,128a87.34,87.34,0,0,1-17.6,52.81,8,8,0,1,1-12.8-9.62A71.34,71.34,0,0,0,232,128a72,72,0,0,0-144,0,8,8,0,0,1-16,0,88,88,0,0,1,3.29-23.88C74.2,104,73.1,104,72,104a48,48,0,0,0,0,96H96a8,8,0,0,1,0,16H72A64,64,0,1,1,81.29,88.68,88,88,0,0,1,248,128Zm-69.66,42.34L160,188.69V128a8,8,0,0,0-16,0v60.69l-18.34-18.35a8,8,0,0,0-11.32,11.32l32,32a8,8,0,0,0,11.32,0l32-32a8,8,0,0,0-11.32-11.32Z\"/>","d-funnel":"<path d=\"M221.9,61.38,152,136v58.65a8,8,0,0,1-3.56,6.66l-32,21.33A8,8,0,0,1,104,216V136L34.1,61.38A8,8,0,0,1,40,48H216A8,8,0,0,1,221.9,61.38Z\" opacity=\"0.2\"/><path d=\"M230.6,49.53A15.81,15.81,0,0,0,216,40H40A16,16,0,0,0,28.19,66.76l.08.09L96,139.17V216a16,16,0,0,0,24.87,13.32l32-21.34A16,16,0,0,0,160,194.66V139.17l67.74-72.32.08-.09A15.8,15.8,0,0,0,230.6,49.53ZM40,56h0Zm106.18,74.58A8,8,0,0,0,144,136v58.66L112,216V136a8,8,0,0,0-2.16-5.47L40,56H216Z\"/>","d-sliders-horizontal":"<path d=\"M128,80a24,24,0,1,1-24-24A24,24,0,0,1,128,80Zm40,72a24,24,0,1,0,24,24A24,24,0,0,0,168,152Z\" opacity=\"0.2\"/><path d=\"M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z\"/>","d-wrench":"<path d=\"M224,96a64,64,0,0,1-94.94,56L73,217A24,24,0,0,1,39,183L104,126.94a64,64,0,0,1,80-90.29L144,80l5.66,26.34L176,112l43.35-40A63.8,63.8,0,0,1,224,96Z\" opacity=\"0.2\"/><path d=\"M226.76,69a8,8,0,0,0-12.84-2.88l-40.3,37.19-17.23-3.7-3.7-17.23,37.19-40.3A8,8,0,0,0,187,29.24,72,72,0,0,0,88,96,72.34,72.34,0,0,0,94,124.94L33.79,177c-.15.12-.29.26-.43.39a32,32,0,0,0,45.26,45.26c.13-.13.27-.28.39-.42L131.06,162A72,72,0,0,0,232,96,71.56,71.56,0,0,0,226.76,69ZM160,152a56.14,56.14,0,0,1-27.07-7,8,8,0,0,0-9.92,1.77L67.11,211.51a16,16,0,0,1-22.62-22.62L109.18,133a8,8,0,0,0,1.77-9.93,56,56,0,0,1,58.36-82.31l-31.2,33.81a8,8,0,0,0-1.94,7.1L141.83,108a8,8,0,0,0,6.14,6.14l26.35,5.66a8,8,0,0,0,7.1-1.94l33.81-31.2A56.06,56.06,0,0,1,160,152Z\"/>","d-target":"<path d=\"M176,128a48,48,0,1,1-48-48A48,48,0,0,1,176,128Z\" opacity=\"0.2\"/><path d=\"M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z\"/>","d-cpu":"<path d=\"M200,48H56a8,8,0,0,0-8,8V200a8,8,0,0,0,8,8H200a8,8,0,0,0,8-8V56A8,8,0,0,0,200,48ZM152,152H104V104h48Z\" opacity=\"0.2\"/><path d=\"M152,96H104a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V104A8,8,0,0,0,152,96Zm-8,48H112V112h32Zm88,0H216V112h16a8,8,0,0,0,0-16H216V56a16,16,0,0,0-16-16H160V24a8,8,0,0,0-16,0V40H112V24a8,8,0,0,0-16,0V40H56A16,16,0,0,0,40,56V96H24a8,8,0,0,0,0,16H40v32H24a8,8,0,0,0,0,16H40v40a16,16,0,0,0,16,16H96v16a8,8,0,0,0,16,0V216h32v16a8,8,0,0,0,16,0V216h40a16,16,0,0,0,16-16V160h16a8,8,0,0,0,0-16Zm-32,56H56V56H200v95.87s0,.09,0,.13,0,.09,0,.13V200Z\"/>","d-calendar-x":"<path d=\"M216,48V88H40V48a8,8,0,0,1,8-8H208A8,8,0,0,1,216,48Z\" opacity=\"0.2\"/><path d=\"M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Zm-50.34-74.34L139.31,152l18.35,18.34a8,8,0,0,1-11.32,11.32L128,163.31l-18.34,18.35a8,8,0,0,1-11.32-11.32L116.69,152,98.34,133.66a8,8,0,0,1,11.32-11.32L128,140.69l18.34-18.35a8,8,0,0,1,11.32,11.32Z\"/>","d-chart-line-up":"<path d=\"M224,64V208H32V48H208A16,16,0,0,1,224,64Z\" opacity=\"0.2\"/><path d=\"M232,208a8,8,0,0,1-8,8H32a8,8,0,0,1-8-8V48a8,8,0,0,1,16,0V156.69l50.34-50.35a8,8,0,0,1,11.32,0L128,132.69,180.69,80H160a8,8,0,0,1,0-16h40a8,8,0,0,1,8,8v40a8,8,0,0,1-16,0V91.31l-58.34,58.35a8,8,0,0,1-11.32,0L96,123.31l-56,56V200H224A8,8,0,0,1,232,208Z\"/>","d-linux-logo":"<path d=\"M224,208H168c-8-14.35-22.91-24-40-24s-32,9.65-40,24H32S64,168,64,88a64,64,0,0,1,128,0C192,168,224,208,224,208Z\" opacity=\"0.2\"/><path d=\"M229,214.25A8,8,0,0,1,217.76,213C216.39,211.27,184,169.86,184,88A56,56,0,0,0,72,88c0,81.86-32.37,123.27-33.75,125a8,8,0,0,1-12.51-10c.15-.2,7.69-9.9,15.13-28.74C47.77,156.8,56,127.64,56,88a72,72,0,0,1,144,0c0,39.64,8.23,68.8,15.13,86.28,7.48,18.94,15.06,28.64,15.14,28.74A8,8,0,0,1,229,214.25ZM100,88a12,12,0,1,0,12,12A12,12,0,0,0,100,88Zm68,12a12,12,0,1,0-12,12A12,12,0,0,0,168,100ZM99.58,128.84a8,8,0,0,0-7.15,14.31l32,16a7.94,7.94,0,0,0,7.15,0l32-16a8,8,0,0,0-7.16-14.31L128,143.05ZM128,176a54.07,54.07,0,0,0-47,28.11,8,8,0,1,0,14,7.78,37.35,37.35,0,0,1,66,0,8,8,0,0,0,14-7.78A54.07,54.07,0,0,0,128,176Z\"/>","d-database":"<path d=\"M216,80c0,26.51-39.4,48-88,48S40,106.51,40,80s39.4-48,88-48S216,53.49,216,80Z\" opacity=\"0.2\"/><path d=\"M128,24C74.17,24,32,48.6,32,80v96c0,31.4,42.17,56,96,56s96-24.6,96-56V80C224,48.6,181.83,24,128,24Zm80,104c0,9.62-7.88,19.43-21.61,26.92C170.93,163.35,150.19,168,128,168s-42.93-4.65-58.39-13.08C55.88,147.43,48,137.62,48,128V111.36c17.06,15,46.23,24.64,80,24.64s62.94-9.68,80-24.64ZM69.61,53.08C85.07,44.65,105.81,40,128,40s42.93,4.65,58.39,13.08C200.12,60.57,208,70.38,208,80s-7.88,19.43-21.61,26.92C170.93,115.35,150.19,120,128,120s-42.93-4.65-58.39-13.08C55.88,99.43,48,89.62,48,80S55.88,60.57,69.61,53.08ZM186.39,202.92C170.93,211.35,150.19,216,128,216s-42.93-4.65-58.39-13.08C55.88,195.43,48,185.62,48,176V159.36c17.06,15,46.23,24.64,80,24.64s62.94-9.68,80-24.64V176C208,185.62,200.12,195.43,186.39,202.92Z\"/>","d-eye":"<path d=\"M128,56C48,56,16,128,16,128s32,72,112,72,112-72,112-72S208,56,128,56Zm0,112a40,40,0,1,1,40-40A40,40,0,0,1,128,168Z\" opacity=\"0.2\"/><path d=\"M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,192c-30.78,0-57.67-11.19-79.93-33.25A133.47,133.47,0,0,1,25,128,133.33,133.33,0,0,1,48.07,97.25C70.33,75.19,97.22,64,128,64s57.67,11.19,79.93,33.25A133.46,133.46,0,0,1,231.05,128C223.84,141.46,192.43,192,128,192Zm0-112a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Z\"/>","d-mask-happy":"<path d=\"M216,48v55.77C216,174.6,176.6,232,128,232S40,174.6,40,103.79V48a8,8,0,0,1,10.89-7.47C66,46.41,95.11,55.71,128,55.71s62-9.3,77.11-15.16A8,8,0,0,1,216,48Z\" opacity=\"0.2\"/><path d=\"M217,34.8a15.94,15.94,0,0,0-14.82-1.71C188.15,38.55,159.82,47.71,128,47.71S67.84,38.55,53.79,33.09A16,16,0,0,0,32,48v55.77c0,35.84,9.65,69.65,27.18,95.18,18.16,26.46,42.6,41,68.82,41s50.66-14.57,68.82-41C214.35,173.44,224,139.63,224,103.79V48A16,16,0,0,0,217,34.8Zm-9,69c0,32.64-8.66,63.23-24.37,86.13C168.54,211.9,148.79,224,128,224s-40.54-12.1-55.63-34.08C56.66,167,48,136.43,48,103.79V48c15.11,5.87,45.58,15.71,80,15.71S192.9,53.87,208,48v55.81Zm-18,18.87A8,8,0,1,1,178,133.33c-2.68-3-8.85-5.33-14-5.33s-11.36,2.34-14,5.33A8,8,0,1,1,138,122.66c5.71-6.38,16.14-10.66,26-10.66S184.25,116.28,190,122.66ZM92,128c-5.19,0-11.36,2.34-14,5.33A8,8,0,1,1,66,122.66C71.75,116.28,82.18,112,92,112s20.25,4.28,26,10.66A8,8,0,1,1,106,133.33C103.36,130.34,97.19,128,92,128Zm76.45,45.19a52.9,52.9,0,0,1-80.9,0A8,8,0,1,1,99.72,162.8a36.89,36.89,0,0,0,56.56,0,8,8,0,0,1,12.17,10.39Z\"/>","d-squares-four":"<path d=\"M112,56v48a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8h48A8,8,0,0,1,112,56Zm88-8H152a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V56A8,8,0,0,0,200,48Zm-96,96H56a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V152A8,8,0,0,0,104,144Zm96,0H152a8,8,0,0,0-8,8v48a8,8,0,0,0,8,8h48a8,8,0,0,0,8-8V152A8,8,0,0,0,200,144Z\" opacity=\"0.2\"/><path d=\"M200,136H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48ZM104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Z\"/>","b-arrows-clockwise":"<path d=\"M228,48V96a12,12,0,0,1-12,12H168a12,12,0,0,1,0-24h19l-7.8-7.8a75.55,75.55,0,0,0-53.32-22.26h-.43A75.49,75.49,0,0,0,72.39,75.57,12,12,0,1,1,55.61,58.41a99.38,99.38,0,0,1,69.87-28.47H126A99.42,99.42,0,0,1,196.2,59.23L204,67V48a12,12,0,0,1,24,0ZM183.61,180.43a75.49,75.49,0,0,1-53.09,21.63h-.43A75.55,75.55,0,0,1,76.77,179.8L69,172H88a12,12,0,0,0,0-24H40a12,12,0,0,0-12,12v48a12,12,0,0,0,24,0V189l7.8,7.8A99.42,99.42,0,0,0,130,226.06h.56a99.38,99.38,0,0,0,69.87-28.47,12,12,0,0,0-16.78-17.16Z\"/>","b-download-simple":"<path d=\"M228,144v64a12,12,0,0,1-12,12H40a12,12,0,0,1-12-12V144a12,12,0,0,1,24,0v52H204V144a12,12,0,0,1,24,0Zm-108.49,8.49a12,12,0,0,0,17,0l40-40a12,12,0,0,0-17-17L140,115V32a12,12,0,0,0-24,0v83L96.49,95.51a12,12,0,0,0-17,17Z\"/>","b-printer":"<path d=\"M214.67,68H204V40a12,12,0,0,0-12-12H64A12,12,0,0,0,52,40V68H41.33C25.16,68,12,80.56,12,96v80a12,12,0,0,0,12,12H52v28a12,12,0,0,0,12,12H192a12,12,0,0,0,12-12V188h28a12,12,0,0,0,12-12V96C244,80.56,230.84,68,214.67,68ZM76,52H180V68H76ZM180,204H76V172H180Zm40-40H204v-4a12,12,0,0,0-12-12H64a12,12,0,0,0-12,12v4H36V96c0-2.17,2.44-4,5.33-4H214.67c2.89,0,5.33,1.83,5.33,4Zm-16-44a16,16,0,1,1-16-16A16,16,0,0,1,204,120Z\"/>","b-pencil-simple":"<path d=\"M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z\"/>","b-arrow-right":"<path d=\"M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z\"/>","b-magnifying-glass":"<path d=\"M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z\"/>","b-warning":"<path d=\"M240.26,186.1,152.81,34.23h0a28.74,28.74,0,0,0-49.62,0L15.74,186.1a27.45,27.45,0,0,0,0,27.71A28.31,28.31,0,0,0,40.55,228h174.9a28.31,28.31,0,0,0,24.79-14.19A27.45,27.45,0,0,0,240.26,186.1Zm-20.8,15.7a4.46,4.46,0,0,1-4,2.2H40.55a4.46,4.46,0,0,1-4-2.2,3.56,3.56,0,0,1,0-3.73L124,46.2a4.77,4.77,0,0,1,8,0l87.44,151.87A3.56,3.56,0,0,1,219.46,201.8ZM116,136V104a12,12,0,0,1,24,0v32a12,12,0,0,1-24,0Zm28,40a16,16,0,1,1-16-16A16,16,0,0,1,144,176Z\"/>","b-check-circle":"<path d=\"M176.49,95.51a12,12,0,0,1,0,17l-56,56a12,12,0,0,1-17,0l-24-24a12,12,0,1,1,17-17L112,143l47.51-47.52A12,12,0,0,1,176.49,95.51ZM236,128A108,108,0,1,1,128,20,108.12,108.12,0,0,1,236,128Zm-24,0a84,84,0,1,0-84,84A84.09,84.09,0,0,0,212,128Z\"/>","b-x-circle":"<path d=\"M168.49,104.49,145,128l23.52,23.51a12,12,0,0,1-17,17L128,145l-23.51,23.52a12,12,0,0,1-17-17L111,128,87.51,104.49a12,12,0,0,1,17-17L128,111l23.51-23.52a12,12,0,0,1,17,17ZM236,128A108,108,0,1,1,128,20,108.12,108.12,0,0,1,236,128Zm-24,0a84,84,0,1,0-84,84A84.09,84.09,0,0,0,212,128Z\"/>","b-flag":"<path d=\"M40.14,46.88A12,12,0,0,0,36,56V224a12,12,0,0,0,24,0V181.72c22.84-17.12,42.1-9.12,70.68,5,16.23,8,34.74,17.2,54.8,17.2,14.72,0,30.28-4.94,46.38-18.88A12,12,0,0,0,236,176V56a12,12,0,0,0-19.86-9.07c-24.71,21.41-44.53,13.31-74.82-1.68C113.19,31.27,78.17,13.94,40.14,46.88ZM212,170.26c-22.84,17.13-42.1,9.11-70.68-5C118.16,153.76,90.33,140,60,153.87V61.69c22.84-17.12,42.1-9.12,70.68,5,16.23,8,34.74,17.2,54.8,17.2A63,63,0,0,0,212,78.08Z\"/>","b-clock":"<path d=\"M128,20A108,108,0,1,0,236,128,108.12,108.12,0,0,0,128,20Zm0,192a84,84,0,1,1,84-84A84.09,84.09,0,0,1,128,212Zm68-84a12,12,0,0,1-12,12H128a12,12,0,0,1-12-12V72a12,12,0,0,1,24,0v44h44A12,12,0,0,1,196,128Z\"/>","b-caret-right":"<path d=\"M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z\"/>","b-caret-down":"<path d=\"M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z\"/>","b-list-checks":"<path d=\"M228,128a12,12,0,0,1-12,12H128a12,12,0,0,1,0-24h88A12,12,0,0,1,228,128ZM128,76h88a12,12,0,0,0,0-24H128a12,12,0,0,0,0,24Zm88,104H128a12,12,0,0,0,0,24h88a12,12,0,0,0,0-24ZM79.51,39.51,56,63l-7.51-7.52a12,12,0,0,0-17,17l16,16a12,12,0,0,0,17,0l32-32a12,12,0,0,0-17-17Zm0,64L56,127l-7.51-7.52a12,12,0,1,0-17,17l16,16a12,12,0,0,0,17,0l32-32a12,12,0,0,0-17-17Zm0,64L56,191l-7.51-7.52a12,12,0,1,0-17,17l16,16a12,12,0,0,0,17,0l32-32a12,12,0,0,0-17-17Z\"/>","b-hand":"<path d=\"M188,44a32,32,0,0,0-8,1V44a32,32,0,0,0-60.79-14A32,32,0,0,0,76,60v50.83a32,32,0,0,0-52,36.7C55.82,214.6,75.35,244,128,244a92.1,92.1,0,0,0,92-92V76A32,32,0,0,0,188,44Zm8,108a68.08,68.08,0,0,1-68,68c-35.83,0-49.71-14-82.48-83.14-.14-.29-.29-.58-.45-.86a8,8,0,0,1,13.85-8l.21.35,18.68,30A12,12,0,0,0,100,152V60a8,8,0,0,1,16,0v60a12,12,0,0,0,24,0V44a8,8,0,0,1,16,0v76a12,12,0,0,0,24,0V76a8,8,0,0,1,16,0Z\"/>","b-arrow-counter-clockwise":"<path d=\"M228,128a100,100,0,0,1-98.66,100H128a99.39,99.39,0,0,1-68.62-27.29,12,12,0,0,1,16.48-17.45,76,76,0,1,0-1.57-109c-.13.13-.25.25-.39.37L54.89,92H72a12,12,0,0,1,0,24H24a12,12,0,0,1-12-12V56a12,12,0,0,1,24,0V76.72L57.48,57.06A100,100,0,0,1,228,128Z\"/>","b-sign-out":"<path d=\"M124,216a12,12,0,0,1-12,12H48a12,12,0,0,1-12-12V40A12,12,0,0,1,48,28h64a12,12,0,0,1,0,24H60V204h52A12,12,0,0,1,124,216Zm108.49-96.49-40-40a12,12,0,0,0-17,17L195,116H112a12,12,0,0,0,0,24h83l-19.52,19.51a12,12,0,0,0,17,17l40-40A12,12,0,0,0,232.49,119.51Z\"/>","b-arrow-square-out":"<path d=\"M228,104a12,12,0,0,1-24,0V69l-59.51,59.51a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z\"/>","b-trend-up":"<path d=\"M244,56v64a12,12,0,0,1-24,0V85l-75.51,75.52a12,12,0,0,1-17,0L96,129,32.49,192.49a12,12,0,0,1-17-17l72-72a12,12,0,0,1,17,0L136,135l67-67H168a12,12,0,0,1,0-24h64A12,12,0,0,1,244,56Z\"/>","b-eye":"<path d=\"M251,123.13c-.37-.81-9.13-20.26-28.48-39.61C196.63,57.67,164,44,128,44S59.37,57.67,33.51,83.52C14.16,102.87,5.4,122.32,5,123.13a12.08,12.08,0,0,0,0,9.75c.37.82,9.13,20.26,28.49,39.61C59.37,198.34,92,212,128,212s68.63-13.66,94.48-39.51c19.36-19.35,28.12-38.79,28.49-39.61A12.08,12.08,0,0,0,251,123.13Zm-46.06,33C183.47,177.27,157.59,188,128,188s-55.47-10.73-76.91-31.88A130.36,130.36,0,0,1,29.52,128,130.45,130.45,0,0,1,51.09,99.89C72.54,78.73,98.41,68,128,68s55.46,10.73,76.91,31.89A130.36,130.36,0,0,1,226.48,128,130.45,130.45,0,0,1,204.91,156.12ZM128,84a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,84Zm0,64a20,20,0,1,1,20-20A20,20,0,0,1,128,148Z\"/>","b-funnel":"<path d=\"M234.29,47.91A20,20,0,0,0,216,36H40A20,20,0,0,0,25.2,69.45l.12.14L92,140.75V216a20,20,0,0,0,31.1,16.64l32-21.33A20,20,0,0,0,164,194.66V140.75l66.67-71.16.12-.14A20,20,0,0,0,234.29,47.91Zm-91,79.89A12,12,0,0,0,140,136v56.52l-24,16V136a12,12,0,0,0-3.25-8.2L49.23,60H206.77Z\"/>","b-sliders-horizontal":"<path d=\"M40,92H70.06a36,36,0,0,0,67.88,0H216a12,12,0,0,0,0-24H137.94a36,36,0,0,0-67.88,0H40a12,12,0,0,0,0,24Zm64-24A12,12,0,1,1,92,80,12,12,0,0,1,104,68Zm112,96H201.94a36,36,0,0,0-67.88,0H40a12,12,0,0,0,0,24h94.06a36,36,0,0,0,67.88,0H216a12,12,0,0,0,0-24Zm-48,24a12,12,0,1,1,12-12A12,12,0,0,1,168,188Z\"/>","b-wrench":"<path d=\"M230.47,67.5a12,12,0,0,0-19.26-4.32L172.43,99l-12.68-2.72L157,83.57l35.79-38.78a12,12,0,0,0-4.32-19.26A76.07,76.07,0,0,0,88.41,121.64L30.92,174.18a4.68,4.68,0,0,0-.39.38,36,36,0,0,0,50.91,50.91l.38-.39,52.54-57.49A76.05,76.05,0,0,0,230.47,67.5ZM160,148a51.5,51.5,0,0,1-23.35-5.52,12,12,0,0,0-14.26,2.62L64.31,208.66a12,12,0,0,1-17-17l63.55-58.07a12,12,0,0,0,2.62-14.26A51.5,51.5,0,0,1,108,96a52.06,52.06,0,0,1,52-52h.89L135.17,71.87a12,12,0,0,0-2.91,10.65l5.66,26.35a12,12,0,0,0,9.21,9.21l26.35,5.66a12,12,0,0,0,10.65-2.91L212,95.12c0,.3,0,.59,0,.89A52.06,52.06,0,0,1,160,148Z\"/>","b-cloud-arrow-down":"<path d=\"M192.49,167.51a12,12,0,0,1,0,17l-32,32a12,12,0,0,1-17,0l-32-32a12,12,0,1,1,17-17L140,179V128a12,12,0,0,1,24,0v51l11.51-11.52A12,12,0,0,1,192.49,167.51ZM160,36A92.08,92.08,0,0,0,79,84.37,68,68,0,1,0,72,220H84a12,12,0,0,0,0-24H72a44,44,0,0,1-1.81-87.95A91.7,91.7,0,0,0,68,128a12,12,0,0,0,24,0,68,68,0,0,1,136,0,67.27,67.27,0,0,1-7.25,30.59,12,12,0,1,0,21.42,10.82A91.08,91.08,0,0,0,252,128,92.1,92.1,0,0,0,160,36Z\"/>","b-floppy-disk":"<path d=\"M222.14,69.17,186.83,33.86A19.86,19.86,0,0,0,172.69,28H48A20,20,0,0,0,28,48V208a20,20,0,0,0,20,20H208a20,20,0,0,0,20-20V83.31A19.86,19.86,0,0,0,222.14,69.17ZM164,204H92V160h72Zm40,0H188V156a20,20,0,0,0-20-20H88a20,20,0,0,0-20,20v48H52V52H171l33,33ZM164,84a12,12,0,0,1-12,12H96a12,12,0,0,1,0-24h56A12,12,0,0,1,164,84Z\"/>","b-info":"<path d=\"M108,84a16,16,0,1,1,16,16A16,16,0,0,1,108,84Zm128,44A108,108,0,1,1,128,20,108.12,108.12,0,0,1,236,128Zm-24,0a84,84,0,1,0-84,84A84.09,84.09,0,0,0,212,128Zm-72,36.68V132a20,20,0,0,0-20-20,12,12,0,0,0-4,23.32V168a20,20,0,0,0,20,20,12,12,0,0,0,4-23.32Z\"/>"};
+const ic = (n, cls = '') => `<svg class="icn ${cls}" viewBox="0 0 256 256" aria-hidden="true" focusable="false">${ICONS[n] || ''}</svg>`;
 // =====================================================================================================
 // CyberView new look (v4.39.0). Four steps: 1 Data, 2 Machines, 3 Priority model, 4 Work list.
 // Everything is read from, and every edit is saved to, the same store as the classic site (app.js).
@@ -446,6 +501,7 @@ const UI = {
 
     // ---------- start
     async start() {
+        document.querySelectorAll('i[data-ic]').forEach(el => { el.outerHTML = ic(el.dataset.ic); });
         this.applyTheme();
         const T = OrgSettings.teams();
         let t = null; try { t = localStorage.getItem('cyberview.new.team'); } catch (e) { }
@@ -491,22 +547,28 @@ const UI = {
 
     // ---------- header pieces
     paintSteps() {
-        const S = [['data', '1', 'Data', 'Is it fresh?'], ['machines', '2', 'Machines', 'Is it right?'], ['model', '3', 'Priority model', 'What matters?'], ['work', '4', 'Work list', 'What to fix']];
-        document.getElementById('steps').innerHTML = S.map(([v, n, l, s], i) => `${i ? '<span class="arrow" aria-hidden="true">→</span>' : ''}<button class="step ${this.view === v ? 'on' : ''}" onclick="UI.go('${v}')" ${this.view === v ? 'aria-current="page"' : ''}>
-            <span class="n">${n}</span><span><span class="lab">${l}</span><span class="sub">${s}</span></span></button>`).join('');
+        let gapN = 0; try { gapN = this.gaps().total; } catch (e) { }
+        const badge = { machines: gapN ? [gapN, 'to put right'] : null, work: this._overdue ? [this._overdue, 'fixes overdue'] : null };
+        document.getElementById('steps').innerHTML = [['home', 0, 'Home', 'All steps', 'd-squares-four']].concat(UI.STEPS).map(([v, n, l, s, icn], i) => `${i > 1 ? `<span class="arrow" aria-hidden="true">${ic('b-arrow-right')}</span>` : i ? '<span class="arrow" aria-hidden="true" style="opacity:.35">|</span>' : ''}<button class="step sc${n || 1} ${this.view === v ? 'on' : ''}" onclick="UI.go('${v}')" ${this.view === v ? 'aria-current="page"' : ''} ${n ? '' : 'style="--c:var(--text2);--cb:var(--subtle)"'}>
+            <span class="n">${ic(icn)}</span><span><span class="lab">${n ? n + '. ' : ''}${l}${badge[v] ? ` <span class="badge" title="${fmtNum(badge[v][0])} ${badge[v][1]}">${fmtNum(badge[v][0])}</span>` : ''}</span><span class="sub">${s}</span></span></button>`).join('');
+        { const bar = document.getElementById('steps'), on = bar.querySelector('.step.on');      // on a phone, bring the current step into view
+          if (on && bar.scrollWidth > bar.clientWidth) bar.scrollLeft = Math.max(0, on.offsetLeft - (bar.clientWidth - on.offsetWidth) / 2); }
         const T = OrgSettings.teams();
         document.getElementById('team').innerHTML = ['ALL', ...T].map(t => `<option value="${esc(t)}" ${t === this.team ? 'selected' : ''}>${t === 'ALL' ? 'All teams' : esc(t)}</option>`).join('');
         const ds = document.getElementById('demo-strip');
         ds.classList.toggle('hidden', !Demo.ON);
-        if (Demo.ON) ds.innerHTML = `<span>🎭 <strong>Demo · ${esc(Demo.ORG)}</strong>: sample data, nothing here is real. Simulated day ${fmtNum(Demo.state().day || 0)}.</span>
-            <span class="row" style="margin-left:auto"><button class="btn sm" onclick="UI.nextDay(this)">⟳ Simulate next day's sync</button><button class="btn sm" onclick="Demo.reset()">↺ Reset demo</button><button class="btn sm" onclick="Demo.leave()">Leave demo</button></span>`;
+        if (Demo.ON) ds.innerHTML = `<span class="row" style="gap:8px"><span class="icbox sm" style="font-size:19px">${ic('d-mask-happy')}</span><span><strong>Demo · ${esc(Demo.ORG)}</strong>: sample data, nothing here is real. Simulated day ${fmtNum(Demo.state().day || 0)}.</span></span>
+            <span class="row" style="margin-left:auto"><button class="btn sm" onclick="UI.nextDay(this)">${ic('b-arrows-clockwise')} Simulate next day's sync</button><button class="btn sm" onclick="Demo.reset()">${ic('b-arrow-counter-clockwise')} Reset demo</button><button class="btn sm" onclick="Demo.leave()">${ic('b-sign-out')} Leave demo</button></span>`;
     },
-    async nextDay(btn) { btn.disabled = true; btn.textContent = '⟳ Syncing…'; try { await Demo.nextDay(); } finally { this.refresh(); } },
+    async nextDay(btn) { btn.disabled = true; btn.innerHTML = ic('b-arrows-clockwise') + ' Syncing…'; try { await Demo.nextDay(); } finally { this.refresh(); } },
+    // [view, step, name, question, icon]: the four steps, each with its own colour (sc1-sc4) and the POC's icon
+    STEPS: [['data', 1, 'Data', 'Is it fresh?', 'd-cloud-arrow-down'], ['machines', 2, 'Machines', 'Is it right?', 'd-funnel'], ['model', 3, 'Priority model', 'What matters?', 'd-sliders-horizontal'], ['work', 4, 'Work list', 'What to fix', 'd-wrench']],
     head(n, eyebrow, title, lead, right = '') {
-        return `<div class="pagehead"><div><div class="eyebrow">${n ? 'Step ' + n + ' of 4 · ' : ''}${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lead">${lead}</p></div><div class="row">${right}</div></div>`;
+        const icn = n ? UI.STEPS[n - 1][4] : 'd-eye';
+        return `<div class="pagehead sc${n || 1}"><div class="headrow"><span class="icbox md">${ic(icn)}</span><div><div class="eyebrow">${n ? 'Step ' + n + ' of 4 · ' : ''}${esc(eyebrow)}</div><h1>${esc(title)}</h1><p class="lead">${lead}</p></div></div><div class="row">${right}</div></div>`;
     },
     pBadge(p, word) { return `<span class="pb p${p}" title="${esc(PriorityModel.LEVEL[p])}"><span aria-hidden="true">${PriorityModel.SHAPE[p]}</span> P${p}${word && word !== 'P' + p ? ' · ' + esc(word) : ''}</span>`; },
-    pen(name) { return this.canEdit ? `<button class="pen" data-n="${esc(name)}" onclick="event.stopPropagation(); UI.edit(this.dataset.n)" title="Edit this machine: team, service, tier, exposure, OS" aria-label="Edit ${esc(name)}">✎</button>` : ''; },
+    pen(name) { return this.canEdit ? `<button class="pen" data-n="${esc(name)}" onclick="event.stopPropagation(); UI.edit(this.dataset.n)" title="Edit this machine: team, service, tier, exposure, OS" aria-label="Edit ${esc(name)}">${ic('b-pencil-simple')}</button>` : ''; },
     edit(name) { app.fillTeamSelects(); app.editAsset(name); },
     dueTxt(due, now = Demo.now()) {
         if (!due) return '';
@@ -526,6 +588,8 @@ const UI = {
             if (seq !== this.seq) return;
             el.innerHTML = html;
             if (this.view === 'model') this.paintModel();
+            this.bindCharts(el);
+            if (this.view === 'home' || this.view === 'work') this.paintSteps();      // badges follow the newest numbers
         } catch (e) { console.error('[new]', e); if (seq === this.seq) el.innerHTML = `<div class="card pad"><span class="st bad">✗ Could not draw this page</span> <span class="t2">${esc(e.message)}</span></div>`; }
     },
 
@@ -536,17 +600,21 @@ const UI = {
         const gaps = this.gaps();
         const sc = this.scored(), groups = this.groups(sc), p1 = groups.filter(g => g.p === 1), od = groups.filter(g => g.overdue).length;
         const teamTxt = this.team === 'ALL' ? 'all teams' : this.team;
-        const tile = (v, ic, k, val, d) => `<button class="card tile" onclick="UI.go('${v}')"><span class="ic" aria-hidden="true">${ic}</span><span class="k">${k}</span><span class="v">${val}</span><span class="d">${d}</span></button>`;
+        this._overdue = od;
+        const tile = (n, corner, val, d, extra = '') => { const [v, , l, , icn] = UI.STEPS[n - 1];
+            return `<button class="card tile sc${n}" onclick="UI.go('${v}')">${corner}<span class="icbox lg">${ic(icn)}</span><span class="k">Step ${n}</span><span class="v">${l}</span><span>${val}</span><span class="d">${d}</span>${extra}</button>`; };
+        const corner = (n, word, ok = false) => `<span class="corner ${ok ? 'ok' : ''}" title="${esc(word)}">${ok ? '✓' : fmtNum(n)}</span>`;
+        const H = this.histPts(this.team), sp = H.length > 1 ? `<span class="spark">${this.sparkSVG(H.map(x => x.open))}<span class="tiny muted" style="display:block">${this.histDelta(H)}</span></span>` : '';
         return this.head(0, 'CyberView · ' + teamTxt, 'What should we work on?', 'Four steps, left to right: check the data is fresh, put the machines right, choose how to rank the risk, then work down one list. Most days you only need step 4.',
-                `<button class="btn primary" onclick="UI.go('work')">Open the work list →</button>`)
+                `<button class="btn primary" onclick="UI.go('work')">${ic('b-wrench')} Open the work list ${ic('b-arrow-right')}</button>`)
             + `<div class="grid g4">
-                ${tile('data', '⇩', 'Step 1 · Data', bad ? `<span class="st warn">⚠ ${bad} source${bad === 1 ? '' : 's'} to check</span>` : '<span class="st ok">✓ All sources fresh</span>', `${fmtNum(rows.length)} sources: Qualys, Automox, end-of-life dates, EPSS, Red Hat`)}
-                ${tile('machines', '🖥', 'Step 2 · Machines', gaps.total ? `<span class="st warn">⚠ ${fmtNum(gaps.total)} to put right</span>` : '<span class="st ok">✓ Nothing to put right</span>', `${fmtNum(gaps.noteam.length)} without a team · ${fmtNum(gaps.notier.length)} without a tier · ${fmtNum(gaps.unseen.length)} not seen lately`)}
-                ${tile('model', '⚖', 'Step 3 · Priority model', esc(P.name), esc(P.tag) + (M.preset === 'cyberview' ? ' · the same priorities as the classic site' : ''))}
-                ${tile('work', '🔧', 'Step 4 · Work list', `${fmtNum(p1.length)} P1 fix${p1.length === 1 ? '' : 'es'}`, `${fmtNum(groups.length)} fixes on ${fmtNum(new Set(D.dets.map(d => d.asset)).size)} machines${od ? ` · <strong>✖ ${fmtNum(od)} overdue</strong>` : ''}`)}
+                ${tile(1, corner(bad, bad + ' sources to check', !bad), bad ? `<span class="st warn">⚠ ${bad} source${bad === 1 ? '' : 's'} to check</span>` : '<span class="st ok">✓ All sources fresh</span>', `${fmtNum(rows.length)} sources: Qualys, Automox, end-of-life dates, EPSS, Red Hat`)}
+                ${tile(2, corner(gaps.total, gaps.total + ' machines to put right', !gaps.total), gaps.total ? `<span class="st warn">⚠ ${fmtNum(gaps.total)} to put right</span>` : '<span class="st ok">✓ Nothing to put right</span>', `${fmtNum(gaps.noteam.length)} without a team · ${fmtNum(gaps.notier.length)} without a tier · ${fmtNum(gaps.unseen.length)} not seen lately`)}
+                ${tile(3, '', `<strong>${esc(P.name)}</strong>`, esc(P.tag) + (M.preset === 'cyberview' ? ' · the same priorities as the classic site' : ''))}
+                ${tile(4, corner(p1.length, p1.length + ' P1 fixes', !p1.length), `<strong>${fmtNum(p1.length)} P1 fix${p1.length === 1 ? '' : 'es'}</strong>`, `${fmtNum(groups.length)} fixes on ${fmtNum(new Set(D.dets.map(d => d.asset)).size)} machines${od ? ` · <strong>✖ ${fmtNum(od)} overdue</strong>` : ''}`, sp)}
             </div>
             <div class="card pad mt"><h2>Today for ${esc(teamTxt)}</h2>${this.topList(groups.slice(0, 5))}
-                <div class="mt"><button class="btn" onclick="UI.go('work')">See the whole list →</button></div></div>`;
+                <div class="mt"><button class="btn" onclick="UI.go('work')">See the whole list ${ic('b-arrow-right')}</button></div></div>`;
     },
     topList(groups) {
         if (!groups.length) return '<p class="empty">Nothing open. ✓</p>';
@@ -557,10 +625,13 @@ const UI = {
     // ---------- Step 1: data sources
     async vData() {
         const rows = await app.healthRows(), D = await this.load();
+        const SRC = [[/qualys/i, 'd-target', 'q'], [/automox/i, 'd-cpu', 'a'], [/end-of-life/i, 'd-calendar-x', 'e'], [/epss/i, 'd-chart-line-up', 'p'], [/red hat/i, 'd-linux-logo', 'r'], [/register/i, 'd-database', 'd']];
         const card = (r) => {
             const st = r.run ? '<span class="st info">⟳ Running</span>' : r.warn ? '<span class="st warn">⚠ Check</span>' : r.last ? '<span class="st ok">✓ OK</span>' : '<span class="st info">– Not set up</span>';
-            const btn = r.btn && this.canEdit ? `<button class="btn sm" ${r.run ? 'disabled' : ''} onclick="UI.sync(this, ${esc(JSON.stringify(r.btn))})">${r.run ? '⟳ Running…' : '⟳ Sync now'}</button>` : '';
-            return `<div class="card pad"><div class="row between"><h3>${esc(r.name)}</h3>${st}</div>
+            const btn = r.btn && this.canEdit ? `<button class="btn sm" ${r.run ? 'disabled' : ''} onclick="UI.sync(this, ${esc(JSON.stringify(r.btn))})">${ic('b-arrows-clockwise')} ${r.run ? 'Running…' : 'Sync now'}</button>` : '';
+            const [, icn, k] = SRC.find(x => x[0].test(r.name)) || [null, 'd-database', 'd'];
+            return `<div class="card pad"><div class="row between"><span class="icbox md" style="--c:var(--src-${k}); --cb:color-mix(in srgb, var(--src-${k}) 13%, transparent)">${ic(icn)}</span>${st}</div>
+                <h3 style="margin-top:12px">${esc(r.name)}</h3>
                 <p class="small t2" style="margin:2px 0 10px">${esc(r.how)}</p>
                 <div class="small"><strong>Result:</strong> ${esc(r.result)}</div>
                 <div class="row between mt small"><span class="muted">Last: ${r.last ? esc(App.whenText(r.last)) + ' (' + esc(this.ago(r.last)) + ')' : 'never'}${r.sched ? ' · ' + esc(r.sched) : ''}</span>${btn}</div></div>`;
@@ -576,7 +647,7 @@ const UI = {
             </div></div>`;
     },
     async sync(btn, code) {
-        btn.disabled = true; btn.textContent = '⟳ Running…';
+        btn.disabled = true; btn.innerHTML = ic('b-arrows-clockwise') + ' Running…';
         try { await (new Function('return (async () => { await ' + code + '; })()'))(); }
         catch (e) { StorageService.toast('Sync failed: ' + e.message); }
         setTimeout(() => this.refresh(), 1200);
@@ -753,7 +824,7 @@ const UI = {
             const a = g.ax, parts = [];
             if (a.will) parts.push(`<span class="nowrap" title="Automox will install the patch within the plan window">⟳ ${a.will} will patch</span>`);
             if (a.blocked) parts.push(`<span class="nowrap" title="Automox has a patch but something stops it">⚠ ${a.blocked} blocked</span>`);
-            if (a.manual) parts.push(`<span class="nowrap" title="No Automox agent or patch: someone has to fix it">✋ ${a.manual} manual</span>`);
+            if (a.manual) parts.push(`<span class="nowrap" title="No Automox agent or patch: someone has to fix it">${ic('b-hand')} ${a.manual} manual</span>`);
             return `<div class="small">${parts.join('<br>') || '<span class="muted">–</span>'}</div>`;
         };
         const rowsHTML = shown.map(g => {
@@ -776,14 +847,15 @@ const UI = {
                         <td class="small">${x.e.why.map(w => `<span class="chip ${x.e.pts ? 'pts' : ''}">${esc(w)}</span>`).join('')}</td>
                         <td class="small">${esc(RiskModel.tierLabel(x.F.tier))}<br>${esc(x.F.exposure)}${x.F.eol ? '<br><span class="chip hot">end-of-life OS</span>' : ''}</td>
                         <td>${this.dueTxt(x.e.due)}</td>
-                        <td class="hide-sm small">${a ? { will: '⟳ will patch', blocked: '⚠ blocked', manual: '✋ manual' }[a.b] + `<div class="tiny muted">${esc(a.why || '')}</div>` : '–'}</td></tr>`; }).join('')}
+                        <td class="hide-sm small">${a ? { will: '⟳ will patch', blocked: '⚠ blocked', manual: ic('b-hand') + ' manual' }[a.b] + `<div class="tiny muted">${esc(a.why || '')}</div>` : '–'}</td></tr>`; }).join('')}
                 </tbody></table></div></td></tr>`;
             return main + sub;
         }).join('');
         return this.head(4, 'Work list', 'What to fix, in order', `One row per fix, worst first, for ${esc(this.team === 'ALL' ? 'all teams' : this.team)}. Ranked by <strong>${esc(P.name)}</strong> (<button class="linkbtn" onclick="UI.go('model')">change</button>). Open a row for its machines and the reasons; ✎ edits a machine.`,
-                `<button class="btn" onclick="UI.csv()">⇩ CSV</button><button class="btn" onclick="window.print()">Print</button>`)
+                `<button class="btn" onclick="UI.csv()">${ic('b-download-simple')} CSV</button><button class="btn" onclick="window.print()">${ic('b-printer')} Print</button>`)
             + savedNote
             + `<div class="grid g4 mb">${[1, 2, 3, 4].map(p => `<div class="card pad"><div class="row between">${this.pBadge(p, P.words[p])}<span class="mono" style="font-size:20px;font-weight:800">${fmtNum(cnt(p))}</span></div><div class="tiny muted" style="margin-top:4px">fixes · ${esc(PriorityModel.LEVEL[p])}</div></div>`).join('')}</div>
+            <div class="grid g2 mb">${this.trendCard()}${this.automoxCard(groups)}</div>
             <div class="card"><div class="pad row between">
                 <div class="row"><div class="seg" role="group" aria-label="Priority">${seg}</div>
                     <label class="small row" style="gap:5px"><input type="checkbox" ${W.kev ? 'checked' : ''} onchange="UI.work.kev=this.checked; UI.render()"> ⚑ Known exploited only</label>
@@ -792,6 +864,106 @@ const UI = {
             <div class="scroll"><table class="tbl"><thead><tr><th>Priority</th><th>Fix</th><th style="text-align:right">Machines</th><th>Due</th><th class="hide-sm">Automox</th></tr></thead>
                 <tbody>${rowsHTML || '<tr><td colspan="5" class="empty">Nothing matches. ✓</td></tr>'}</tbody></table></div>
             ${groups.length > shown.length ? `<div class="pad row between"><span class="small muted">Showing ${fmtNum(shown.length)} of ${fmtNum(groups.length)} fixes</span><button class="btn" onclick="UI.work.shown += 40; UI.render()">Show 40 more</button></div>` : `<p class="pad small muted" style="margin:0">${fmtNum(groups.length)} fix${groups.length === 1 ? '' : 'es'} · risk-accepted machines and findings are left out, as in the classic site's official numbers.</p>`}</div>`;
+    },
+    // ---------- charts (method from the dataviz guide: thin marks, recessive grid, legend + direct labels, hover, a table view)
+    // Open and overdue P1-P2 findings per day, from the Status snapshots (one per sync; the last of each day is kept).
+    histPts(team) {
+        const by = new Map();
+        for (const s of app.statusHistory()) {
+            const t = StatusEngine.time(s.at); if (!t) continue;
+            const rows = (s.teams || []).filter(x => team === 'ALL' || x.team === team); if (!rows.length) continue;
+            const open = rows.reduce((a, x) => a + (x.newP12 || 0) + (x.bl12 || 0), 0), over = rows.reduce((a, x) => a + (x.over12 || 0), 0);
+            by.set(new Date(t).toISOString().slice(0, 10), { t, open, over });
+        }
+        return [...by.values()].sort((a, b) => a.t - b.t).slice(-90);
+    },
+    histDelta(H) {
+        const last = H[H.length - 1], cut = last.t - 29 * 864e5, base = [...H].reverse().find(x => x.t <= cut) || H[0];
+        const d = last.open - base.open, days = Math.max(1, Math.round((last.t - base.t) / 864e5));
+        return `Open P1–P2: ${fmtNum(last.open)} · ${d === 0 ? 'no change' : (d < 0 ? '▼ ' : '▲ ') + fmtNum(Math.abs(d)) + (d < 0 ? ' fewer' : ' more')} than ${days} d ago`;
+    },
+    // 12-point-style sparkline: de-emphasis line, the latest point in the accent
+    sparkSVG(vals) {
+        const W = 150, H = 34, n = vals.length, max = Math.max(1, ...vals), min = Math.min(...vals), span = Math.max(1, max - min);
+        const x = (i) => 3 + (W - 6) * i / Math.max(1, n - 1), y = (v) => 4 + (H - 8) * (1 - (v - min) / span);
+        const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+        return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Open P1 and P2 findings over the last ${n} days, now ${fmtNum(vals[n - 1])}"><polyline points="${pts}" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(n - 1)}" cy="${y(vals[n - 1])}" r="4" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2"/></svg>`;
+    },
+    trendCard() {
+        const H = this.histPts(this.team), P = this.saved.preset;
+        const note = `<p class="tiny muted" style="margin:6px 0 0">From the daily status snapshots, which count with the CyberView status rules${P === 'cyberview' ? '' : ' (not the model chosen in step 3)'}.</p>`;
+        if (H.length < 2) return `<div class="card pad"><h2>${ic('b-trend-up')} P1–P2 over time</h2><p class="empty">Not enough history yet: a snapshot is kept after each Qualys sync.</p>${note}</div>`;
+        this._hist = H;
+        const S = [['open', 'Open P1–P2', 'var(--series-1)', ''], ['over', 'Overdue P1–P2', 'var(--series-2)', 'dash']];
+        const W = 640, Hh = 210, L = 40, R = 96, T = 10, B = 24, n = H.length;
+        const t0 = H[0].t, t1 = H[n - 1].t, rawMax = Math.max(1, ...H.map(p => Math.max(p.open, p.over)));
+        const step = Math.pow(10, Math.floor(Math.log10(rawMax))), max = Math.ceil(rawMax / step * 2) * step / 2 || 1;
+        this._histMax = max;
+        const x = (t) => L + (W - L - R) * (t1 > t0 ? (t - t0) / (t1 - t0) : 0.5), y = (v) => T + (Hh - T - B) * (1 - v / max);
+        const day = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        const grid = [0, 0.5, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${y(max * f)}" y2="${y(max * f)}" stroke="${f ? 'var(--grid)' : 'var(--axis)'}" stroke-width="1"/><text x="${L - 7}" y="${y(max * f) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${fmtNum(max * f)}</text>`).join('');
+        const xl = `<text x="${L}" y="${Hh - 6}" font-size="11" fill="var(--muted)">${esc(day(t0))}</text><text x="${W - R}" y="${Hh - 6}" font-size="11" fill="var(--muted)" text-anchor="end">${esc(day(t1))}</text>`;
+        const lines = S.map(([k, , c, dash]) => `<polyline points="${H.map(p => `${x(p.t).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" ${dash ? 'stroke-dasharray="5 4"' : ''}/>`).join('');
+        // direct labels at the line ends (text ink, keyed by a short line), pushed apart when they would touch
+        let ya = y(H[n - 1].open), yb = y(H[n - 1].over); if (Math.abs(ya - yb) < 15) { const m = (ya + yb) / 2; if (ya <= yb) { ya = m - 8; yb = m + 8; } else { ya = m + 8; yb = m - 8; } }
+        const ends = S.map(([k, l, c, dash], i) => { const yy = i ? yb : ya; return `<line x1="${W - R + 8}" x2="${W - R + 20}" y1="${yy}" y2="${yy}" stroke="${c}" stroke-width="2" ${dash ? 'stroke-dasharray="3 2"' : ''}/><text x="${W - R + 25}" y="${yy + 4}" font-size="11.5" fill="var(--text)"><tspan font-weight="700">${fmtNum(H[n - 1][k])}</tspan> ${i ? 'overdue' : 'open'}</text>`; }).join('');
+        const last = H[n - 1];
+        return `<div class="card pad"><div class="row between"><h2 style="margin:0">${ic('b-trend-up')} P1–P2 over time</h2><span class="tiny muted">${esc(this.histDelta(H))}</span></div>
+            <div class="legend">${S.map(([, l, c, dash]) => `<span><span class="key ${dash}" style="border-color:${c}"></span>${l}</span>`).join('')}</div>
+            <div class="chart" data-chart="trend"><svg class="plot" viewBox="0 0 ${W} ${Hh}" tabindex="0" role="img" aria-label="Open P1–P2 findings ${fmtNum(last.open)}, overdue ${fmtNum(last.over)}, over ${n} days. Use the arrow keys to read each day.">${grid}${xl}${lines}${ends}
+                <line class="xh" x1="0" x2="0" y1="${T}" y2="${Hh - B}" stroke="var(--line-strong)" stroke-width="1" visibility="hidden"/>
+                ${S.map(([k, , c]) => `<circle class="xd" data-k="${k}" r="4.5" fill="${c}" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>`).join('')}
+                <rect class="hit" x="${L}" y="${T}" width="${W - L - R}" height="${Hh - T - B}" fill="transparent"/></svg><div class="vtip hidden"></div></div>
+            <details class="tv"><summary>Show as a table</summary><table><thead><tr><th>Day</th><th>Open P1–P2</th><th>Overdue</th></tr></thead><tbody>${H.slice().reverse().map(p => `<tr><td>${esc(day(p.t))}</td><td>${fmtNum(p.open)}</td><td>${fmtNum(p.over)}</td></tr>`).join('')}</tbody></table></details>${note}</div>`;
+    },
+    // Automox: of the findings in this list, how many it will patch, how many are blocked, how many need a person (tall segmented bar)
+    automoxCard(groups) {
+        if (!this.data.plan) return `<div class="card pad"><h2>${ic('d-cpu')} Automox</h2><p class="empty">Automox is not connected, so the list cannot say what it will patch.</p></div>`;
+        const c = { will: 0, blocked: 0, manual: 0 }; groups.forEach(g => { c.will += g.ax.will; c.blocked += g.ax.blocked; c.manual += g.ax.manual; });
+        const tot = c.will + c.blocked + c.manual;
+        const parts = [['will', '⟳', 'Automox will patch', 'var(--st-good)', '#fff', 'an active automatic policy installs it in the plan window'],
+            ['blocked', '⚠', 'Blocked', 'var(--st-warn)', '#0b0b0b', 'a patch exists, but a stale agent, a pending reboot or the policy stops it'],
+            ['manual', ic('b-hand'), 'Manual: someone must fix it', 'var(--st-crit)', '#fff', 'no Automox agent, no patch, or a team Automox does not patch']];
+        const pct = (v) => tot ? Math.round(v * 100 / tot) : 0;
+        const bar = tot ? parts.filter(([k]) => c[k]).map(([k, sym, l, bg, ink, why]) => `<div class="part" tabindex="0" style="flex:${c[k]} 1 0; background:${bg}; color:${ink}" data-tip="${esc(JSON.stringify([l, fmtNum(c[k]) + ' findings · ' + pct(c[k]) + '%', why]))}" aria-label="${esc(l)}: ${fmtNum(c[k])} findings, ${pct(c[k])}%">${c[k] * 100 / tot >= 9 ? pct(c[k]) + '%' : ''}</div>`).join('') : '';
+        return `<div class="card pad"><div class="row between"><h2 style="margin:0">${ic('d-cpu')} Who fixes it</h2><span class="tiny muted">${fmtNum(tot)} findings in this list</span></div>
+            ${tot ? `<div class="chart" data-chart="seg"><div class="seg-bar" role="img" aria-label="${parts.map(([k, , l]) => `${l} ${fmtNum(c[k])}`).join(', ')}">${bar}</div><div class="vtip hidden"></div></div>
+            <div class="seg-legend">${parts.map(([k, sym, l, bg]) => `<span><span class="sw" style="background:${bg}"></span>${sym} ${esc(l)} <strong class="mono">${fmtNum(c[k])}</strong></span>`).join('')}</div>
+            <p class="tiny muted" style="margin:10px 0 0">The same rules as the classic Patch Plan, looking ahead ${fmtNum(+StatusEngine.settings().patchPlanDays || 7)} days. Filter the list (P1, Known exploited, search) and the bar follows.</p>` : '<p class="empty">Nothing in this list. ✓</p>'}</div>`;
+    },
+    // hover / keyboard for the charts on the page: a crosshair that snaps to the nearest day, a tooltip per bar part
+    bindCharts(root) {
+        const tipAt = (box, tip, html, px, py) => { tip.innerHTML = html; tip.classList.remove('hidden'); const bw = box.clientWidth, tw = tip.offsetWidth; tip.style.left = Math.max(0, Math.min(bw - tw, px + 14)) + 'px'; tip.style.top = Math.max(0, py - tip.offsetHeight - 10) + 'px'; };
+        root.querySelectorAll('[data-chart="trend"]').forEach(box => {
+            const svg = box.querySelector('svg'), tip = box.querySelector('.vtip'), H = this._hist; if (!H) return;
+            const vb = svg.viewBox.baseVal, L = 40, R = 96, T = 10, Bm = 24, n = H.length, t0 = H[0].t, t1 = H[n - 1].t;
+            const max = this._histMax || 1;
+            const x = (t) => L + (vb.width - L - R) * (t1 > t0 ? (t - t0) / (t1 - t0) : 0.5), y = (v) => T + (vb.height - T - Bm) * (1 - v / max);
+            let cur = n - 1;
+            const show = (i) => {
+                cur = i; const p = H[i], X = x(p.t);
+                const xh = svg.querySelector('.xh'); xh.setAttribute('x1', X); xh.setAttribute('x2', X); xh.setAttribute('visibility', 'visible');
+                svg.querySelectorAll('.xd').forEach(c => { c.setAttribute('cx', X); c.setAttribute('cy', y(p[c.dataset.k])); c.setAttribute('visibility', 'visible'); });
+                const sc = box.clientWidth / vb.width, d = new Date(p.t).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                tipAt(box, tip, `<div class="d">${esc(d)}</div><div class="r"><span class="key" style="display:inline-block;width:14px;border-top:2px solid var(--series-1)"></span><b>${fmtNum(p.open)}</b> open P1–P2</div><div class="r"><span class="key" style="display:inline-block;width:14px;border-top:2px dashed var(--series-2)"></span><b>${fmtNum(p.over)}</b> overdue</div>`, X * sc, y(Math.max(p.open, p.over)) * sc);
+            };
+            const hide = () => { svg.querySelector('.xh').setAttribute('visibility', 'hidden'); svg.querySelectorAll('.xd').forEach(c => c.setAttribute('visibility', 'hidden')); tip.classList.add('hidden'); };
+            svg.addEventListener('pointermove', (e) => {
+                const r = svg.getBoundingClientRect(), vx = (e.clientX - r.left) * vb.width / r.width;
+                let best = 0, bd = Infinity; H.forEach((p, i) => { const dd = Math.abs(x(p.t) - vx); if (dd < bd) { bd = dd; best = i; } }); show(best);
+            });
+            svg.addEventListener('pointerleave', hide); svg.addEventListener('blur', hide); svg.addEventListener('focus', () => show(cur));
+            svg.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); show(Math.max(0, Math.min(n - 1, cur + (e.key === 'ArrowLeft' ? -1 : 1)))); } else if (e.key === 'Escape') hide(); });
+        });
+        root.querySelectorAll('[data-chart="seg"]').forEach(box => {
+            const tip = box.querySelector('.vtip');
+            box.querySelectorAll('.part').forEach(part => {
+                const on = () => { const [a, b, c] = JSON.parse(part.dataset.tip), br = box.getBoundingClientRect(), pr = part.getBoundingClientRect();
+                    tipAt(box, tip, `<div class="d">${esc(a)}</div><div class="r"><b>${esc(b)}</b></div><div class="tiny muted" style="white-space:normal;max-width:240px">${esc(c)}</div>`, pr.left - br.left + pr.width / 2 - 60, pr.top - br.top); };
+                part.addEventListener('pointerenter', on); part.addEventListener('focus', on);
+                part.addEventListener('pointerleave', () => tip.classList.add('hidden')); part.addEventListener('blur', () => tip.classList.add('hidden'));
+            });
+        });
     },
     toggle(qid) { const k = String(qid); if (this.work.open.has(k)) this.work.open.delete(k); else this.work.open.add(k); this.render(); },
     csv() {

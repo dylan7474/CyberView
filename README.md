@@ -135,6 +135,7 @@ git clone https://github.com/dylan7474/CyberView.git && cd CyberView
 - **Two people at once:** each collection carries a revision. If someone else saved first, your save is refused and the page asks you to reload instead of overwriting their work. Changes by others show on reload (no live refresh yet).
 - **Secrets:** `.env` holds the generated database password (not in git). The Qualys data never goes in this repo.
 - **Tests:** `python3 tests/test_api.py http://127.0.0.1` against a *test* stack with no users (it clears the data and creates test users; remove them afterwards, see the top of the file).
+- **Golden numbers (v4.41.1):** `tests/run_all.sh` runs every check on a developer machine: the classic and new sites in a headless browser with a fixed data set, frozen clock and recorded outside data (1,061 numbers that must not move), a throwaway server stack (`docker compose -p cvtest`), the API tests, the API round trip and both sites signed in (924 numbers), then removes the stack. `python3 tests/golden/golden.py check` is the quick browser-only part. The safety net for the database work; see [tests/golden/README.md](tests/golden/README.md).
 - Opened from a file or a static web host (no server) the page keeps using browser storage exactly as before; the sidebar shows which mode it is in.
 
 ---

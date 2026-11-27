@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Golden fixture loader</title></head>
+<body>
+<p id="msg">Loading the golden fixture into this browser…</p>
+<!-- Test helper (tests/golden): puts fixture/estate.json into this browser's demo storage, exactly as the demo keeps it.
+     Opened by golden.py only; the page itself is never linked from the app. -->
+<script src="../../app.js"></script>
+<script>
+window.onload = async () => {
+    // only when golden.py asks (?golden): it clears this browser's CyberView data first
+    if (!new URLSearchParams(location.search).has('golden')) { document.getElementById('msg').textContent = 'A test helper for tests/golden; nothing to see here.'; return; }
+    try {
+        const F = await (await fetch('fixture/estate.json', { cache: 'no-store' })).json();
+        localStorage.clear();
+        await new Promise(res => { const r = indexedDB.deleteDatabase(Demo.DB); r.onsuccess = r.onerror = r.onblocked = () => res(); });
+        localStorage.setItem(Demo.FLAG, '1');
+        Object.entries(F.localStorage).forEach(([k, v]) => localStorage.setItem(k, v));
+        VulnStore.DB = Demo.DB;
+        await VulnStore.merge({ detections: F.detections, qids: F.qids, assets: [], clearAll: true });
+        window.__loaded = { keys: Object.keys(F.localStorage).length, detections: F.detections.length, qids: F.qids.length };
+        document.getElementById('msg').textContent = 'Loaded: ' + JSON.stringify(window.__loaded);
+    } catch (e) { window.__loaded = { error: String(e && e.message || e) }; document.getElementById('msg').textContent = 'Failed: ' + e; }
+};
+</script>
+</body>
+</html>
